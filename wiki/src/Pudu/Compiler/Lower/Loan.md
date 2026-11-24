@@ -7,6 +7,10 @@ aliases: [Compiler Lower Loan]
 ---
 # Compiler Lower Loan
 
+Resolved Grill Log. Loaned calls select their body from the retained
+argument layouts. An incompatible concrete layout takes the same
+specialization path as a runtime alternative.
+
 ## Purpose and interface
 
 Export lowerLoanedBody, loanedReturn, loanedValue and lowerLoanedCall.
@@ -98,3 +102,48 @@ an ordinary value held before its operands, as `evaluateCall` orders it; a value
 that stops leaves the call unmade. valueSignature builds the signature a
 value call reads from its formed function type. closeLoaned makes a body's
 trailing result answer the finals; lambdas and lifted method values use it.
+
+## Ordinary operands of loaned calls (#956)
+
+Resolved Grill Log: when a loaned call has an ordinary operand, widen it
+using the corresponding expected parameter carrier before binding it.
+A lent place must retain its exact carrier for writeback.
+
+## Native mutable loan layouts (#956)
+
+Resolved Grill Log: Read each place once at its argument position. Select the exact native parameter and final layouts before the call. Project finals back into their retained places in parameter order.
+
+## Layout demands from a lent parameter (#956)
+
+Resolved Grill Log: a named parameter may demand a broader layout
+through an assignment. The caller projects its input and records any
+layout it needs to hold the resulting final.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: A held operand may project into a wider loaned input without copying the callable. The return path still publishes the final into its original place.
+
+## Selected indirect loan profiles
+
+Resolved Grill Log: retain explicit places and possible forwarded
+names in operand order. The callable identity decides the written
+parameter count and which positions publish finals. A failing arity
+check runs after operand effects and before any final store.
+
+[[Compiler Lower Default]] · [[Backend Rendering Callable Programs]]
+
+Resolved Grill Log: an already retained indirect callee uses the
+same operand traversal as a written one. No path reevaluates the
+callee to discover its constraints.
+
+## Retained declared receiver places
+
+Resolved Grill Log: start selected direct method calls with the
+already evaluated receiver and its original place at parameter zero.
+Check arity after the remaining arguments run and before queueing
+the body or publishing any finals.
+
+Resolved Grill Log: a prepared place read can select a slice and
+therefore reserve native locals before collecting later arguments.
+
+Resolved Grill Log: a loan final that cannot project into its place's layout uses the range-key store when the place may be indexed by a range, and otherwise records the wider layout for replay.

@@ -60,3 +60,6 @@ Resolved Grill Log: project existing checked semantics; no inference, fallback, 
 ## Indexed stores (#840)
 
 entryHelpers builds the map-shaped helper family with its opening and closing text; mapHelpers uses `{`/`}` and storeHelpers `#[`/`]` at key Int. `put` inserts with key replacement. Resolved Grill Log: one family for both, so equality, order, comparability and cleanup cannot differ.
+
+Resolved Grill Log: lookup with a default searches once, retains a found
+result, and constructs an empty array or zero only when the key is absent.

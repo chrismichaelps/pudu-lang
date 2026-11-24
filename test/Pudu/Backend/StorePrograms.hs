@@ -19,6 +19,23 @@ storeSuccessPrograms =
       , "  0"
       , "}" ]
     , "#[-1: \"a\", 3: \"d\"] #[] 2\nSome(\"d\")None#[-1: \"a\"][-1, 3][\"a\", \"d\"]\ntruefalse#[-1: \"a\", 3: \"d\"]\ntrue\n" )
+  , ( "store updates preserve callable payloads and retained aliases", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn retain(value: dynamic View) -> fn() -> Str { value.toText }"
+      , "fn plain() -> Str { \"plain\" }"
+      , "fn main() -> Int {"
+      , "  let empty: Buckets[fn() -> Str] = bucketsOf()"
+      , "  let base = empty.insert(-2, plain)"
+      , "  let filled = base.insert(3, retain(\"λ\".toBytes()))"
+      , "  let read = filled.get"
+      , "  match read(3) { case Some(run) => print(run())"
+      , "                 case None => print(\"missing\") }"
+      , "  print(show(base.get(3)))"
+      , "  for run in filled.values() { print(run()) }"
+      , "  print(show(filled.remove(-2).keys()))"
+      , "  0", "}" ]
+    , "Some(\"λ\")\nNone\nplain\nSome(\"λ\")\n[3]\n")
   , ( "owned payloads, method values, builtin identity, nesting, ordering and transfers", program
       [ "type Tag = { name: Str, weight: Float }"
       , ""
@@ -146,6 +163,18 @@ storeModulePrograms =
       , "  0"
       , "}" ]
     , "MultiMap{groups: {\"a\": [1], \"b\": [2, 2, 3]}, occurrences: {(\"a\", 1): 1, (\"b\", 2): 2, (\"b\", 3): 1}}\ntruefalsefalse\n[2, 2, 3]4[(\"a\", 1), (\"b\", 2), (\"b\", 2), (\"b\", 3)]\nvalue\n{\"a\": [1], \"b\": [2, 2, 3], \"c\": [9]}2\nMultiMap{groups: {0.0: [1, 2]}, occurrences: {(-0.0, 1): 1, (0.0, 2): 1}}true<builtin multiMapAdd>\nMultiMap{groups: {5: [6, 6]}, occurrences: {(5, 6): 2}}\n" )
+  , ("MultiMap defaults preserve existing groups and repeated counts", program
+      [ "import Std.MultiMap as Multi", "import Std.MultiMap {MultiMap}"
+      , "fn main() -> Int {"
+      , "  let empty: MultiMap[Int, Str] = Multi.empty()"
+      , "  let first = Multi.add(&empty, 1, \"north\")"
+      , "  let other = Multi.add(&first, 2, \"west\")"
+      , "  let updated = Multi.add(&Multi.add(&other, 1, \"south\"), 1, \"north\")"
+      , "  print(show(Multi.get(&first, 1)) + show(Multi.get(&updated, 1)))"
+      , "  print(show(Multi.get(&updated, 2)) + show(Multi.get(&first, 2)))"
+      , "  print(show(updated.occurrences.get((1, \"north\"))))"
+      , "  0", "}" ]
+    , "[\"north\"][\"north\", \"south\", \"north\"]\n[\"west\"][]\nSome(2)\n")
   , ( "Std.HashMap inserts, replaces, removes and enumerates in insertion order", program
       [ "import Std.HashMap as HashMap"
       , ""

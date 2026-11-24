@@ -281,16 +281,21 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
         pure resolved
       ArrayExpression members
         | NominalType identity [element] <- resolved
-        , nominalName identity == "Array" -> do
-            mapM_ (checkAgainst needs declared rigid element) members
-            recordExpression spanValue resolved
-            pure resolved
+        , nominalName identity == "Array" -> checkMembers resolved element members
+      SetExpression members
+        | NominalType identity [element] <- resolved
+        , nominalName identity == "Set" -> checkMembers resolved element members
       BlockExpression block -> do
         _ <- checkBlockAgainst needs declared rigid resolved block
         recordExpression spanValue resolved
         pure resolved
       _ -> fallback
  where
+  checkMembers resolved element members = do
+    mapM_ (checkAgainst needs declared rigid element) members
+    recordExpression spanValue resolved
+    pure resolved
+
   {-| Returning what `unify` produced, rather than the inferred type, is what
       keeps a failure from being reported twice: the caller unifies again
       against the same expectation, and `ErrorType` absorbs there. -}

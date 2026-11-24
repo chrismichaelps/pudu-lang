@@ -26,6 +26,7 @@ directCallProperties :: [(String, IO Property)]
 directCallProperties =
   [ ("direct calls select functions with bounded call depth", testSelection)
   , ("direct calls pass signed integer arguments as C locals", once <$> testTypedCalls)
+  , ("typed calls borrow aggregate projections from a live caller", once <$> testBorrowedCalls)
   , ("direct calls print what heap calls print", once <$> testOutput)
   , ("direct calls report a failure at its own site", once <$> testFailure)
   , ("direct exports enter the direct body", testExportEntry)
@@ -115,6 +116,29 @@ testTypedCalls = do
     , "  0"
     , "}"
     ]
+
+testBorrowedCalls :: IO Property
+testBorrowedCalls = do
+  emitted <- emitWith ExecutableEntry program
+  case emitted of
+    Left problem -> pure (counterexample problem (property False))
+    Right unit -> do
+      observed <- runExecutable program (pure . (=== (ExitSuccess, "4.5\n4.0\n", "")))
+      pure (conjoin
+        [ counterexample "missing typed borrowed parameter" (property ("const pudu_box * pudu_a0" `Text.isInfixOf` emittedSource unit))
+        , observed ])
+ where
+  program = Text.unlines
+    [ "module Main"
+    , "type Sample = { level: Float64 }"
+    , "type Report = { sample: Sample }"
+    , "fn read(sample: Sample) -> Float64 { sample.level + 0.5 }"
+    , "fn through(report: &Report) -> Float64 { read(report.sample) }"
+    , "fn main() -> Int {"
+    , "  let report = Report{ sample: Sample{ level: 4.0 } }"
+    , "  print(display(through(&report)))"
+    , "  print(display(report.sample.level))"
+    , "  0", "}" ]
 
 -- Owned text and records cross direct calls made from both a recursive (heap)
 -- caller and a direct caller; every value is released exactly as before.

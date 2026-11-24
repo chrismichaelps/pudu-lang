@@ -50,6 +50,13 @@ the root to the change and keeps every other subtree as it is; a node only one
 tree holds is taken apart in place instead of being copied. Either way an
 update never changes a map someone else still holds.
 
+Resolved Grill Log: opening a uniquely owned node keeps its storage for
+rewriting on the updated path. A shared node retains its children and owned
+cells and supplies no reusable storage. Rotations reuse the storage of each
+exclusively opened node exactly once. Removing a node frees any storage that
+does not back a surviving entry. Tree order, duplicate policy and height
+updates follow the same balancing rules.
+
 ## Resolved Grill Log
 
 - **Q:** Why a tree rather than a sorted array or a hash table? **A:** The

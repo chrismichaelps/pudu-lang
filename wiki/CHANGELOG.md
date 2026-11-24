@@ -5,6 +5,475 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-24 — Native dispatch and lowering parity
+
+- Keep checked trait members with their trait on held receivers.
+  [[Compiler Lower Method]] · [[Compiler Lower Body]] · [[Compiler Lower Text]]
+- Lower each sortBy comparison site with its own locals.
+  [[Compiler Lower Sort]] · [[Compiler Lower Array Loop]]
+- Declare range method operands once around both materializers.
+  [[Compiler Lower Range]]
+- Widen a reduction accumulator to a later callback result.
+  [[Compiler Lower Array Loop]]
+- Adapt ordinary stored callbacks to held traversal items.
+  [[Compiler Lower Lambda]]
+- Stop range-keyed loan writeback from widening slots.
+  [[Compiler Lower Place]] · [[Compiler Lower Loan]]
+- Restrict held-receiver test programs to forms evaluation accepts.
+  [[Backend Rendering Callable Programs]]
+- Fold store keys into one signed word.
+  [[Compiler Lower Keyed]]
+- Name array storage by capacity so release never misses a heap buffer.
+  [[Backend Runtime Array]]
+- Repair test programs that checking or parsing rejects.
+  [[Backend Rendering Callable Programs]]
+
+## 2026-11-24 — Held builtin member values (#956)
+
+- Bind a builtin method to the selected receiver and apply its own callable
+  layout and argument-count diagnostic at the saved invocation.
+  [[Compiler Lower Method Value]] · [[Compiler Lower Default]]
+- Keep open traversal captures and specialize their invocation from the
+  retained callback or seed, including when they serve as traversal callbacks.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Array Loop]]
+- Compare bound builtin methods by family, member, and receiver value
+  across capture layouts. [[Compiler Lower Method Value]] ·
+  [[Native Aggregate Emission]]
+- Preserve a retained traversal callback's actual result layout.
+  [[Compiler Lower Method Value]]
+- Specialize a concretely typed bound traversal used as a callback.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Array Loop]]
+
+## 2026-11-24 — Native emission performance
+
+- Use fixed frame storage for small non-suspending entries. Reuse storage
+  for decimal digit pairs and adjacent text views.
+  [[Backend Frame Runtime]] · [[Native Text Runtime]]
+- Pass eligible records and tuples as borrowed pointers through typed calls.
+  [[Backend Typed Integer Calls]]
+- Find MultiMap groups and occurrence counts once per update.
+  [[Compiler Lower Multi Map]]
+- Track reported native runtime costs and record the baseline, semantic
+  guarantees, and regression evidence needed for each fix.
+  [[Native Emission Performance]]
+- Reuse unique array receivers with total scalar operands, allocate small
+  arrays in one block, and recycle storage for small sequential heap calls.
+  [[Native Arrays]] · [[Backend Frame Runtime]]
+- Skip redundant receiver retains for local array indexing, admit floating
+  signatures to typed calls, and build JSON values during validation.
+  [[Compiler Frame Body]] · [[Backend Typed Integer Calls]] · [[Native JSON Kernels]]
+- Bind payloads directly when a freshly constructed scalar variant has a
+  known matching arm. [[Compiler Frame Match]]
+- Emit local frame branches and reuse exclusively owned ordered tree nodes.
+  [[Backend Frame Bodies]] · [[Native Persistent Trees]]
+- Keep small host registries inline and index only the current live token
+  range. [[Native Host State]]
+- Keep zero-byte and one-byte copies in immutable text storage, and select
+  elementwise lane operations before entering their loops.
+  [[Native Text Runtime]] · [[Native Host Lanes]]
+- Use typed arithmetic for signed 8-, 16-, and 32-bit direct calls.
+  [[Backend Typed Integer Calls]]
+- Dispatch distinct variant arms by numeric tag and keep ordinary guard and
+  payload-failure behavior. [[Compiler Frame Match]]
+
+## 2026-11-23 — Held member reads (#956)
+
+- Read the selected record or named variant field and preserve
+  declared methods and missing-member diagnostics.
+  [[Compiler Lower Record]]
+
+## 2026-11-23 — Held record updates (#956)
+
+- Evaluate record-update fields before validating the held base.
+  Preserve the held record owner and existing fields.
+  [[Compiler Lower Record]]
+
+## 2026-11-23 — Concrete held aggregate construction (#956)
+
+- Preserve concrete field, element and key layouts during record
+  and collection construction. [[Compiler Lower Record]] ·
+  [[Compiler Lower Array]] · [[Compiler Lower Keyed]]
+
+## 2026-11-23 — Native layout warning cleanup (#956)
+
+- Disambiguate projection and output states in loan publication and
+  async entry reporting. [[Compiler Lower Method]] ·
+  [[Compiler Lower Function Body]]
+
+## 2026-11-23 — Concrete held writes (#956)
+
+- Discover writable layouts required by concrete replacements
+  through local, field and indexed places. [[Compiler Lower Place]]
+
+## 2026-11-23 — Concrete held call arguments (#956)
+
+- Specialize named and retained callables for a concrete held
+  argument layout. [[Compiler Lower Generic]] · [[Compiler Lower Lambda]]
+
+## 2026-11-23 — Retained positional constructors (#956)
+
+- Emit stored positional constructors with variant identity and
+  native call bodies. [[Compiler Lower Sum]] · [[Core Closure Identities]]
+
+## 2026-11-23 — Concrete held sum payloads (#956)
+
+- Preserve the layout of a concrete held value in a positional or
+  named sum field. [[Compiler Lower Sum]]
+
+## 2026-11-23 — Native callable compilation (#956)
+
+- Read the specialized signature in a lent call and remove redundant
+  callable lowering bindings. [[Compiler Lower Method]] ·
+  [[Compiler Lower Lambda]]
+
+## 2026-11-23 — Held branch results (#956)
+
+- Join the actual returned layouts of if and match arms and project
+  only the value from the selected arm. [[Compiler Lower Control]]
+
+## 2026-11-23 — Held break values (#956)
+
+- Settle value-producing loop destinations from their reachable break
+  layouts, including labelled exits. [[Compiler Lower Control]]
+
+## 2026-11-23 — Held runtime conditions (#956)
+
+- Validate held Bool operands in branches, loops and short-circuit
+  operators. Evaluate a non-Bool match guard before falling through.
+  [[Compiler Lower Control]] · [[Compiler Lower Match]]
+
+## 2026-11-23 — Native warning cleanup (#956)
+
+- Disambiguate locally scoped operator diagnostics and method providers.
+  [[Compiler Lower Scalar]] · [[Compiler Lower Method Value]]
+
+## 2026-11-23 — Mutable destructuring slots (#956)
+
+- Keep tuple, record and sequence bindings writable across held
+  layout changes. [[Compiler Lower Place]] · [[Compiler Lower Tuple]] ·
+  [[Compiler Lower Match]]
+
+## 2026-11-23 — Structural patterns on held payloads (#956)
+
+- Match anonymous record fields on named sum payloads and preserve
+  the layouts of successful captures. [[Compiler Lower Match]]
+
+## 2026-11-23 — Canonical pattern owners (#956)
+
+- Require the checked declaration identity for constructors and named
+  record patterns, including held values from another module.
+  [[Compiler Lower Match]]
+
+## 2026-11-23 — Held sequence state and results (#956)
+
+- Preserve changes to cursor layout between calls and check the held
+  advance result before binding a loop item. [[Compiler Lower For]] ·
+  [[Backend For Programs]]
+
+## 2026-11-23 — Native lowering compilation (#956)
+
+- Correct the held equality guard and disambiguate local names in
+  destructuring and text position conversion. [[Compiler Lower Scalar]] ·
+  [[Compiler Lower Tuple]] · [[Compiler Lower Text]]
+
+## 2026-11-23 — Held iteration sources (#956)
+
+- Select iteration from the retained source and skip impossible
+  binders. Report noniterable values at the loop after evaluating the
+  source. [[Compiler Lower For]] · [[Compiler Lower Match]]
+
+## 2026-11-23 — Type-only module qualifiers (#993)
+
+- Report missing constructor exports through modules that publish only
+  types. Keep alias types usable with their original constructors.
+  [[Type Check Rule]] · [[Type Check Pattern]] · [[Program Graph Spec]]
+
+## 2026-11-23 — Nested alternative binding layouts (#956)
+
+- Project private captures into shared slots after structural success.
+  Guards, bodies and enclosing statements read those slots.
+  [[Compiler Lower Match]] · [[Compiler Frame Match]]
+
+## 2026-11-23 — Escaping refutable bindings (#956)
+
+- Project bindings from successful held alternatives into enclosing
+  slots. Keep the fallback in the original scope. [[Compiler Lower Match]]
+
+## 2026-11-23 — Held shapes in refutable patterns (#956)
+
+- Select each held match subject before testing arms and guards.
+  Report the actual subject kind when a sequence binding fails.
+  [[Compiler Lower Match]]
+
+## 2026-11-23 — Held destructuring subjects (#956)
+
+- Match tuple and record bindings against the retained subject.
+  Publish binding layouts after success and report E7013 at the
+  original pattern. [[Compiler Lower Tuple]]
+
+## 2026-11-23 — Runtime receivers in tuple-checked reads (#956)
+
+- Dispatch tuple-checked indexing on the held receiver. Keep
+  direct literal slot reads on tuples and runtime bounds diagnostics
+  for shorter held tuples. [[Compiler Lower Slice]]
+
+## 2026-11-23 — Held range keys in bracket reads (#956)
+
+- Select indexing or slicing from the retained key for ordinary
+  reads, receiver preparation, and mutable arguments.
+  [[Compiler Lower Slice]] · [[Compiler Lower Place]]
+
+## 2026-11-23 — Exact writable array indices (#956)
+
+- Retain exact integer keys through indexed assignment and loans.
+  Keep bounds and wrong-kind diagnostics at the read or store.
+  [[Compiler Lower Place]]
+
+## 2026-11-23 — Mutable receivers through builtin dispatch (#956)
+
+- Retain receiver places across text and collection member selection.
+  The selected nominal method can publish its final through the
+  original place. [[Compiler Lower Place]] · [[Compiler Lower Text]]
+
+## 2026-11-23 — Mutable declared receiver selection (#956)
+
+- Select the held declaration before preparing argument loans.
+  Retain indexed receiver places for ordered writeback.
+  [[Compiler Lower Method]] · [[Compiler Lower Loan]]
+
+## 2026-11-23 — Mutable finals through ordinary callable types (#956)
+
+- Preserve places for held callables with mutable parameters.
+  Collection callbacks return the ordinary result and release their
+  finals. [[Compiler Lower Lambda]] · [[Compiler Lower Loan]] ·
+  [[Compiler Lower Array Loop]]
+
+## 2026-11-23 — Selected indirect mutable arguments (#956)
+
+- Retain argument places in order and use the selected callable's
+  defaults and exclusive positions when publishing finals.
+  [[Compiler Lower Loan]] · [[Compiler Lower Default]]
+
+## 2026-11-23 — Selected indirect callable arity (#956)
+
+- Use the retained callable's argument profile for ordinary indirect
+  calls and collection traversal. Preserve the named arity diagnostic
+  after supplied effects. [[Compiler Lower Default]] · [[Compiler Lower Lambda]]
+
+## 2026-11-23 — Declared method argument counts (#956)
+
+- Forward written argument counts through direct and stored methods.
+  Keep default evaluation and missing parameter diagnostics in
+  declaration order. [[Compiler Lower Default]] · [[Compiler Lower Method Value]]
+
+## 2026-11-23 — Held declared method values (#956)
+
+- Capture the selected receiver and retain its bound signature or field
+  value across later reads. [[Compiler Lower Method Value]]
+
+## 2026-11-23 — Held declared method calls (#956)
+
+- Select the held ordinary method before arguments and preserve its
+  result layout. [[Compiler Lower Method]] · [[Compiler Lower Body]]
+
+## 2026-11-23 — Traversal callback defaults (#956)
+
+- Pass the selected callback's supplied count and retain parameter
+  diagnostics. [[Compiler Lower Array Loop]] · [[Compiler Lower Default]]
+
+## 2026-11-23 — Traversal callback validation (#956)
+
+- Preserve callback invocation failures and predicate result handling
+  in array and range traversal. [[Compiler Lower Array Loop]]
+
+## 2026-11-23 — Held collection arguments and strides (#956)
+
+- Validate selected collection arguments at runtime. Preserve exact
+  positive range strides and their result count. [[Compiler Lower Arguments]] ·
+  [[Native Range Runtime]]
+
+## 2026-11-23 — Held native collection members (#956)
+
+- Select array, keyed and range methods on the retained receiver
+  before evaluating their arguments. [[Compiler Lower Body]]
+
+## 2026-11-23 — Exact dynamic Int payloads (#956)
+
+- Retain exact Int payloads through trait dispatch, bound methods and
+  mutable receiver finals. [[Compiler Lower Dynamic]] · [[Compiler Lower Method]]
+
+## 2026-11-23 — Exact native Int identity (#956)
+
+- Preserve Int runtime identity for wider range members across
+  frames, arithmetic and conversions. [[Compiler Lower Scalar]]
+
+## 2026-11-23 — Exact stored range bounds (#956)
+
+- Store original endpoint values, compute finite extents and sums
+  exactly, and stream range loops. [[Native Range Runtime]] · [[Compiler Lower For]]
+
+## 2026-11-23 — Exact native slice bounds (#956)
+
+- Check written endpoints at their original width and share the slice
+  bounds logic with stored keys. Preserve endpoint validation order.
+  [[Compiler Lower Slice]]
+
+## 2026-11-23 — Wider native integer positions (#956)
+
+- Preserve held integer counts and positions for text, bytes, and
+  scalar indexing. Check exact view bounds and group shape before
+  narrowing. [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]]
+
+## 2026-11-23 — Selected native arguments (#956)
+
+- Select held method and text-view operands and preserve invocation
+  diagnostics. Validate selected byte-construction elements in order.
+  [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]]
+
+## 2026-11-23 — Selected text and byte receivers (#956)
+
+- Dispatch methods, bound member reads and indexing on the held
+  receiver layout. Preserve failure spans and operand ordering.
+  [[Compiler Lower Text]] · [[Compiler Lower Slice]]
+
+## 2026-11-23 — Stored mutable parameter layouts (#956)
+
+- Settle later writes in lifted and bound callable parameters while
+  preserving their captured environments. [[Compiler Lower Loan]]
+
+## 2026-11-23 — Mutable slot layout discovery (#956)
+
+- Settle mutable storage from later writes, including nested updates
+  and writeback through named loans. [[Compiler Lower Place]]
+
+## 2026-11-23 — Native mutable loan layouts (#956)
+
+- Select exact layouts for native mutable call arguments and publish
+  their finals through the original places. [[Compiler Lower Loan]]
+
+## 2026-11-23 — Native task result layouts (#956)
+
+- Settle native layouts for internal async bodies and their task
+  closures. Preserve selected failures across awaits and joins.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Scope]]
+
+## 2026-11-23 — Native keyed collection layouts (#956)
+
+- Preserve runtime key and value layouts in maps, sets and indexed
+  stores, including lookup, updates and traversal. [[Compiler Lower Keyed]]
+
+## 2026-11-23 — Native sum payload layouts (#956)
+
+- Preserve runtime alternatives in positional and named sum
+  constructors, payload patterns, and early failure propagation.
+  [[Compiler Lower Sum]] · [[Compiler Lower Try]]
+
+## 2026-11-23 — Native tuple and record layouts (#956)
+
+- Preserve runtime alternatives in tuple members and nominal record
+  fields. Project branch results into a shared layout and keep retained
+  fields through updates. [[Compiler Lower Record]] · [[Compiler Lower Tuple]]
+
+## 2026-11-22 — Stored method and builtin layouts (#956)
+
+- Retain receiver captures when a stored synchronous method needs
+  different native inputs. Render, write and report panic using the
+  actual input layout of a stored builtin. [[Compiler Lower Method Value]]
+
+## 2026-11-22 — Stored native callbacks (#956)
+
+- Reuse captured values when a stored callback needs a different native
+  input layout. Indirect calls and array traversal select the specialized
+  body and preserve its result. [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Native array callbacks (#956)
+
+- Specialize named and inline callbacks for runtime element layouts.
+  Preserve actual mapped results and the accumulator layout in array
+  and range reductions. [[Compiler Lower Array]] · [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Array runtime element carriers (#956)
+
+- Preserve selected callable layouts during array construction, retrieval,
+  copying, updates, slicing and iteration. A bound retrieval keeps its
+  captured array layout. [[Compiler Lower Array]]
+
+## 2026-11-22 — Internal runtime call carriers (#956)
+
+- Use concrete argument carriers for internal direct-call copies and
+  settle their return carriers before emission. Retain returned callables
+  through declared function signatures. [[Compiler Lower]]
+
+## 2026-11-22 — Stored runtime callables (#956)
+
+- Preserve the actual closure and result carrier across local storage.
+  Invoking a stored dynamic text method selects its typed callable;
+  rendering and operators consume the held result. [[Compiler Lower Lambda]]
+
+## 2026-11-22 — Dynamic runtime result consumers (#956)
+
+- Render selected dynamic text results in direct output and rendering
+  calls. Preserve the runtime failure of calling a numeric field and
+  report the held value's kind in dynamic diagnostics.
+  [[Native Operator Parity Delivery]]
+
+## 2026-11-22 — Dynamic text member selection (#956)
+
+- Select universal text calls and stored text methods on their held
+  receivers. Preserve callable fields, custom rendering and mutable
+  receiver writeback. [[Compiler Lower Method Value]]
+
+## 2026-11-22 — Dynamic cross-layout comparisons (#956)
+
+- Compare dynamic values through their respective payload layouts.
+  Preserve nominal identities, variant shape and field order, along with
+  nested array and keyed collection comparison. [[Backend Cross Comparison]]
+
+## 2026-11-22 — Proven generic dynamic payloads (#956)
+
+- Form dynamic variants from proven widenings in checked modules and
+  reachable generic copies. Dispatch and nominal narrowing can reach
+  multiple payload layouts of one owner. [[Native Type Abstractions]]
+
+## 2026-11-22 — Dynamic dispatch identity and transfers (#956)
+
+- Preserve full trait and payload owner identities through dynamic
+  dispatch. A transfer during argument evaluation leaves the call and
+  loan writeback unexecuted. [[Native Operator Parity Delivery]]
+
+## 2026-11-22 — Dynamic control-flow carriers (#956)
+
+- Widen breaks to their loop's checked result and use checked aggregate
+  carriers in conditional and match joins. Dynamic record and sum
+  patterns narrow by canonical owner before matching their payloads.
+  [[Native Operator Parity Delivery]] · [[Native Type Abstractions]]
+
+## 2026-11-22 — Dynamic collection and assignment carriers (#956)
+
+- Widen concrete replacements in record updates and nested assignments.
+  Arrays, sets, maps and stores accept implementing arguments in dynamic
+  slots. Calls with mutable loans widen ordinary arguments independently,
+  and dynamic methods forward named loans and write back their final values.
+  [[Native Operator Parity Delivery]] · [[Backend Abstraction Programs]]
+
+## 2026-11-22 — Native aggregate shape order (#956)
+
+- Dynamic aggregate comparisons follow the held value's shape. Concrete
+  sums order positional and named variants by shape before comparing names.
+  [[Native Aggregate Emission]] · [[Native Operator Parity Delivery]]
+
+## 2026-11-22 — Native operator and array parity (#956)
+
+- Checked unary operations preserve runtime refusals for additional represented
+  values. Typed array joins preserve empty results and invalid-member
+  diagnostics in direct and bound calls. Dynamic operators select their held
+  carriers and preserve display, show, and the resulting implementation, and callback tokens render and compare through their
+  ordinary cell and entry paths. Stored foreign functions share the direct
+  crossing, callback constructors report their declaration, and dynamic
+  numeric keys compare the values they hold. The differential cases cover
+  nested comparability and slice bounds.
+  [[Native Operator Parity Delivery]] · [[Native Emission Coverage]]
+
 ## 2026-11-19 — Native open, share, clipboard and status bar (#974)
 
 - Native open, share, clipboard and status bar (#974): OPEN 46, SHARE 47, COPY 48, PASTE 49 and STATUS 50 on the iOS and Android hosts, OPENED 25, SHARED 26 and PASTED 27 events, and body caps and connection timeouts for remote images and fetch requests.

@@ -20,6 +20,22 @@ rangeSuccessPrograms =
       , "  print(show(keyed) + \" \" + show(setOf([3.., 1..2, ..])))", "  let big = (-9223372036854775807 - 1)..=9223372036854775806", "  print(display(big.isBounded()) + \" \" + display((0..9223372036854775807).length()) + \" \" + display((-1..9223372036854775806).length()))"
       , "  return 0", "}" ]
     , "1..5 1..=5 3.. ..4 .. 5..2 1..5\n4 5 0 0 1\nfalsetruefalsetruefalse\ntruefalsetruefalsetruefalsetrue\nSome(1)Some(5)NoneNoneNone\nfalsetruetruefalsefalsefalse\n[1, 2, 3, 4][5, 4, 3, 2, 1][][0, 3, 6, 9][0, 5, 10][0]\n15 0 0 -6\nf1\nf2\nf3\nf4\nf5\n[1, 4, 9, 16, 25] [2, 4] 120\ni2\ni3\ni4\n[20, 30, 40, 50] [40, 50] [10, 20, 30, 40] [10, 20, 30, 40, 50] éll\ntruefalsetruetruetrue\ntruefalsetruetrue\n{..2: \"y\", 0..=1: \"z\", 1..3: \"x\"} #{.., 1..2, 3..}\ntrue 9223372036854775807 9223372036854775807\n")
+  , ("slice boundaries allow empty results without clamping", program
+      [ "fn main() -> Int {"
+      , "  let empty: Array[Int] = []"
+      , "  let tail = 2.."
+      , "  print(show(empty[..]) + \" \" + show([1, 2][tail]))"
+      , "  print(\"[\" + \"éa\"[2..2] + \"]\")"
+      , "  return 0", "}" ]
+    , "[] []\n[]\n")
+  , ("a stored and a written range step each hold the receiver and stride once", program
+      [ "fn main() -> Int {"
+      , "  let r = 0..=4"
+      , "  let step = r.step"
+      , "  print(show(step(2)))"
+      , "  print(show(r.step(3)))"
+      , "  return 0", "}" ]
+    , "[0, 2, 4]\n[0, 3]\n")
   ]
 
 {-| Each fails where `Eval.Range` fails, after printing "start". -}
@@ -55,6 +71,18 @@ rangeRefusalPrograms =
   , ("a Str range value ending before it starts", program
       [ "fn main() -> Int {", "  print(\"start\")", "  let r = 3..1"
       , "  print(\"abc\"[r])", "  return 0", "}" ])
+  , ("written range evaluates the receiver and both ends before checking bounds", program
+      [ "fn values() -> Array[Int] { print(\"receiver\")\n [1, 2] }"
+      , "fn bound(label: Str, value: Int) -> Int { print(label)\n value }"
+      , "fn main() -> Int {"
+      , "  print(show(values()[bound(\"start\", -1)..=bound(\"end\", 8)]))"
+      , "  return 0", "}" ])
+  , ("a held inclusive range on Bytes counts bytes and reports at the key", program
+      [ "fn main() -> Int {", "  print(\"start\")", "  let r = ..=2"
+      , "  print(show(\"é\".toBytes()[r]))", "  return 0", "}" ])
+  , ("range complement reports E7001 after evaluating the operand", program
+      [ "fn main() -> Int {", "  let invalid = ~{ print(\"range\")\n 2..9 }"
+      , "  print(show(invalid))", "  return 0", "}" ])
   , ("sum of an unbounded range", program
       [ "fn main() -> Int {", "  print(\"start\")", "  print(display((..5).sum()))"
       , "  return 0", "}" ])

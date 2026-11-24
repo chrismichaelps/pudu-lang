@@ -53,3 +53,45 @@ CoreStoreType is an owned, aggregate `pudu_box *` mangled `BK_<held>_E`. Resolve
 ## Foreign handles (#853)
 
 A foreign handle is an owned box whose C helper names include its nominal type identity.
+
+## Callback token text (#956)
+
+`callbackTokenText` emits the canonical declaration name in angle brackets
+as an immutable text literal. Nested renderers call it for callback cells.
+
+### Resolved Grill Log
+
+Equality compares registration identities. Ordering uses the interpreter's
+shared rank for callback values. Rendering needs only
+the owner, so it remains available after registration teardown.
+
+## Dynamic payload display (#956)
+
+Member display retains text, converts a character to text, or selects the
+payload's normal renderer.
+
+### Resolved Grill Log
+
+Both direct and erased carriers use the existing text and character helpers.
+
+## Callable ordering by runtime shape (#956)
+
+Resolved Grill Log: a function carrier can hold foreign callables and
+callback constructors alongside ordinary closures. The comparison helper
+uses the active closure's runtime shape when ordering a comparable value.
+
+## Runtime kind names (#956)
+
+Resolved Grill Log: emit static labels through the shared Core spelling
+and call a layout helper only for values whose active shape selects the
+name.
+
+## Transparent runtime alternatives (#956)
+
+Resolved Grill Log: display and show expose the selected payload of a
+runtime alternative. Drop, equality and comparison reuse the held
+type's existing aggregate operations.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact Int layout keeps the Int runtime name and uses a distinct aggregate symbol suffix so narrow and exact payloads never share helpers.

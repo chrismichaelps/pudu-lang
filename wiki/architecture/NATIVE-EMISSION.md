@@ -9,6 +9,9 @@ aliases: [Native Emission Coverage]
 
 Compile ordinary checked Pudu programs into portable C11 with interpreter-identical observable behavior. Full coverage requires every implemented language construct and reachable standard-library boundary to have lowering, representation, execution, cleanup, diagnostics, and differential evidence. A typed E6001 refusal is an honest boundary, not completed support. There is no silent interpreter fallback.
 
+The [[Native Emission Performance]] ledger tracks reported costs in emitted
+programs and the measurements and parity cases required to close them.
+
 ## Coverage ledger
 
 | Area | State | Next obligation |
@@ -17,14 +20,14 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Partial (#499, #828) | Callees, receivers and their selected members run before arguments in the tree, compiled and native paths (#828), including dynamic receivers and byte operations added by #846. Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence, including once-counted named-value calls (#568); promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
-| Entry result reporting | Partial (#512, #521, #525, #566, #871) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; an entry whose first parameter has no default stops with the evaluator's located E7003 (#871); complete callable forms and platform failure evidence remain |
+| Entry result reporting | Partial (#512, #521, #525, #566, #871) | Represented values, including output Results, use interpreter-identical rendering and builder buffering; an entry whose first parameter has no default stops with the evaluator's located E7003 (#871); callback tokens report the qualified declaration name from their retained cell; complete callable forms and platform failure evidence remain |
 | Complete numeric families | Implemented (#495, #497, #500, #507, #512, #560, #800, #802) | Fixed integers, Int128/UInt128, BigInt (#800), Float32/Float64 and Decimal (#802) are admitted, with `convertInteger` between every integer kind and every `Std.Decimal` primitive; preserve the carriers' differential evidence |
 | Text and bytes | Partial (#515, #516, #517, #518, #559, #562, #565) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt`, `toFloat` and `charFromCode` match the interpreter (#559, #562); Bytes with every method, `toBytes` and `bytesOf` are native (#565); output Results are native (#566); `toDecimal` is native through the Decimal parser (#802); `Bytes.strided` is native (#846); all six byte-addressed TextView primitives and builtin values are native (#827), including public StringView integration; retain the conversion and callable evidence |
 | Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558, #561, #564, #840) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; arrays (#556, #558), maps and sets (#561) and range values (#564) and Bytes (#565) are native; word-map algebra and queries are native (#810, #814); indexed stores (`Buckets[V]`), `hashOf`, `mixHash` and the MultiMap primitives are native, so `Std.HashMap` and `Std.MultiMap` compile (#840); the six flat-table primitives, the buffer, column, sort, digest, keyed digest, checksum, sealing, signature, audio and codec kernels are native ([[Native Builtin Kernels]]); the ledger row stays Partial until the independent review of #842 is recorded |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558, #562, #564) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges, range values, sequence types, arrays, maps, sets, Str, tuples and sum payloads (#554, #561, #562, #564); sequence patterns are native in `match` and in `let` at any depth (#558, #846) |
 | Modules and constants | Partial (#539, #543, #563) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity, with arbitrary Bytes constants including nested byte values (#565); records and sums whose fields name other modules' types or aliases are laid out as checking formed them (#563); folded arrays, maps, sets and ranges now project recursively through their existing carriers (#808); folded stores project through the store carrier (#840); callable constants whose folding left no product compile their written initializer at the use, and calls through a constant, bare or qualified, are value calls (#846); `null` has no type until raw pointers exist, so checking refuses it (E3024) and no `null` constant reaches lowering (#858) |
 | Callables and generic code | Partial (#551, #552, #555, #560, #567, #569, #575, #631, #633, #638, #641, #644, #646, #806, #810, #819, #824, #840, #842, #846, #935) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; named expression bodies, including entries, generic copies and trait defaults, use the ordinary return path (#567); the four standard-stream builtins, display/show and charFromCode/bytesOf/mapOf/setOf are first-class values, builtin refusals through a value name the call (#569, #575, #631), builtin values whose type checking left open form at unit (#631), and panic and untyped convertInteger stop like the interpreter directly and as values, except where #634 leaves panic untyped (#633); default parameter values fill in the callee through a supplied-argument count, directly, across modules and through values (#638); module-qualified function values are first-class (#641); built-in methods of text, arrays, maps, sets, ranges, chars and bytes are values bound to their receiver, failing at the call through them (#644); trait methods are values bound to records and sums or named through their type (#646); the seven Decimal primitive values reuse their direct-call bodies and preserve builtin identity and entry rendering (#806); all eight word-map algebra/query builtins are first-class (#810, #814); static members and defaults named through a type parameter (`T.made()`) select the copy's bound type (#819); inherited defaults typed by the trait's own parameters, for plain and generic implementations, and defaults of traits imported from other modules, lowered in the trait's module (#824); `bucketsOf`, `hashOf`, `mixHash`, `multiMapAdd` and `multiMapContains` are first-class, store methods are values bound to their receiver, and a builtin value's failure points at the call made through it (#840); every pure kernel builtin is first-class too (#842); generic methods whose type arguments checking left to the call, static members through a type parameter at each instantiation, `dynamic` widening/dispatch/rendering/equality, and constructor parameters (`F[_]`) plain and through a trait are native, and `toText` taken as a value from a type that declares none is a text method rendering `<method toText>` (#846); trait-qualified method values dispatch on their first argument in both engines (#647) |
-| Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
+| Accepted operations with runtime refusals | Partial (#494, #512) | Checked unary operations on represented scalars and ordinary aggregates retain E7001 when the interpreter refuses; typed array joins preserve empty results and invalid-member diagnostics; dynamic unary and binary operators select the held carriers, including mixed-width integer arithmetic and comparisons |
 | Errors, references and resources | Partial (#544, #553, #649, #651, #790, #794) | Shared borrows, dereference and `?` on Result and Option match the interpreter; assignment to fields, elements and paths of both follows the interpreter's order and root-span failures (#649); functions and methods with `&mut` parameters, `self: &mut Self` included, write each final back to the lent place on every return path, directly, through methods and through function values (#651, #790, #794); moves, drop and all unwind paths remain |
 | Host services and concurrency | Partial (#846) | Tasks, async lambdas, `.await`, `async with scope` joins, cells, locks, channels, threads, clocks, sleeping, arguments, environment, directories, standard-input lines, whole-file I/O, links, permissions, temporary files, atomic writes, open readers/writers, binary64 math, packed lanes and the broad-phase overlap kernel, stream sockets, child programs, gzip and bare-stream compression, time rendering and reading, stop signals and TLS connections through the system TLS library are native; foreign functions with fixed-width integer, float, Bool, text, lent byte and record crossings are typed native call sites ([[Native Foreign Call Sites]], #850, #851, #852); direct opaque handle calls preserve owned, counted and borrowed claims and runtime refusals ([[Native Foreign Handles Delivery]], #853); scalar, record, text and owned-handle foreign out-slots preserve declaration order and zero initialization ([[Native Foreign Slot Delivery]], #854); foreign functions an imported module declares are called through its qualifier or alias as bare calls are (#873); desktop windows and audio devices and streams run through the native host adapters, refusing settings before the platform as the interpreter does ([[Native Desktop Adapter Delivery]], #856; [[Native Audio Adapter Delivery]], #857); time readings beyond the integer carrier refuse alike in both engines |
 
@@ -52,11 +55,358 @@ The ledger's Partial rows predate this audit. A row stays Partial until a
 probe for each remaining claim runs in both engines; the audit shows no
 corpus program depends on a remaining gap.
 
+## Operator and array edge cases (#956)
+
+[[Native Operator Parity Delivery]] tracks dynamic operator dispatch, typed
+join carriers, callback token reporting, nested tuple comparability and
+slice bounds. Direct and bound join calls use the same array contract.
+
+## Callable and aggregate parity (#956)
+
+| Checked program | Verified native result |
+| --- | --- |
+| Bind a foreign Int32 function to a local and call it | Calls the stored crossing and returns 3 |
+| Compare tuples whose dynamic first members hold Int 6 and Int8 1 | Reports true for greater-than |
+| Show a callback constructor bound to a local | `<callback registration Main.Visit>` |
+
+The ordered collection regressions use mixed integer widths, floating values
+and duplicate numeric keys. Stored foreign declarations share the direct
+crossing for checked bounds, claims, result slots and mutable writeback.
+The checker reserves nullable-address loans for direct calls (E3102).
+Dynamic aggregate comparisons follow the held shape after numeric dispatch,
+including sums with both positional and named variants.
+
+## Dynamic destination carriers (#956)
+
+Record updates, nested place assignments and ordinary arguments to loaned
+calls widen implementing values to their declared dynamic carriers.
+Array, map, set and store methods use the same projection for their
+arguments. A contextual set literal records its resolved member carrier
+before lowering. Dynamic method dispatch forwards an exclusive parameter
+named in a loaned position. [[Backend Abstraction Programs]] and [[Backend
+Mutable Loan Programs]] cover writeback, direct and stored calls, and
+keyed lookup after insertion.
+
+## Dynamic control-flow carriers (#956)
+
+Loop exits use the checked result carrier of their lexical destination.
+Conditional and match results widen dynamic members inside the checked
+aggregate carrier. Named record and sum patterns on dynamic values first
+test the canonical owner, then match the payload. [[Backend Abstraction
+Programs]] and [[Backend Shape Programs]] cover labelled exits, nested
+narrowing, guards, and same-named declarations across modules.
+
+## Dynamic dispatch identity and transfers (#956)
+
+Dynamic method calls preserve the selected trait's canonical identity
+through checking, execution, and native lowering. The held type selects
+the owner independently of the variant tag. A receiver or argument
+that transfers control skips invocation and writeback. [[Backend Shape
+Programs]] and [[Backend Control Programs]] exercise both behaviors.
+
+## Proven generic dynamic payloads (#956)
+
+Native lowering discovers concrete dynamic variants from proven widening
+facts in checked modules and their reachable specializations. Dispatch
+and common-field narrowing can select multiple concrete variants of one
+generic owner. [[Backend Cross Comparison]] compares their held values
+through both layouts. [[Backend Shape Programs]] covers direct equality,
+ordering inside tuples, ordered membership, and nested arrays, sums and
+maps across concrete instantiations.
+
+## Dynamic text member selection (#956)
+
+A checked trait member uses its selected trait. Universal `toText` calls
+and stored members select on the held value, including overrides,
+callable fields and builtin character conversion. Direct calls preserve
+mutable receiver writeback and a stored callable retains its selected
+receiver. Direct calls and local stored callables preserve distinct
+runtime layouts in an internal sum when returning variants disagree.
+`show`, `display`, output and scalar operators use the held value,
+including `Option[Str]` returned by `Bytes`. A numeric field reached
+through the dynamic view retains the runtime call diagnostic. Internal
+synchronous direct calls retain runtime alternatives across declared
+parameters and results, using a copy when the parameter carrier changes.
+The worklist settles return carriers before emitting frame slots.
+[[Backend Method Value Programs]] covers a returned callable, explicit
+returns, a defaulted argument, and output from the held result.
+
+[[Compiler Lower Array]] stores callable carriers with different native
+return types in one array. Indexing, range slicing, iteration and bound
+retrieval use that layout. When an update or concatenation widens the
+element carrier, it builds a new array and retains existing aliases.
+Named and inline callbacks use the native element layout for
+`map`, `filter`, `reduce` and `sortBy`. Mapping keeps the callback's
+result layout. Reduction settles its accumulator layout before
+emitting the loop, including when the input is a range. Joining mapped
+text reads the held value and reports an invalid member at the join.
+[[Backend Method Value Programs]] covers valid and invalid decoding,
+stable aliases, mixed-layout lookups and repeated reduction.
+Stored synchronous named functions and lambdas can select native
+argument layouts at an indirect call. A lambda copy uses the held
+captures and keeps the original closure's identity. Array callbacks
+select the result layout of the held body. Stored synchronous methods
+retain their captured receivers when invoked with different native
+argument layouts. Stored rendering, output, panic and applicable
+collection constructors specialize their native inputs.
+[[Backend Method Value Programs]] and [[Backend Rendering Callable Programs]]
+cover these paths.
+
+Tuples and nominal records keep selected runtime layouts in their
+members. Conditional and match results project compatible products
+into one native layout. Updates retain the base's untouched fields
+and preserve existing aliases. [[Backend Shape Programs]] covers
+nested fields, shared records, destructuring and early returns.
+Positional and named sum constructors retain the actual payload layout
+under the declared variant. Pattern binding and `?` use those payload
+slots, including a failure returned in the enclosing function's layout.
+[[Backend Shape Programs]] covers the propagation paths.
+
+Maps, sets and indexed stores preserve native key and value layouts.
+Construction, lookup, method binding and iteration use the retained
+slots. Widening an update or combining collections rebuilds entries
+without changing earlier aliases. [[Backend Keyed Programs]] and
+[[Backend Store Programs]] cover callable values, absent keys and
+set probes with selected values.
+
+Internal async functions and stored async callables retain native
+input and result layouts. Await and scope joins use the selected
+payload, including failures carried back to the async entry. [[Backend
+Shape Programs]] covers deferred execution and selected child failures.
+Mutable loans use the native layout of the held place. Direct and
+indirect calls settle the ordinary result separately from loan finals
+and publish the finals in parameter order. [[Backend Shape Programs]]
+covers retained captures, fields and indexed places. A mutable local
+also settles its physical layout from later writes, including a
+named mutable-loan final and changes through a nested field or element.
+Lifted and bound loan bodies can demand wider parameter layouts
+without changing the stored environment. Function copies retain stable
+body identities while their final layouts settle. [[Backend Shape
+Programs]] covers writeback into initially narrow places. Native
+text and byte receiver selection keeps the held layout for methods,
+bound methods and indexing. An absent member and an invalid index
+preserve their different evaluation order. [[Backend Rendering Callable
+Programs]] covers the selected access and diagnostics. Selected
+argument layouts, other intrinsic families and fixed external
+boundaries remain open.
+
+## Dynamic diagnostic kind names (#956)
+
+Dynamic values supply the held value's runtime kind when a diagnostic
+names its operand. Active sum variants and callable kinds keep their
+existing spellings. [[Backend Keyed Programs]] covers rejection of a
+generic record holding a function.
+
 ## Nested foreign records (#863)
 
 The interpreter and C11 use the platform layout of each nested record.
 [[Nested Foreign Record Delivery]] covers inner tail padding and records
 whose combined scalar leaves exceed the per-record member limit.
+
+## Selected text and byte operands (#956)
+
+Methods and text views evaluate the whole argument list before
+validating held layouts. Stored calls attach argument failures to the
+invocation. Byte construction checks each element in order before
+packing. [[Compiler Lower Arguments]] · [[Compiler Lower Bytes]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Wider integer positions (#956)
+
+Text and byte methods and scalar indexing accept held integer widths.
+Byte views and repetition check exact bounds before conversion.
+Byte groups validate the relationship between the original width and
+stride. [[Compiler Lower Arguments]] · [[Compiler Lower Array]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Exact written slice bounds (#956)
+
+Written slices evaluate both endpoints before validating their types
+in order. All held integer widths participate in exact bounds checks.
+Stored slice keys dispatch on their held layout and share the same
+bounds implementation. Widening the stored range representation is
+pending. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
+
+## Exact stored range bounds (#956)
+
+Stored ranges own exact endpoints for slicing, rendering, ordering,
+membership and finite extent. Native sums compute the exact progression,
+and loops walk a cursor. [[Native Range Runtime]] · [[Compiler Lower For]]
+
+## Exact Int runtime identity (#956)
+
+Wide range members use the Int runtime name and checked arithmetic
+rules. Their storage preserves the mathematical value through frames
+and conversions. Dynamic traits retain the exact payload while
+selecting the Int implementation. A mutable final can change the
+payload layout. [[Integer Literal]] · [[Compiler Lower Scalar]] ·
+[[Compiler Lower Dynamic]]. Execution evidence is pending.
+
+## Held collection member selection (#956)
+
+Array, keyed and range calls select the held receiver before evaluating
+arguments. Shared names use the held operation and result layout.
+Missing members stop at lookup. [[Compiler Lower Body]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Held collection arguments and strides (#956)
+
+Selected array, keyed and range calls validate operands after evaluation.
+Array methods and stores preserve their platform-word conversions.
+Ranges use the exact positive stride in both execution paths and
+allocate only the selected terms. [[Compiler Lower Arguments]] ·
+[[Native Range Runtime]]. Execution evidence is pending.
+
+## Traversal callbacks (#956)
+
+Array and range traversal validate held callbacks only when reached.
+Array filter and sort preserve their Boolean-result diagnostics.
+Range filter discards other results after evaluating them.
+[[Compiler Lower Array Loop]] · [[Backend Rendering Callable Programs]].
+Execution evidence is pending.
+
+## Traversal callback defaults (#956)
+
+Callbacks use the held callable profile to pass the supplied count
+and omitted slots. The default prologue reports a missing required
+parameter at invocation after earlier defaults. [[Compiler Lower
+Array Loop]] · [[Compiler Lower Default]]. Execution evidence is pending.
+
+## Held declared method calls (#956)
+
+Ordinary calls select the held receiver before evaluating arguments.
+The selected member can supply a different result layout, including a
+callable with its own parameter profile. Missing members stop before
+argument effects. [[Compiler Lower Method]] · [[Compiler Lower Body]] ·
+[[Backend Rendering Callable Programs]]. Execution evidence is pending.
+
+## Held declared method values (#956)
+
+Reading a member selects the held field or method at capture time.
+The method closure keeps the receiver and selected callable layout,
+and a missing member fails at the read. [[Compiler Lower Method
+Value]] · [[Backend Rendering Callable Programs]]. Execution evidence
+is pending.
+
+## Held builtin method values (#956)
+
+A field or method read can select a builtin from the held receiver.
+Its closure uses that receiver's signature, including the checked
+result or accumulator fact for a generic traversal when available.
+When a saved method receives the wrong number of arguments, its
+own diagnostic follows all supplied argument effects. [[Compiler Lower
+Method Value]] · [[Compiler Lower Default]] · [[Backend Rendering
+Callable Programs]]. Native execution evidence is pending.
+
+An open `map` or `reduce` can be captured without a checked callable
+fact. A later indirect invocation, including through a traversal,
+specializes the template from the retained callback or seed while
+keeping the receiver and method identity. [[Compiler Lower Lambda]] ·
+[[Compiler Lower Method Value]] · [[Compiler Lower Array Loop]].
+Bound builtin methods compare the family, member, and retained receiver
+through each side's capture layout. [[Native Aggregate Emission]] ·
+[[Backend Cross Comparison]].
+Traversal wrappers record the held result layout of a selected callback
+even when their receiver layout matches the checked receiver.
+A bound traversal used as a callback can specialize its concrete or open
+signature to the input layout carried by the outer loop.
+
+## Declared method argument counts (#956)
+
+Declared calls pass the selected implementation's supplied count.
+Stored wrappers dispatch on that count before reading argument slots.
+The implementation evaluates omitted defaults in parameter order.
+[[Compiler Lower Default]] · [[Backend Method Programs]]
+
+## Selected indirect callable arity (#956)
+
+Ordinary indirect calls and traversal select the retained callable's
+written parameters and supplied-count convention. A fixed function
+and a defaulted function can share a native slot layout and still
+take different invocation paths. [[Compiler Lower Default]] ·
+[[Backend Rendering Callable Programs]]
+
+## Selected indirect mutable arguments (#956)
+
+Indirect calls checked with mutable arguments retain the explicit and
+forwarded places before invoking the held callable. The selected profile
+determines omitted defaults and publishes only its own exclusive finals.
+[[Compiler Lower Loan]] · [[Backend Rendering Callable Programs]]
+
+## Mutable finals through ordinary callable types (#956)
+
+A selected callable may carry mutable finals even when the checked
+function type takes ordinary values. Native indirect calls retain
+eligible places and use the selected profile for writeback.
+Collection callbacks publish only the ordinary result.
+[[Compiler Lower Lambda]] · [[Backend Rendering Callable Programs]]
+
+## Mutable declared receiver selection (#956)
+
+An ordinary declared call retains its receiver and eligible place
+before selecting the runtime declaration. The selected receiver and
+argument loans publish finals to the original places after the call.
+[[Compiler Lower Method]] · [[Backend Rendering Callable Programs]]
+
+## Mutable receivers through builtin dispatch (#956)
+
+Builtin and declared member calls share receiver preparation. The
+selector retains the original receiver place so a held nominal
+method can write its final back. Universal text conversion uses
+the same dispatch. [[Compiler Lower Text]] · [[Compiler Lower Place]] ·
+[[Backend Rendering Callable Programs]]
+
+## Exact writable array indices (#956)
+
+Writable array place keys evaluate once in order. Native lowering
+checks exact integer magnitudes before narrowing and reports
+wrong-kind failures at the access or store. Assignment keeps
+replacement effects before a destination failure.
+[[Compiler Lower Place]] · [[Backend Rendering Callable Programs]]
+
+## Held range keys in bracket reads (#956)
+
+Native bracket reads choose scalar indexing or slicing using the
+retained key. Receiver and mutable-argument preparation share the
+same bounds and diagnostic path. A range used as a writeback key
+still reports the assignment refusal. [[Compiler Lower Slice]] ·
+[[Backend Rendering Callable Programs]]
+
+## Runtime receivers in tuple-checked reads (#956)
+
+All native bracket reads select the retained receiver and key.
+Tuple literals use direct slot reads at known positions. A held
+array, text value, or shorter tuple takes its own access and
+bounds path. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
+
+## Held destructuring subjects (#956)
+
+Tuple and record bindings test the held shape and publish locals
+only after the whole pattern matches. Differing successful layouts
+join by binding position. Failure names the original subject's
+runtime kind at the written pattern. [[Compiler Lower Tuple]] ·
+[[Backend Rendering Callable Programs]]
+
+## Held shapes in refutable patterns (#956)
+
+Refutable patterns test the actual held layout. An impossible arm
+falls through without evaluating its guard. Sequence bindings retain
+the original pattern span and report the held subject's runtime kind.
+[[Compiler Lower Match]] · [[Backend Rendering Callable Programs]]
+
+## Escaping refutable bindings (#956)
+
+Sequence and let-else bindings use private locals for each held
+layout and written alternative. Successful arms publish the chosen
+values to the enclosing block. [[Compiler Lower Match]] ·
+[[Backend Rendering Callable Programs]]
+
+## Nested alternative binding layouts (#956)
+
+Written alternatives and retained runtime tags can bind different
+native layouts. The selected pattern copies its captures into shared
+slots before the guard or body reads them. A false guard continues
+with the next arm. [[Compiler Lower Match]] · [[Compiler Frame Match]]
 
 ## Published progress (#496)
 

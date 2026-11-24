@@ -42,6 +42,7 @@ textMethodRuntimeParts =
       ])
   , ("text_view",
       [ "static inline pudu_text pudu_text_view(pudu_text text, size_t start, size_t end) {"
+      , "  if (start == end) return (pudu_text){(const unsigned char *)\"\", 0, NULL};"
       , "  pudu_text view = {text.bytes + start, end - start, text.owner};"
       , "  return pudu_text_retain(view);"
       , "}"

@@ -117,3 +117,7 @@ growing dead code so a pattern match stays total.
 ## Decimal (#802)
 
 Decimal's zero is NULL; `limbsOf` is shared with the frame emitter.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact Int layout uses the owned exact integer cell. Arithmetic lowering supplies the source kind for checked operations.

@@ -38,6 +38,41 @@ all exact output/status assertions; retain strict C warnings and the zero-live
 allocation check. Refer to the malloc wrapper in the test entry so scalar-only
 probes still compile without suppressing unused-function diagnostics.
 
+## Frame and array allocation regressions
+
+Resolved Grill Log: fail the third frame allocation while an entry makes
+repeated sequential calls to a recursive target whose base case returns
+immediately. The second frame must be reused. Cap aggregate box allocations in
+a separate native program that repeatedly pushes a computed remainder into
+an unaliased array. Both cases use the strict emitted-code and leak harness.
+The repeated-call loop also requires a local branch in the emitted body and
+executes the suspended call's resume entry on every iteration.
+The array probe counts all ordinary allocations and limits the nested
+construction and cleanup of small arrays to one allocation per array.
+The index probe caps receiver retains across repeated literal and local
+integer positions while checking the resulting sum.
+The JSON probe releases an initialized partial tree on malformed input
+and at each injected allocation failure, including buffer growth.
+The floating call probe checks typed entry selection, Float32 intermediate
+rounding, Float64 results and signed zero through a typed call chain.
+Constructed scalar variants must match with zero heap boxes while a
+guarded match retains its first applicable arm and payload behavior.
+The ordered-tree probe limits node allocation while building an exclusive
+tree. It also verifies lookup, replacement, rotation, and deletion against
+a retained snapshot.
+The host registry probe repeatedly opens and retires single objects. The
+table must stay inline while tokens remain monotonic and stale tokens fail.
+The short-text probe checks repeated one-byte rendering with allocation
+failure armed on the first ordinary allocation.
+Also check decimal copies and concatenations, and keep a concatenated view
+after both source views leave scope. Arm the frame allocator failure on
+the first call when a small entry must run without a heap frame.
+Typed narrow integer probes check the generated entry, checked overflow,
+wrap, saturation, the signed minimum division and remainder edges, and
+width-preserving left and sign-extending right shifts.
+The variant switch probe requires a numeric switch and checks a rejected
+guard, a nonmatching payload and a directly selected arm.
+
 ## Aggregate length overflow (#569)
 
 Resolved Grill Log: production-emitted tuple programs carry text_join. Inject

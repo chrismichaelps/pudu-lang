@@ -284,6 +284,10 @@ Resolved Grill Log: `CoreArrayPattern` holds front patterns, an optional rest
 optional fourth operand, help text computed at run time, which replaces the
 written help; a slice failure needs it to name the length.
 
+Resolved Grill Log: a projected pattern tests its inner pattern
+first, then copies successful captures into shared binding locals.
+Guards and bodies consume these locals after the projection.
+
 ## Str methods with collection results (#559)
 
 `TextSplit`, `TextLines` and `TextChars` answer arrays. `TextParsesInt`,
@@ -522,3 +526,33 @@ Distinguish a C symbol call from an Objective-C send without exposing the receiv
 ## Resolved Grill Log for Objective-C delegates
 
 `CoreDelegateNew` constructs an owned delegate handle from a group token. `CoreDelegate` records a checked declaration: the class symbol, the group, and each member signature in core types, so emitters derive method encodings from the checked types.
+
+## Runtime kind labels (#956)
+
+Resolved Grill Log: share the static label for a represented value across
+lowering and emission. A sum or callable still gets its active runtime
+label from its payload or closure.
+
+## Runtime result alternatives (#956)
+
+Resolved Grill Log: the backend can carry a finite set of concrete runtime
+layouts for one checked expression. A reserved sum key identifies these
+alternatives through the existing ownership path. Each tag names one
+concrete carrier, and no source declaration introduces this layout.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: A closure-target test compares the held body identity for native dispatch. It does not use the language equality relation or inspect captures.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: A record carrier retains its canonical owner and declared arguments. A reserved layout suffix records physical field types when a field has runtime alternatives. Diagnostic names omit the suffix.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: A sum keeps its canonical owner and declared type arguments. A reserved carrier suffix records the physical payload layouts in declaration order.
+
+## Exact range reads
+
+Resolved Grill Log: distinguish exact endpoint access from presence.
+Length and sum keep their checked Int result and overflow diagnostics.

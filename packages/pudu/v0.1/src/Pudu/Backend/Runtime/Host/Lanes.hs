@@ -15,10 +15,13 @@ hostLaneParts =
       , "   of count lanes to write into. Lanes sit in the machine's own byte order"
       , "   and at any address. */"
       , "PUDU_OPTIONAL static inline size_t pudu_lanes_held(pudu_box *lanes) { return lanes->fields[0].text.length / 8; }"
-      , "PUDU_OPTIONAL static inline double pudu_lanes_at(pudu_box *lanes, size_t index) {"
+      , "PUDU_OPTIONAL static inline double pudu_lanes_load(const unsigned char *bytes, size_t index) {"
       , "  double value;"
-      , "  memcpy(&value, lanes->fields[0].text.bytes + index * 8, 8);"
+      , "  memcpy(&value, bytes + index * 8, 8);"
       , "  return value;"
+      , "}"
+      , "PUDU_OPTIONAL static inline double pudu_lanes_at(pudu_box *lanes, size_t index) {"
+      , "  return pudu_lanes_load(lanes->fields[0].text.bytes, index);"
       , "}"
       , "PUDU_OPTIONAL static inline void pudu_lanes_put(unsigned char *bytes, size_t index, double value) { memcpy(bytes + index * 8, &value, 8); }"
       , "PUDU_OPTIONAL static inline pudu_box *pudu_lanes_new(size_t count, unsigned char **bytes) {"
@@ -135,7 +138,15 @@ hostLaneParts =
       , "}"
       ])
   , ("host_lanes_zip", ["host_lanes"],
-      [ "/* Lane by lane over two sequences of one length: 0 add, 1 subtract,"
+      ([ "static void pudu_lanes_zip_values(unsigned char *restrict bytes, const unsigned char *left,"
+       , "                                 const unsigned char *right, size_t count, int mode) {"
+       , "  switch (mode) {" ]
+       <> concatMap zipCases
+          [("case 0", "x + y"), ("case 1", "x - y"), ("case 2", "x * y"), ("case 3", "x / y"),
+           ("case 4", "pudu_lanes_smaller(x, y)"), ("default", "pudu_lanes_larger(x, y)")]
+       <> [ "  }"
+      , "}"
+      , "/* Lane by lane over two sequences of one length: 0 add, 1 subtract,"
       , "   2 multiply, 3 divide, 4 the smaller, 5 the larger. */"
       , "static pudu_box *pudu_host_lanes_zip(pudu_box *left, pudu_box *right, int mode) {"
       , "  size_t count = pudu_lanes_held(left);"
@@ -143,15 +154,11 @@ hostLaneParts =
       , "  pudu_box *made;"
       , "  if (count != pudu_lanes_held(right)) return pudu_lanes_none();"
       , "  made = pudu_lanes_new(count, &bytes);"
-      , "  for (size_t i = 0; i < count; ++i) {"
-      , "    double x = pudu_lanes_at(left, i), y = pudu_lanes_at(right, i);"
-      , "    pudu_lanes_put(bytes, i, mode == 0 ? x + y : mode == 1 ? x - y : mode == 2 ? x * y : mode == 3 ? x / y"
-      , "      : mode == 4 ? pudu_lanes_smaller(x, y) : pudu_lanes_larger(x, y));"
-      , "  }"
+      , "  pudu_lanes_zip_values(bytes, left->fields[0].text.bytes, right->fields[0].text.bytes, count, mode);"
       , "  pudu_host_done(0);"
       , "  return made;"
       , "}"
-      ])
+      ]))
   , ("host_lanes_scalar", ["host_lanes", "float_decode"],
       [ "/* Each lane against one value: 0 add, 1 multiply, 2 one where the lane is above it. */"
       , "static pudu_box *pudu_host_lanes_scalar(pudu_box *lanes, uint64_t value, int mode) {"
@@ -442,3 +449,11 @@ hostLaneParts =
       , "}"
       ])
   ]
+  where
+    zipCases (branch, operation) =
+      [ "  " <> branch <> ":"
+      , "    for (size_t i = 0; i < count; ++i) {"
+      , "      double x = pudu_lanes_load(left, i), y = pudu_lanes_load(right, i);"
+      , "      pudu_lanes_put(bytes, i, " <> operation <> ");"
+      , "    }"
+      , "    break;" ]

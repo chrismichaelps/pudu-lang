@@ -262,6 +262,31 @@ controlSuccessPrograms =
       , " let token = if { count = count + 1\n true } { print(\"taken\") }"
       , " return count"
       ])
+  , ("a transfer in a dynamic method argument skips dispatch and writeback", program
+      [ "trait Counter { fn bump(self: &Self, value: &mut Int, delta: Int) -> Int }"
+      , "type Step = {}"
+      , "impl Counter for Step {"
+      , "  fn bump(self: &Self, value: &mut Int, delta: Int) -> Int {"
+      , "    print(\"unreachable method\")"
+      , "    *value = *value + delta"
+      , "    *value"
+      , "  }"
+      , "}"
+      , "fn receiver(value: dynamic Counter) -> dynamic Counter {"
+      , "  print(\"receiver\")"
+      , "  value"
+      , "}"
+      , "fn later() -> Int { print(\"unreachable argument\")\n 9 }"
+      , "fn leave(value: dynamic Counter) -> Int {"
+      , "  receiver(value).bump({ print(\"first\")\n return 41 }, later())"
+      , "}"
+      , "fn preserve(value: dynamic Counter, count: &mut Int) -> Int {"
+      , "  receiver(value).bump(count, { print(\"second\")\n return 42 })"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var count = 3"
+      , "  print(show((leave(Step{}), preserve(Step{}, &mut count), count)))"
+      , "  0", "}" ])
   ] <> map scalarTransferProgram
     [ ("Never left and operand", "{ break 43 } && noteBool()")
     , ("Never right and operand", "true && { break 43 }")

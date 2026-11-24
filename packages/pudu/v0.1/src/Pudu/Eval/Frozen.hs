@@ -172,6 +172,7 @@ instance Persist Frozen where
 kindCode :: IntegerKind -> Int
 kindCode kind = case kind of
   PlatformSigned -> 0
+  ExactIntKind -> 0
   PlatformUnsigned -> 1
   BigIntKind -> 2
   SignedKind width -> 100 + width

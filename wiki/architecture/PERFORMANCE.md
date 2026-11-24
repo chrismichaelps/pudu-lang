@@ -174,6 +174,9 @@ full record lives in [[Backend Performance Delivery]].
 
 ## Benchmark and Regression Gates
 
+[[Native Emission Performance]] tracks open generated-code investigations and
+their workload-specific acceptance evidence.
+
 - Criterion-style microbenchmarks: source indexing, lexing, parsing, name lookup, unification, ownership dataflow, lowering, each optimization pass, C emission.
 - End-to-end corpus: tiny CLI, generic collections, error-heavy invalid source, ownership stress, async fan-out, macro expansion stress, and multi-module incremental rebuild.
 - Generated-code benchmarks compare interpreter correctness first, then native latency/throughput/code size against prior Pudu releases.

@@ -67,6 +67,31 @@ mutableLoanSuccessPrograms =
       , "  0"
       , "}" ]
     , "onesonesonestenstenstens 22 Tally{total: 33, label: \"t\"}[0, 11]\n", "")
+  , ("a dynamic method writes back a forwarded loan", program
+      [ "trait Counter { fn increase(self: &Self, count: &mut Int) -> Int }"
+      , "type By = { value: Int }"
+      , "type Double = {}"
+      , "impl Counter for By {"
+      , "  fn increase(self: &Self, count: &mut Int) -> Int {"
+      , "    *count = *count + self.value"
+      , "    *count"
+      , "  }"
+      , "}"
+      , "impl Counter for Double {"
+      , "  fn increase(self: &Self, count: &mut Int) -> Int {"
+      , "    *count = *count * 2"
+      , "    *count"
+      , "  }"
+      , "}"
+      , "fn forward(counter: dynamic Counter, count: &mut Int) -> Int { counter.increase(count) }"
+      , "fn main() -> Int {"
+      , "  var count = 10"
+      , "  let a = forward(By{value: 3}, &mut count)"
+      , "  let b = forward(Double{}, &mut count)"
+      , "  print(show((a, b, count)))"
+      , "  0"
+      , "}" ]
+    , "(13, 26, 26)\n", "")
   , ("locals, fields, elements and nested places are lent and written back", program
       [ "type Point = { mut x: Int, y: Int }"
       , "fn bump(value: &mut Int) -> Int {"

@@ -166,6 +166,7 @@ library
     Pudu.Cache.Location
     Pudu.Backend.Emit
     Pudu.Backend.Emit.Aggregate
+    Pudu.Backend.Emit.CrossComparison
     Pudu.Backend.Emit.Cell
     Pudu.Backend.Emit.Entry
     Pudu.Backend.Emit.Export
@@ -304,7 +305,9 @@ library
     Pudu.Compiler.Lower.Place
     Pudu.Compiler.Lower.Stop
     Pudu.Compiler.Lower.Call
+    Pudu.Compiler.Lower.Arguments
     Pudu.Compiler.Lower.Array
+    Pudu.Compiler.Lower.ArrayLoop
     Pudu.Compiler.Lower.Sort
     Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Convert

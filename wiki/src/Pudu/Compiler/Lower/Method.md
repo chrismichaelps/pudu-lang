@@ -224,3 +224,91 @@ inferred arguments all select the same instance.
 A receiver lent with `&mut self` is read with readHeldAtKeys, so a bad key or
 range fails at the place where it was written, as a `&self` receiver does. Its
 writeback still stores at the root.
+
+## Forwarding a dynamic method's loan (#956)
+
+Resolved Grill Log: read the loaned argument positions from the checked
+member type. A single name in one of those positions lends its existing
+place, just as it does in an ordinary call. Preserve the receiver and
+argument evaluation order and the dispatch arm's writeback ordering.
+
+## Dynamic dispatch keys (#956)
+
+Resolved Grill Log: take the full trait key from the dynamic carrier and
+the implementation owner from the variant's held type. Variant tags label
+the match and writeback. They do not select the method namespace.
+
+## Transfers before dynamic dispatch (#956)
+
+Resolved Grill Log: a receiver or argument that transfers control finishes
+the preceding operand effects. A partial argument list never reaches any
+implementation and never produces loan finals to write back.
+
+## Universal text method on a dynamic view (#956)
+
+Resolved Grill Log: a selected trait member keeps its checked dispatch.
+The universal fallback selects the held value first and then uses ordinary
+member resolution. Receiver evaluation precedes any selected member work.
+
+## Noncallable fields selected through a dynamic view (#956)
+
+Resolved Grill Log: a universal text call can select a definitely
+noncallable field at runtime. Read the field after evaluating the receiver
+and emit the ordinary call failure using that value's kind.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: A synchronous method instance uses a native copy when its operands carry checked values in runtime alternative layouts. A dynamic call projects the result of its selected implementation.
+
+## Native layouts in dynamic mutable calls (#956)
+
+Resolved Grill Log: specialize each implementation on its actual
+arguments. Project compatible arm results to a common result tuple
+before publishing finals through the original places.
+
+Resolved Grill Log: when a dynamic receiver's final is broader than
+its original place, record the layout demand for the next lowering pass.
+
+## Held receiver fallback (#956)
+
+Resolved Grill Log: when a selected receiver does not supply the
+written builtin, use its nominal implementation if it declares one.
+The retained receiver is read once through its actual carrier.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: The exact Int variant selects the Int implementation by nominal owner. A mutable final is reprojected into the dynamic trait so a changed payload layout uses the matching variant.
+
+## Held declared method receivers
+
+Resolved Grill Log: An ordinary declared call selects the held nominal receiver before lowering argument expressions. Matching owner and type arguments reuse the admitted instance. Other held values reuse the shared member dispatch.
+
+Resolved Grill Log: After selecting a different owner, specialize
+that declaration using its bound callable fact. The original member's
+signature cannot infer a different implementation's generic arguments.
+[[Compiler Lower Method Value]] supplies the shared bound signature.
+
+## Method argument counts
+
+Resolved Grill Log: ordinary and dynamically selected invocations
+pass the selected implementation's supplied count after projecting
+the written operands. Loaned calls use the same count convention
+without adding the hidden count to the loan positions.
+
+[[Compiler Lower Default]]
+
+## Mutable declared receiver selection
+
+Resolved Grill Log: retain the receiver and its eligible place before
+resolving the member or evaluating arguments. Pass the place through
+held alternatives. The selected declaration determines receiver and
+argument loans and writes finals back through the original places.
+
+Resolved Grill Log: universal text conversion shares the retained
+member selector so a held declaration can replace the checked
+renderer and write back its final.
+
+Resolved Grill Log: a prepared place read can allocate native locals
+for held slice bounds before dispatching a dynamic member.
+
+Resolved Grill Log: a checked trait member stays with its trait. Declared method lookup on a held receiver whose type lacks that trait's implementation finds no member, and the call reports the missing member with the written, trait-qualified name, as evaluation does.

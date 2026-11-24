@@ -161,3 +161,14 @@ and actual constructor patterns retain their existing diagnostics.
 Resolved Grill Log: adding built-ins to declaredNames must not let constructor
 admission preempt module/import guidance. Preserve exact E3034 code/help from
 the carrier regression rather than weakening its expected output. See [[Builtin Scope Delivery]].
+
+## Type-only module qualifiers (#993)
+
+Check the declared import qualifiers when a positional or named
+constructor path has no matching export. Keep E3034 for a known type
+qualifier and E3033 for a module qualifier.
+
+Resolved Grill Log. An exported type alias participates in type
+formation. Variant admission still uses the namespace that declares
+the constructor. Report the missing constructor before recovering its
+nested bindings. [[Program Graph Spec]]

@@ -51,3 +51,7 @@ calls, or dispatch an evaluator here. Writable-receiver checks remain in [[Check
 
 Requires [[Type Env]], [[Type Unify]], [[Type Value]]. Consumed by [[Type Check Call]]
 and [[Type Check Rule]]. Referenced by [[src/Pudu/Type/_MOC]].
+
+Resolved Grill Log: expose the pure bare-owner substitution to
+[[Compiler Lower Method Value]] so native dispatch saturates the same
+canonical Self without repeating type checking.

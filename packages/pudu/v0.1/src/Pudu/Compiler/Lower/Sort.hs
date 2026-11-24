@@ -11,10 +11,13 @@ import Pudu.Core
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
-{-| The statements sorting `items` with `before` (both already evaluated
-    into locals) and the local holding the result. `before x y` answers
-    whether x goes before y. -}
-sortStatements :: LowerState -> Span -> CoreLocal -> CoreLocal -> (LowerState, [CoreStatement], CoreLocal)
+{-| The statements sorting retained `items` and the local holding the
+    result. `before state x y` lowers one question whether x goes before y.
+    Each of the four comparison sites asks it separately, so every site owns
+    the locals its comparison declares. -}
+sortStatements :: LowerState -> Span -> CoreLocal
+  -> (LowerState -> CoreExpression -> CoreExpression -> (LowerState, Maybe CoreExpression))
+  -> (LowerState, Maybe ([CoreStatement], CoreLocal))
 sortStatements state at items before =
   let kind = coreLocalType items
       element = case kind of
@@ -47,8 +50,17 @@ sortStatements state at items before =
       (s24, leftItem) = hidden s23 element
       (s25, rightItem) = hidden s24 element
       (s26, rising) = hidden s25 element
+      (a1, fallingAsk) = before s26 (reading second) (reading first)
+      (a2, fallsAsk) = before a1 (reading next) (reading current)
+      (a3, risingAsk) = before a2 (reading rising) (reading current)
+      (a4, rightFirstAsk) = before a3 (reading rightItem) (reading leftItem)
+      asked = maybe false' id
+      asksFalling = asked fallingAsk
+      asksFalls = asked fallsAsk
+      asksRising = asked risingAsk
+      asksRightFirst = asked rightFirstAsk
 
-      (o1, outer) = pushLoop Nothing s26
+      (o1, outer) = pushLoop Nothing a4
       (o2, descending) = pushLoop Nothing o1
       (o3, ascending) = pushLoop Nothing (popLoop o2)
       (o4, passes) = pushLoop Nothing (popLoop (popLoop o3))
@@ -56,7 +68,6 @@ sortStatements state at items before =
       (o6, merging) = pushLoop Nothing o5
       final = popLoop (popLoop (popLoop o6))
 
-      asks x y = expression CoreBoolType (CoreCallValue (reading before) [reading x, reading y])
       push target value = assign target (method (coreLocalType target) ArrayPushValue (taken target) [value])
       runAt position = expression kind (CoreIndex (reading runs) position)
       runEnded run = [push runs run]
@@ -68,7 +79,7 @@ sortStatements state at items before =
             ( runEnded (expression kind (CoreArray [item (reading index)])) <> [stop outer] )
         , declare first (item (reading index))
         , declare second (item (plus (reading index) one))
-        , assign falling (asks second first)
+        , assign falling asksFalling
         , assign gathered (expression kind (CoreArray [reading first]))
         , declare current (reading second)
         , assign ahead (plus (reading index) two)
@@ -79,7 +90,7 @@ sortStatements state at items before =
                     <> runEnded (method kind ArrayReversed (reading gathered) [])
                     <> [assign index (reading count), stop descending] )
               , declare next (item (reading ahead))
-              , assign falls (asks next current)
+              , assign falls asksFalls
               , statement (CoreIf (reading falls)
                   (CoreBlock [push gathered (reading current), assign current (reading next), assign ahead (plus (reading ahead) one)] Nothing)
                   (Just (block
@@ -91,7 +102,7 @@ sortStatements state at items before =
                   ( [push gathered (reading current)] <> runEnded (reading gathered)
                     <> [assign index (reading count), stop ascending] )
               , declare rising (item (reading ahead))
-              , assign falls (asks rising current)
+              , assign falls asksRising
               , statement (CoreIf (reading falls)
                   (CoreBlock ([push gathered (reading current)] <> runEnded (reading gathered)
                     <> [assign index (reading ahead), stop ascending]) Nothing)
@@ -108,7 +119,7 @@ sortStatements state at items before =
             , stop merging ]
         , declare rightItem (part right (reading fromRight))
         , declare leftItem (part left (reading fromLeft))
-        , assign rightFirst (asks rightItem leftItem)
+        , assign rightFirst asksRightFirst
         , statement (CoreIf (reading rightFirst)
             (CoreBlock [push out (reading rightItem), assign fromRight (plus (reading fromRight) one)] Nothing)
             (Just (block [push out (reading leftItem), assign fromLeft (plus (reading fromLeft) one)]))) ]
@@ -154,7 +165,9 @@ sortStatements state at items before =
             (compare' CoreEqual (method intType ArrayLengthOf (reading runs) []) zero)
             (CoreBlock [] (Just (expression kind (CoreArray []))))
             (runAt zero))) ]
-   in (final, statements, result)
+   in case sequence [fallingAsk, fallsAsk, risingAsk, rightFirstAsk] of
+        Just _ -> (final, Just (statements, result))
+        Nothing -> (a4, Nothing)
  where
   hidden current kind = bindLocal current "" kind
   expression kind shape = CoreExpression at kind shape

@@ -55,3 +55,42 @@ Bytes slice by written ranges and range values like arrays, counting bytes.
 ## Failure location (#958)
 
 Resolved Grill Log: the range is where a slice fails in both engines, whether the slice is bound, passed or used as a method receiver (#958).
+
+## Array runtime elements (#956)
+
+Resolved Grill Log: a slice preserves its lowered receiver's element
+carrier for written bounds and ranges held in a value.
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Select the held slice receiver and preserve the order of all written range ends before reporting an unsupported receiver.
+
+## Exact written slice endpoints
+
+Written and stored slice keys share the same checked slice operation.
+A written endpoint can retain any integer width. Check its original
+mathematical value against the length, then convert for the actual
+slice. Select stored keys and receivers independently.
+
+Resolved Grill Log: evaluate the receiver and both written expressions
+before validating endpoints. A wrong endpoint type therefore precedes
+receiver dispatch and bounds validation. Only a proven in-bounds
+inclusive end may be incremented.
+
+## Exact stored slice endpoints
+
+Resolved Grill Log: stored keys read the original endpoint magnitudes.
+After successful bounds validation the existing slice receives Int
+positions. A missing endpoint keeps its ordinary default.
+
+## Selected bracket keys
+
+Resolved Grill Log: once the operands are retained, integer and range
+keys share a selector. Use the held key's type before deciding between
+indexing and slicing. Receiver and key effects run in their original
+order. A place read uses the same selector and supplies its own blame
+span. [[Compiler Lower Place]]
+
+Resolved Grill Log: dispatch does not depend on the checked receiver
+family. A retained integer literal selects a direct slot on a tuple.
+Only a nonliteral key needs the runtime slot match.

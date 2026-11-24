@@ -9,7 +9,200 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("rendering builtin signatures and identities coexist", program
+    ("a checked text method keeps the held range signature", program
+      (selectedReceiverTypes <> heldBuiltin "trim" "Range[Int]" "1..4" <>
+        [ "fn main() -> Int {"
+        , "  let length = choose(\"λ\".toBytes()).trim().length"
+        , "  print(show(length))"
+        , "  print(show(length()))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<range method length>\n3\n", "")
+  , ("a held traversal uses the checked callback result and held element", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "Array[Int]" "[4, 7]" <>
+        [ "fn main() -> Int {"
+        , "  let mapping = choose(\"λ\".toBytes()).lines().map"
+        , "  print(show(mapping(|n| display(n))))"
+        , "  0", "}" ])
+    , "receiver\nitems\n[\"4\", \"7\"]\n", "")
+  , ("open traversal members can be retained and rendered", program
+      (heldOpenTraversalTypes <>
+        [ "fn main() -> Int {"
+        , "  let receiver = choose(\"λ\".toBytes()).lines()"
+        , "  print(show(receiver.map))"
+        , "  print(show(receiver.reduce))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<array method map>\n<array method reduce>\n", "")
+  , ("builtin method equality follows the family, member, and receiver", program
+      [ "fn main() -> Int {"
+      , "  let intMap: Map[Int, Int] = mapOf([])"
+      , "  let textMap: Map[Int, Str] = mapOf([])"
+      , "  let intSet: Set[Int] = setOf([])"
+      , "  let textSet: Set[Str] = setOf([])"
+      , "  let intBuckets: Buckets[Int] = bucketsOf()"
+      , "  let textBuckets: Buckets[Str] = bucketsOf()"
+      , "  print(show((intMap.size == textMap.size, intSet.size == textSet.size, intBuckets.size == textBuckets.size)))"
+      , "  print(show((intMap.size == intSet.size, intMap.keys == intMap.values)))"
+      , "  let numbers = intMap.insert(1, 2)"
+      , "  let words = textMap.insert(1, \"2\")"
+      , "  print(show((numbers.size == words.size, numbers.size == intMap.size)))"
+      , "  0", "}" ]
+    , "(true, true, true)\n(false, false)\n(false, false)\n", "")
+  , ("a retained map preserves results from the held callback", program
+      (selectedReceiverTypes <> heldBuiltin "length" "Str" "\"held\"" <>
+        [ "fn main() -> Int {"
+        , "  let mapping: fn(fn(Int) -> Int) -> Array[Int] = [4, 7].map"
+        , "  let select: fn(Int) -> Int = |n| { print(display(n))\n choose(\"λ\".toBytes()).length() }"
+        , "  print(show(mapping(select)))"
+        , "  print(show([select].map(mapping)))"
+        , "  0", "}" ])
+    , "4\nreceiver\nitems\n7\nreceiver\nitems\n[\"held\", \"held\"]\n4\nreceiver\nitems\n7\nreceiver\nitems\n[[\"held\", \"held\"]]\n", "")
+  , ("a reduction widens its accumulator to a later held callback result", program
+      (selectedReceiverTypes <> heldBuiltin "length" "Str" "\"held\"" <>
+        [ "fn main() -> Int {"
+        , "  let step: fn(Int, Int) -> Int = |acc, n| {"
+        , "    print(display(acc))"
+        , "    if n > 5 { choose(\"λ\".toBytes()).length() } else { acc + n }"
+        , "  }"
+        , "  print(show([4, 7].reduce(step, 1)))"
+        , "  let folding: fn(fn(Int, Int) -> Int, Int) -> Int = [4, 7].reduce"
+        , "  print(show(folding(step, 1)))"
+        , "  0", "}" ])
+    , "1\n5\nreceiver\nitems\n\"held\"\n1\n5\nreceiver\nitems\n\"held\"\n", "")
+  , ("aggregate constructors retain concrete held values and written effects", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "type Holder = { flag: Str, count: Int }"
+        , "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
+        , "    let original = Holder{flag: \"line\", count: 4}"
+        , "    let built = Holder{count: { print(\"count\")\n 4 }, flag: { print(\"flag\")\n item }}"
+        , "    let changed = Holder{..original, flag: item}"
+        , "    print(show((built, changed, original)))"
+        , "    print(show([\"line\", item]))"
+        , "    print(show([item]))"
+        , "    print(show(#{item, \"line\", item}))"
+        , "    print(show(setOf([item, item])))"
+        , "    print(show(mapOf([(item, item), (\"line\", \"word\"), (item, \"line\")])))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\ncount\nflag\n(Holder{flag: 'x', count: 4}, Holder{flag: 'x', count: 4}, Holder{flag: \"line\", count: 4})\n[\"line\", 'x']\n['x']\n#{'x', \"line\"}\n#{'x'}\n{'x': \"line\", \"line\": \"word\"}\n", "")
+  , ("concrete held arguments enter named, stored and loaned bodies", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "fn describe(value: Str) -> Str { show(value) }"
+        , "fn peek(slot: &mut Str) -> Str { show(*slot) }"
+        , "fn main() -> Int {"
+        , "  let named: fn(Str) -> Str = describe"
+        , "  let prefix = \"captured \""
+        , "  let captured = |value: Str| prefix + show(value)"
+        , "  let construct: fn(Str) -> Option[Str] = Some"
+        , "  let storedLoan: fn(&mut Str) -> Str = peek"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
+        , "    print(describe(item))"
+        , "    print(named(item))"
+        , "    print(captured(item))"
+        , "    print(show(construct(item)))"
+        , "    var copy = item"
+        , "    print(peek(&mut copy))"
+        , "    print(storedLoan(&mut copy))"
+        , "    print(show(copy))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n'x'\n'x'\ncaptured 'x'\nSome('x')\n'x'\n'x'\n'x'\n", "")
+  , ("concrete held replacements widen local, field and indexed slots", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "type Holder = { mut flag: Str }"
+        , "fn index() -> Int { print(\"index\")\n 0 }"
+        , "fn main() -> Int {"
+        , "  var direct = \"line\""
+        , "  var holder = Holder{flag: \"line\"}"
+        , "  var values = [\"line\"]"
+        , "  let oldHolder = holder"
+        , "  let oldValues = values"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
+        , "    direct = item"
+        , "    holder.flag = item"
+        , "    values[index()] = item"
+        , "  }"
+        , "  print(show((direct, holder.flag, values)))"
+        , "  print(show((oldHolder.flag, oldValues)))"
+        , "  0", "}" ])
+    , "receiver\nitems\nindex\n('x', 'x', ['x'])\n(\"line\", [\"line\"])\n", "")
+  , ("nested positional and named patterns read concrete held fields", program
+      (selectedReceiverTypes <>
+        [ "type Packet = Pos((Str, Int)) | Named{pair: (Str, Int)}" ] <>
+        heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
+        , "    let positional = Pos((item, 3))"
+        , "    let named = Named{pair: (item, 4)}"
+        , "    match positional {"
+        , "      case Pos((\"line\", _)) => print(\"checked positional\")"
+        , "      case Pos((value, number)) => print(show((value, number)))"
+        , "      case _ => print(\"unexpected variant\")"
+        , "    }"
+        , "    match named {"
+        , "      case Named{pair: (\"line\", _)} => print(\"checked named\")"
+        , "      case Named{pair: (value, number)} => print(show((value, number)))"
+        , "      case _ => print(\"unexpected variant\")"
+        , "    }"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n('x', 3)\n('x', 4)\n", "")
+  , ("labelled breaks share a layout and keep the selected value", program
+      (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"held\"" <>
+        [ "fn displayBreak(early: Bool) -> Str {"
+        , "  let value = @outer loop {"
+        , "    if early { break @outer false }"
+        , "    loop { break @outer choose(\"λ\".toBytes()).isEmpty() }"
+        , "  }"
+        , "  show(value)"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(displayBreak(true))"
+        , "  print(displayBreak(false))"
+        , "  0", "}" ])
+    , "false\nreceiver\nitems\n\"held\"\n", "")
+  , ("if and match project only the result of the selected branch", program
+      (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"held\"" <>
+        [ "fn fromIf(first: Bool) -> Str {"
+        , "  let value = if first { print(\"if fixed\")\n true } else { choose(\"λ\".toBytes()).isEmpty() }"
+        , "  show(value)"
+        , "}"
+        , "fn fromMatch(first: Bool) -> Str {"
+        , "  let value = match first {"
+        , "    case true => { print(\"match fixed\")\n false }"
+        , "    case false => choose(\"λ\".toBytes()).isEmpty()"
+        , "  }"
+        , "  show(value)"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(fromIf(true))"
+        , "  print(fromIf(false))"
+        , "  print(fromMatch(true))"
+        , "  print(fromMatch(false))"
+        , "  0", "}" ])
+    , "if fixed\ntrue\nreceiver\nitems\n\"held\"\nmatch fixed\nfalse\nreceiver\nitems\n\"held\"\n", "")
+  , ("held conditions distinguish skipped operands and false guards", heldConditionProgram
+      [ "  print(show(false && choose(\"λ\".toBytes()).isEmpty()))"
+      , "  print(show(true || choose(\"λ\".toBytes()).isEmpty()))"
+      , "  print(show(true && choose(\"\").isEmpty()))"
+      , "  print(show(false || choose(\"text\").isEmpty()))"
+      , "  if choose(\"\").isEmpty() { print(\"taken\") }"
+      , "  let value = if choose(\"text\").isEmpty() { 1 } else { 7 }"
+      , "  print(show(value))"
+      , "  while choose(\"text\").isEmpty() { print(\"unreached\") }"
+      , "  match 0 {"
+      , "    case 0 if choose(\"λ\".toBytes()).isEmpty() => print(\"unreached\")"
+      , "    case _ => print(\"fell through\")"
+      , "  }"
+      ]
+    , "false\ntrue\nreceiver\ntrue\nreceiver\nfalse\nreceiver\ntaken\nreceiver\n7\nreceiver\nreceiver\nitems\nfell through\n", "")
+  , ("iteration keeps the layouts and order of a held heterogeneous tuple", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "(Int, Str, Bool)" "(3, \"four\", true)" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).lines() { print(show(item)) }"
+        , "  0", "}" ])
+    , "receiver\nitems\n3\n\"four\"\ntrue\n", "")
+  , ("rendering builtin signatures and identities coexist", program
       [ "fn main() -> Int {"
       , "  let integer: fn(Int) -> Str = display"
       , "  let text: fn(Str) -> Str = display"
@@ -23,6 +216,20 @@ renderingCallableSuccessPrograms =
       , "  0"
       , "}" ]
     , "42\nraw\n\"a\\n\"\ntrue\nfalse\n<builtin show>\n", "")
+  , ("stored rendering and output select actual value layouts", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn decode(value: dynamic View) -> Str { value.toText() }"
+      , "fn main() -> Int {"
+      , "  let render: fn(Str) -> Str = show"
+      , "  let send = print"
+      , "  print(render(decode(\"text\")))"
+      , "  print(render(decode(\"λ\".toBytes())))"
+      , "  send(decode(\"raw\"))"
+      , "  send(decode(bytesOf([255u8])))"
+      , "  0", "}" ]
+    , "\"text\"\nSome(\"λ\")\nraw\nNone\n", "")
   , ("rendering builtins specialize through generic callers", program
       [ "fn render[T](value: T, converter: fn(T) -> Str) -> Str { converter(value) }"
       , "fn main() -> Int {"
@@ -60,6 +267,371 @@ renderingCallableSuccessPrograms =
       , "  0"
       , "}" ]
     , "<fn display>\nuser:x\nlocal:y\n", "")
+  , ("selected text keeps its method and index behavior", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\" λ \")"
+        , "  let trim = selected.trim"
+        , "  print(trim())"
+        , "  print(display(selected.length()))"
+        , "  print(display(selected[1]))"
+        , "  print(selected[1..2])"
+        , "  0", "}" ])
+    , "receiver\nλ\n3\nλ\nλ\n", "")
+  , ("selected text method operands reach direct and stored calls", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(\"hello\".replace(choose(\"l\"), { print(\"replacement\")\n \"x\" }))"
+        , "  let contains = \"hello\".contains"
+        , "  print(display(contains(choose(\"ell\"))))"
+        , "  0", "}" ])
+    , "receiver\nreplacement\nhexxo\nreceiver\ntrue\n", "")
+  , ("argument transfer precedes an incompatible selected layout", program
+      (selectedReceiverTypes <>
+        [ "fn stop() -> Int {"
+        , "  \"hello\".replace(choose(\"λ\".toBytes()), { print(\"transfer\")\n return 7 })"
+        , "  99", "}"
+        , "fn main() -> Int { print(display(stop()))\n 0 }" ])
+    , "receiver\ntransfer\n7\n", "")
+  , ("selected text views retain byte offsets and callable identity", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let at = textByteAt"
+        , "  print(show(at(choose(\"λ\"), 1)))"
+        , "  print(show(textByteSize(choose(\"\"))))"
+        , "  print(show(at == textByteAt))"
+        , "  0", "}" ])
+    , "receiver\nSome(187)\nreceiver\n0\ntrue\n", "")
+  , ("selected bytes method operands reach the native method", program
+      (selectedReceiverTypes <> selectedByteConversion <>
+        [ "fn main() -> Int {"
+        , "  print(show(\"head\".toBytes().concat(choose(\"end\").toBytes()).toText()))"
+        , "  0", "}" ])
+    , "receiver\nSome(\"headend\")\n", "")
+  , ("byte construction checks the held array elements in both invocation forms", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Int" "[0, 195, 169]" <>
+        [ "fn main() -> Int {"
+        , "  let pack = bytesOf"
+        , "  print(show(bytesOf(selectedArray(\"ordinary\")).toText()))"
+        , "  print(show(pack(selectedArray(\"λ\".toBytes())).toArray()))"
+        , "  0", "}" ])
+    , "receiver\nSome(\"ordinary\")\nreceiver\n[0, 195, 169]\n", "")
+  , ("byte construction accepts an empty held array of another layout", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Bool" "[]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(bytesOf(selectedArray(\"λ\".toBytes())).length()))"
+        , "  0", "}" ])
+    , "receiver\n0\n", "")
+  , ("wider held integer counts preserve text and byte method results", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let negative = selected.indexOf(\"negative\")"
+        , "  let small = selected.indexOf(\"small\")"
+        , "  let take = \"aλz\".take"
+        , "  let bytes = \"aλz\".toBytes()"
+        , "  let gather = bytes.strided"
+        , "  print(show(take(small)) + show(take(large)) + show(\"\".repeat(large)))"
+        , "  print(show(\"aλz\".slice(negative, large)) + show(\"aλz\".slice(large, small)))"
+        , "  print(show(bytes.at(small)) + show(bytes.at(negative)) + show(bytes.take(large)))"
+        , "  print(show(gather(0, larger, large)) + show(gather(0, large, larger)))"
+        , "  print(show(bytes.strided(large, 1, 2)) + show(bytes.strided(0, 1, negative)))"
+        , "  0", "}" ])
+    , "receiver\n\"aλ\"\"aλz\"\"\"\n\"aλz\"\"\"\nSome(187)None0x61cebb7a\nNoneSome(0x61cebb7a)\nSome(0x)None\n", "")
+  , ("wider held text-view offsets preserve exact boundaries", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let small = selected.indexOf(\"small\")"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let negative = selected.indexOf(\"negative\")"
+        , "  let at = textByteAt"
+        , "  let slice = textByteSlice"
+        , "  print(show(at(\"λx\", small)) + show(at(\"λ\", large)))"
+        , "  print(show(slice(\"λx\", small, 3)) + show(slice(\"λx\", negative, small)))"
+        , "  print(show(textByteFind(\"λx\", \"\", large)))"
+        , "  0", "}" ])
+    , "receiver\nSome(120)None\nSome(\"x\")None\nNone\n", "")
+  , ("wider held bracket indices select array elements and text scalars", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"small\")"
+        , "  print(show([5, 10, 15][position]))"
+        , "  print(show(\"λλx\"[position]))"
+        , "  0", "}" ])
+    , "receiver\n15\n'x'\n", "")
+  , ("written slices accept exact wider integer endpoints", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let end = choose(\"λ\".toBytes()).indexOf(\"small\")"
+        , "  print(show([1, 2, 3][1..=end]))"
+        , "  print(show(\"aλz\"[..end]))"
+        , "  print(show(\"aλz\".toBytes()[end..]))"
+        , "  0", "}" ])
+    , "receiver\n[2, 3]\n\"aλ\"\n0xbb7a\n", "")
+  , ("later slice endpoint can transfer before endpoint validation", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn take() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let values = [1, 2, 3]"
+        , "  print(show(values[selected.indexOf(\"invalid\")..{ print(\"transfer\")\n return 7 }]))"
+        , "  99", "}"
+        , "fn main() -> Int { print(show(take()))\n 0 }" ])
+    , "receiver\ntransfer\n7\n", "")
+  , ("stored ranges retain exact endpoints through queries and traversal", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bounds(start: Int, end: Int) -> Range[Int] { start..=end }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let range = bounds(large, larger)"
+        , "  print(show(range))"
+        , "  print(show(range.start()) + show(range.end()) + show(range.length()))"
+        , "  print(show(range.contains(large)) + show(range.contains(1)))"
+        , "  print(show(range.toArray()) + show(range.reverse()) + show(range.step(2)))"
+        , "  print(show((range, 0) < (larger.., 0)))"
+        , "  for value in range { print(show(value))\n break }"
+        , "  0", "}" ])
+    , "receiver\n18446744073709551616..=18446744073709551617\nSome(18446744073709551616)Some(18446744073709551617)2\ntruefalse\n[18446744073709551616, 18446744073709551617][18446744073709551617, 18446744073709551616][18446744073709551616]\ntrue\n18446744073709551616\n", "")
+  , ("stored ranges with wider in-bounds endpoints slice normally", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let tail = selected.indexOf(\"small\").."
+        , "  print(\"aλz\"[tail])"
+        , "  let all = .."
+        , "  print(show([1, 2][all]))"
+        , "  0", "}" ])
+    , "receiver\nz\n[1, 2]\n", "")
+  , ("exact range members retain Int through calls and conversions", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn keep(value: Int) -> Int { value }"
+        , "fn main() -> Int {"
+        , "  let source = choose(\"λ\".toBytes())"
+        , "  let large = source.indexOf(\"large\")"
+        , "  let decode = charFromCode"
+        , "  for member in large..=large {"
+        , "    let held = keep(member)"
+        , "    print(show(held))"
+        , "    print(show(convertInteger[Int](held)) + show(convertInteger[BigInt](held)))"
+        , "    print(show(decode(held)))"
+        , "    print(show(held &+ 1) + \" \" + show(held >> 1) + \" \" + show(~held))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\n18446744073709551616\nNoneSome(18446744073709551616)\nNone\n1 -9223372036854775808 -1\n", "")
+  , ("dynamic wide Int members select the Int implementation", program
+      (selectedReceiverTypes <> selectedIntegerPositions <> selectedIntegerTrait <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    let value = box(member)"
+        , "    print(value.describe())"
+        , "    print(describe(member))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nInt 18446744073709551616\nInt 18446744073709551616\n", "")
+  , ("dynamic exact and narrow Int layouts compare by value", program
+      (selectedReceiverTypes <> selectedIntegerPositions <> selectedIntegerTrait <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let low = selected.indexOf(\"small\")"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let narrow = box(2)"
+        , "  for member in low..large {"
+        , "    let held: dynamic Describe = member"
+        , "    print(show(held == narrow))"
+        , "    print(show(setOf([held, narrow])))"
+        , "    print(held.describe())"
+        , "    break"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\ntrue\n#{2}\nInt 2\n", "")
+  , ("dynamic wide Int writeback selects the final layout", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "trait Reset { fn reset(self: &mut Self) -> () }"
+        , "impl Reset for Int { fn reset(self: &mut Self) -> () { *self = 3 } }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    var held: dynamic Reset = member"
+        , "    held.reset()"
+        , "    print(show(held))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\n3\n", "")
+  , ("selected collection uses the held map get result", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "fn main() -> Int {"
+        , "  print(show(chooseCollection(\"A\").get(0)))"
+        , "  print(show(chooseCollection(\"λ\".toBytes()).get({ print(\"key\")\n 0 })))"
+        , "  0", "}" ])
+    , "receiver\n65\nreceiver\nkey\nSome(\"held\")\n", "")
+  , ("selected collection uses the held range length and membership", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Range[Int]" "2..=4" <>
+        [ "fn main() -> Int {"
+        , "  let range = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(range.length()))"
+        , "  print(show(range.contains(4u8)))"
+        , "  0", "}" ])
+    , "receiver\n3\ntrue\n", "")
+  , ("array method positions wrap the held mathematical index", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let values = [5, 10, 15]"
+        , "  let get = values.get"
+        , "  print(show(get(large)))"
+        , "  print(show(values.insert(larger, 9)))"
+        , "  print(show(values.slice(large, larger)))"
+        , "  0", "}" ])
+    , "receiver\n5\n[5, 9, 10, 15]\n[5]\n", "")
+  , ("keyed methods accept a held key outside the checked layout", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let key = choose(\"λ\".toBytes())"
+        , "  let initial = mapOf([(\"x\", 3)])"
+        , "  print(show(initial.get(key)))"
+        , "  print(show(initial.insert(key, 5).get(key)))"
+        , "  let values = setOf([\"x\"])"
+        , "  print(show(values.contains(key)))"
+        , "  print(show(values.insert(key).contains(key)))"
+        , "  0", "}" ])
+    , "receiver\nNone\nSome(5)\nfalse\ntrue\n", "")
+  , ("range step preserves the exact positive stride and selected cardinality", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let large = selected.indexOf(\"large\")"
+        , "  let larger = selected.indexOf(\"larger\")"
+        , "  let step = (0..=larger).step"
+        , "  print(show(step(large)))"
+        , "  print(show((1..=5).step(large)))"
+        , "  print(show((5..1).step(large)))"
+        , "  0", "}" ])
+    , "receiver\n[0, 18446744073709551616]\n[1]\n[]\n", "")
+  , ("empty array and range do not attempt to invoke a held builtin callback", program
+      [ "fn main() -> Int {"
+      , "  let empty: Array[Int] = []"
+      , "  let render: fn(Int) -> Str = show"
+      , "  print(show(empty.map(render)))"
+      , "  print(show((2..2).map(render)))"
+      , "  0", "}" ]
+    , "[]\n[]\n", "")
+  , ("range filter discards held non-Boolean predicate results", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn main() -> Int {"
+        , "  print(show((1..=2).filter(checkedPredicate)))"
+        , "  let empty: Array[Int] = []"
+        , "  print(show(empty.filter(checkedPredicate)))"
+        , "  0", "}" ])
+    , "receiver\npredicate\nreceiver\npredicate\n[]\n[]\n", "")
+  , ("a checked text builtin can select a mutable method on an indexed receiver", program
+      (selectedReceiverTypes <>
+        [ "trait HeldSearch { fn contains(self: &mut Self, needle: Str) -> Bool }"
+        , "impl HeldSearch for Option[Str] {"
+        , "  fn contains(self: &mut Self, needle: Str) -> Bool { *self = Some(needle)\n true }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var values = [choose(\"plain\"), choose(\"λ\".toBytes())]"
+        , "  print(show(values[0].contains(\"pl\")))"
+        , "  print(show(values[{ print(\"index\")\n 1 }].contains({ print(\"argument\")\n \"changed\" })))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nreceiver\ntrue\nindex\nargument\ntrue\n[\"plain\", Some(\"changed\")]\n", "")
+  , ("universal text conversion can select a mutable implementation", program
+      (selectedReceiverTypes <>
+        [ "trait HeldRender { fn toText(self: &mut Self) -> Str }"
+        , "impl HeldRender for Option[Str] {"
+        , "  fn toText(self: &mut Self) -> Str { *self = Some(\"changed\")\n \"rendered\" }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  var value = choose(\"λ\".toBytes())"
+        , "  print(value.toText())"
+        , "  print(show(value))"
+        , "  0", "}" ])
+    , "receiver\nrendered\nSome(\"changed\")\n", "")
+  , ("an exact wide integer selects the same element for assignment and mutable calls", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bump(value: &mut Int) -> Int { *value = *value + 2\n *value }"
+        , "trait Touch { fn touch(self: &mut Self) -> Int }"
+        , "impl Touch for Int { fn touch(self: &mut Self) -> Int { *self = *self + 5\n *self } }"
+        , "fn main() -> Int {"
+        , "  var values = [10, 11, 12]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  let key = indices.indexOf(\"two\")"
+        , "  values[key] = { print(\"replacement\")\n 20 }"
+        , "  print(show(bump(&mut values[key])))"
+        , "  print(show(values[key].touch()))"
+        , "  print(show(values))"
+        , "  0", "}" ])
+    , "receiver\nreplacement\n22\n27\n[10, 11, 27]\n", "")
+  , ("a held range selects an array or text slice at a scalar-checked index", program
+      (selectedReceiverTypes <> selectedRangeKey <>
+        [ "fn main() -> Int {"
+        , "  let values = [10, 11, 12, 13]"
+        , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
+        , "  print(show(values[index]))"
+        , "  print(show(\"abcd\"[index]))"
+        , "  print(values[{ print(\"key\")\n index }].toText())"
+        , "  0", "}" ])
+    , "receiver\n[11, 12]\n\"bc\"\nkey\n[11, 12]\n", "")
+  , ("nested pattern alternatives project the held binding before the guard", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[7]" <>
+        [ "fn decide(item: Str) -> Bool { print(show(item))\n show(item) == \"7\" }"
+        , "fn read(value: dynamic View) -> Str {"
+        , "  match (choose(value).lines(), true) {"
+        , "    case ([item] | [item, _, ..], true) if decide(item) => item"
+        , "    case _ => \"none\""
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n\"plain\"\n\"none\"\nreceiver\n7\n7\n", "")
+  , ("nested sequence alternatives publish into the scope after let else", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[7]" <>
+        [ "fn read(value: dynamic View) -> Int {"
+        , "  let ([item] | [item, _, ..], true) = (choose(value).lines(), true) else { return 9 }"
+        , "  print(show(item))"
+        , "  0"
+        , "}"
+        , "fn main() -> Int {"
+        , "  read(\"plain\")"
+        , "  read(\"λ\".toBytes())"
+        , "  0", "}" ])
+    , "receiver\n\"plain\"\nreceiver\n7\n", "")
+  , ("let else publishes values across distinct held element layouts", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[7, 8]" <>
+        [ "fn read(value: dynamic View) -> Int {"
+        , "  let [first, ..rest] = choose(value).lines() else { return 9 }"
+        , "  print(show(first))"
+        , "  print(show(rest))"
+        , "  0"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n\"plain\"\n[]\n0\nreceiver\n7\n[8]\n0\n", "")
+  , ("let else falls back before publishing failed bindings", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[]" <>
+        [ "fn read(value: dynamic View) -> Str {"
+        , "  let fallback = \"nine\""
+        , "  let [first, ..] = choose(value).lines() else { return fallback }"
+        , "  first"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n\"plain\"\nreceiver\n\"nine\"\n", "")
   , ("rendering function arguments use callable rendering", program
       [ "fn main() -> Int {"
       , "  let repr: fn(fn(Int) -> Str) -> Str = show"
@@ -95,12 +667,294 @@ renderingCallableSuccessPrograms =
 renderingCallableRefusalPrograms :: [(String, Text)]
 renderingCallableRefusalPrograms =
   [
-    ("rendering builtin unary failures name builtin", program
+    ("a trait-qualified call on a held collection reports the missing member", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
+        , "impl Keys for Array[UInt8] { fn keys(self: &Self) -> Array[UInt8] { *self } }"
+        , "fn main() -> Int {"
+        , "  print(show(chooseCollection(\"A\").keys()))"
+        , "  print(show(chooseCollection(\"λ\".toBytes()).keys()))"
+        , "  0", "}" ]))
+  , ("a held non-Bool if condition reports before either branch", heldConditionProgram
+      [ "  let chosen = if choose(\"λ\".toBytes()).isEmpty() { \"left\" } else { \"right\" }"
+      , "  print(chosen)"
+      ])
+  , ("a held non-Bool while condition reports before its body", heldConditionProgram
+      [ "  while choose(\"λ\".toBytes()).isEmpty() { print(\"unreached\") }" ])
+  , ("an invalid held left operand stops before the logical right operand", heldConditionProgram
+      [ "  print(show(choose(\"λ\".toBytes()).isEmpty() && { print(\"unreached\")\n true }))" ])
+  , ("an invalid held right operand fails only on the taken logical path", heldConditionProgram
+      [ "  print(show({ print(\"left\")\n false } || choose(\"λ\".toBytes()).isEmpty()))" ])
+  , ("rendering builtin unary failures name builtin", program
       [ "fn main() -> Int { let renderer: fn(Int) -> Str = show\n let invalid = -renderer\n print(display(invalid))\n 0 }" ])
   , ("rendering builtin ordering is refused after operand effects", program
       [ "fn left() -> fn(Int) -> Str { print(\"left\")\n display }"
       , "fn right() -> fn(Int) -> Str { print(\"right\")\n show }"
       , "fn main() -> Int { let invalid = left() < right()\n print(display(invalid))\n 0 }" ])
+  , ("selected missing method fails before evaluating arguments", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(display(selected.contains({ print(\"unreached\")\n \"λ\" })))"
+        , "  0", "}" ]))
+  , ("selected missing bound method fails when retained", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(bytesOf([255u8]))"
+        , "  let kept = selected.trim"
+        , "  print(kept())"
+        , "  0", "}" ]))
+  , ("selected invalid numeric index still evaluates the key", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(display(selected[{ print(\"index\")\n 0 }]))"
+        , "  0", "}" ]))
+  , ("selected invalid slice still evaluates both ends", program
+      (selectedReceiverTypes <>
+        [ "fn bound(label: Str, value: Int) -> Int { print(label)\n value }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(bytesOf([255u8]))"
+        , "  print(selected[bound(\"start\", 0)..bound(\"end\", 1)])"
+        , "  0", "}" ]))
+  , ("selected invalid text operand keeps later operand effects", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(\"hello\".replace(choose(\"λ\".toBytes()), { print(\"replacement\")\n \"x\" }))"
+        , "  0", "}" ]))
+  , ("selected invalid bound text operand names the invocation", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let contains = \"hello\".contains"
+        , "  print(display(contains(choose(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("selected invalid byte operand uses the byte method diagnostic", program
+      (selectedReceiverTypes <> selectedByteConversion <>
+        [ "fn main() -> Int {"
+        , "  print(show(\"head\".toBytes().concat(choose(\"λ\".toBytes()).toBytes())))"
+        , "  0", "}" ]))
+  , ("selected text view operands fail after evaluating offsets", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  print(show(textByteAt(choose(\"λ\".toBytes()), { print(\"offset\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("selected stored text view failure names the invocation", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let at = textByteAt"
+        , "  print(show(at(choose(\"λ\".toBytes()), { print(\"offset\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("byte construction reports the first out-of-range held integer", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Int" "[0, -1, 256]" <>
+        [ "fn main() -> Int {"
+        , "  let pack = bytesOf"
+        , "  print(show(pack(selectedArray(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("byte construction refuses a held noninteger element", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedByteArray "Bool" "[false]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(bytesOf(selectedArray(\"λ\".toBytes()))))"
+        , "  0", "}" ]))
+  , ("wider held repeat count fails at the stored invocation", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let repeat = \"word\".repeat"
+        , "  print(repeat(choose(\"λ\".toBytes()).indexOf(\"large\")))"
+        , "  0", "}" ]))
+  , ("wider negative text count keeps the negative-count diagnostic", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  print(\"word\".take(choose(\"λ\".toBytes()).indexOf(\"negative\")))"
+        , "  0", "}" ]))
+  , ("wider held bracket index reports an out-of-range key", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let numbers = [5, 10, 15]"
+        , "  print(show(numbers[choose(\"λ\".toBytes()).indexOf(\"large\")]))"
+        , "  0", "}" ]))
+  , ("written slice keeps the exact bound above Int", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show(\"λz\"[..selected.indexOf(\"large\")]))"
+        , "  0", "}" ]))
+  , ("written slice reports the earlier incompatible endpoint after both effects", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show([1, 2][{ print(\"start\")\n selected.indexOf(\"invalid\") }..{ print(\"end\")\n 1 }]))"
+        , "  0", "}" ]))
+  , ("written slice checks endpoint kind before the held receiver", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(show(selected[..selected.indexOf(\"invalid\")]))"
+        , "  0", "}" ]))
+  , ("stored slice reads a wide endpoint without wrapping", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let end = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  let key = ..end"
+        , "  print(show([1, 2][key]))"
+        , "  0", "}" ]))
+  , ("stored range construction keeps both effects before validating the first end", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  let bad = { print(\"start\")\n selected.indexOf(\"invalid\") }..{ print(\"end\")\n 1 }"
+        , "  print(show(bad))"
+        , "  0", "}" ]))
+  , ("exact stored range sum reports overflow on the final result", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  let one = large..=large"
+        , "  print(show(one.sum()))"
+        , "  0", "}" ]))
+  , ("arithmetic on a wide range member still checks Int overflow", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn add(value: Int) -> Int { value + 1 }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large { print(show(add(member))) }"
+        , "  0", "}" ]))
+  , ("a dynamic wide Int method keeps its checked overflow", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "trait Step { fn step(self: &Self) -> Int }"
+        , "impl Step for Int { fn step(self: &Self) -> Int { *self + 1 } }"
+        , "fn main() -> Int {"
+        , "  let large = choose(\"λ\".toBytes()).indexOf(\"large\")"
+        , "  for member in large..=large {"
+        , "    let held: dynamic Step = member"
+        , "    print(show(held.step()))"
+        , "  }"
+        , "  0", "}" ]))
+  , ("missing member on a held map stops before the argument", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "fn main() -> Int {"
+        , "  let selected = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(selected.push({ print(\"unreached\")\n 1u8 })))"
+        , "  0", "}" ]))
+  , ("missing member on a held range stops before the argument", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Range[Int]" "2..=4" <>
+        [ "fn main() -> Int {"
+        , "  let selected = chooseCollection(\"λ\".toBytes())"
+        , "  print(show(selected.get({ print(\"unreached\")\n 0 })))"
+        , "  0", "}" ]))
+  , ("array method wrong held position reports at the stored invocation", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let insert = [1, 2].insert"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"invalid\")"
+        , "  print(show(insert(position, { print(\"item\")\n 3 })))"
+        , "  0", "}" ]))
+  , ("range step rejects a held noninteger with its method diagnostic", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  let position = choose(\"λ\".toBytes()).indexOf(\"invalid\")"
+        , "  print(show((1..5).step(position)))"
+        , "  0", "}" ]))
+  , ("range step checks the exact sign before requiring endpoints", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  let stride = choose(\"λ\".toBytes()).indexOf(\"negative\")"
+        , "  print(show((1..).step(stride)))"
+        , "  0", "}" ]))
+  , ("array traversal reports a held builtin when it is invoked", program
+      [ "fn main() -> Int {"
+      , "  let render: fn(Int) -> Str = show"
+      , "  let map: fn(fn(Int) -> Str) -> Array[Str] = [1].map"
+      , "  print(show(map({ print(\"callback\")\n render })))"
+      , "  0", "}" ])
+  , ("array filter reports a held non-Boolean predicate after its effects", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn main() -> Int {"
+        , "  print(show([1, 2].filter(checkedPredicate)))"
+        , "  0", "}" ]))
+  , ("array sort reports a held non-Boolean comparison at the invocation", program
+      (selectedReceiverTypes <> selectedPredicate <>
+        [ "fn compare(left: Int, right: Int) -> Bool { checkedPredicate(left) }"
+        , "fn main() -> Int {"
+        , "  let sort = [2, 1].sortBy"
+        , "  print(show(sort(compare)))"
+        , "  0", "}" ]))
+  , ("declared member missing on the held receiver stops before argument effects", program
+      (selectedReceiverTypes <>
+        [ "trait Announce { fn announce(self: &Self, label: Str) -> Str }"
+        , "impl Announce for Str { fn announce(self: &Self, label: Str) -> Str { label } }"
+        , "fn main() -> Int {"
+        , "  let selected = choose(\"λ\".toBytes())"
+        , "  print(selected.announce({ print(\"unreached\")\n \"label\" }))"
+        , "  0", "}" ]))
+  , ("a missing bound member fails at capture before a later statement", program
+      (selectedReceiverTypes <>
+        [ "fn main() -> Int {"
+        , "  let captured = choose(\"λ\".toBytes()).trim"
+        , "  print(\"unreached\")"
+        , "  print(captured())"
+        , "  0", "}" ]))
+  , ("a wide assignment key checks bounds after the replacement runs", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn main() -> Int {"
+        , "  var values = [0, 1]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[indices.indexOf(\"large\")] = { print(\"replacement\")\n 3 }"
+        , "  0", "}" ]))
+  , ("a negative wide key fails when preparing a mutable argument", program
+      (selectedReceiverTypes <> selectedIntegerPositions <>
+        [ "fn bump(value: &mut Int) -> Int { print(\"unreached\")\n *value }"
+        , "fn main() -> Int {"
+        , "  var values = [0, 1]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  print(show(bump(&mut values[indices.indexOf(\"negative\")])))"
+        , "  0", "}" ]))
+  , ("a selected noninteger key reports the assignment diagnostic after the replacement", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  var values = [0]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[indices.indexOf(\"invalid\")] = { print(\"replacement\")\n 3 }"
+        , "  0", "}" ]))
+  , ("an outer bounds failure precedes an invalid selected key in a nested store", program
+      (selectedReceiverTypes <> selectedInvalidPosition <>
+        [ "fn main() -> Int {"
+        , "  var values = [[0]]"
+        , "  let indices = choose(\"λ\".toBytes())"
+        , "  values[{ print(\"outer\")\n 99 }][{ print(\"inner\")\n indices.indexOf(\"invalid\") }] = { print(\"replacement\")\n 3 }"
+        , "  0", "}" ]))
+  , ("a mutable argument reads its held slice before writeback refuses the range key", program
+      (selectedReceiverTypes <> selectedRangeKey <>
+        [ "fn inspect(value: &mut Int) -> Int { print(show(*value))\n 7 }"
+        , "fn main() -> Int {"
+        , "  var values = [10, 11, 12, 13]"
+        , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
+        , "  print(show(inspect(&mut values[index])))"
+        , "  0", "}" ]))
+  , ("a noniterable held value fails after effects from the source", program
+      (selectedReceiverTypes <> heldBuiltin "lines" "Int" "42" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).lines() { print(display(item)) }"
+        , "  0", "}" ]))
+  , ("a missing field on the held record reports its runtime kind", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { value: Int }"
+        , "type Held = { other: Str }"
+        , "trait CheckedShape { fn shaped(self: &Self) -> Checked }"
+        , "impl CheckedShape for Str { fn shaped(self: &Self) -> Checked { Checked{value: 1} } }"
+        , "trait HeldShape { fn shaped(self: &Self) -> Held }"
+        , "impl HeldShape for Option[Str] { fn shaped(self: &Self) -> Held { Held{other: \"held\"} } }"
+        , "fn main() -> Int {"
+        , "  let {value} = choose(\"λ\".toBytes()).shaped()"
+        , "  print(show(value))"
+        , "  0", "}" ]))
+  , ("a stored stopping builtin receives the held runtime argument", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn decode(value: dynamic View) -> Str { print(\"argument\")\n value.toText() }"
+      , "fn main() -> Int {"
+      , "  let stop: fn(Str) -> Never = panic"
+      , "  stop(decode(\"λ\".toBytes()))"
+      , "}" ])
   , ("rendering builtin map keys retain runtime refusal", program
       [ "fn main() -> Int { let renderer: fn(Int) -> Str = show\n let invalid = mapOf([(renderer, 1)])\n print(display(invalid))\n 0 }" ])
   , ("rendering callable arguments fail before dispatch", program
@@ -118,6 +972,104 @@ deep body = program
 number :: Int -> Text
 number = Text.pack . show
 
+selectedReceiverTypes :: [Text]
+selectedReceiverTypes =
+  [ "trait View { fn size(self: &Self) -> Int }"
+  , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+  , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+  , "fn choose(value: dynamic View) -> Str {"
+  , "  print(\"receiver\")"
+  , "  value.toText()"
+  , "}"
+  ]
+
+{-| A held Option[Str] answers a builtin Str member through its own trait
+    implementation, since the checked member has no trait provider. -}
+heldBuiltin :: Text -> Text -> Text -> [Text]
+heldBuiltin member held heldBody =
+  [ "trait HeldIterable { fn " <> member <> "(self: &Self) -> " <> held <> " }"
+  , "impl HeldIterable for Option[Str] {"
+  , "  fn " <> member <> "(self: &Self) -> " <> held <> " { print(\"items\")\n " <> heldBody <> " }"
+  , "}"
+  ]
+
+heldConditionProgram :: [Text] -> Text
+heldConditionProgram body = program
+  (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"wrong\"" <>
+    ["fn main() -> Int {"] <> body <> ["  0", "}"])
+
+heldOpenTraversalTypes :: [Text]
+heldOpenTraversalTypes = selectedReceiverTypes <> heldBuiltin "lines" "Array[Int]" "[4, 7]"
+
+selectedByteConversion :: [Text]
+selectedByteConversion =
+  [ "trait Conversion { fn toBytes(self: &Self) -> Str }"
+  , "impl Conversion for Option[Str] { fn toBytes(self: &Self) -> Str { \"not bytes\" } }"
+  ]
+
+selectedByteArray :: Text -> Text -> [Text]
+selectedByteArray element members =
+  [ "trait ArrayView { fn toArray(self: &Self) -> Array[" <> element <> "] }"
+  , "impl ArrayView for Str { fn toArray(self: &Self) -> Array[" <> element <> "] { " <> members <> " } }"
+  , "fn selectedArray(view: dynamic View) -> Array[UInt8] { choose(view).toBytes().toArray() }"
+  ]
+
+selectedIntegerPositions :: [Text]
+selectedIntegerPositions =
+  [ "trait Positions { fn indexOf(self: &Self, label: Str) -> BigInt }"
+  , "impl Positions for Option[Str] {"
+  , "  fn indexOf(self: &Self, label: Str) -> BigInt {"
+  , "    if label == \"large\" { return 18446744073709551616 }"
+  , "    if label == \"larger\" { return 18446744073709551617 }"
+  , "    if label == \"negative\" { return -18446744073709551617 }"
+  , "    2"
+  , "  }"
+  , "}"
+  ]
+
+selectedInvalidPosition :: [Text]
+selectedInvalidPosition =
+  [ "trait Positions { fn indexOf(self: &Self, label: Str) -> Bool }"
+  , "impl Positions for Option[Str] { fn indexOf(self: &Self, label: Str) -> Bool { false } }"
+  ]
+
+selectedRangeKey :: [Text]
+selectedRangeKey =
+  [ "trait HeldRangeKey { fn indexOf(self: &Self, label: Str) -> Range[Int] }"
+  , "impl HeldRangeKey for Option[Str] { fn indexOf(self: &Self, label: Str) -> Range[Int] { 1..=2 } }"
+  ]
+
+selectedEscapingSubject :: Text -> [Text]
+selectedEscapingSubject held =
+  [ "trait HeldItems { fn lines(self: &Self) -> Array[Int] }"
+  , "impl HeldItems for Option[Str] { fn lines(self: &Self) -> Array[Int] { " <> held <> " } }"
+  ]
+
+selectedIntegerTrait :: [Text]
+selectedIntegerTrait =
+  [ "trait Describe { fn describe(self: &Self) -> Str }"
+  , "impl Describe for Int { fn describe(self: &Self) -> Str { \"Int \" + display(*self) } }"
+  , "impl Describe for BigInt { fn describe(self: &Self) -> Str { \"BigInt \" + display(*self) } }"
+  , "fn box(value: Int) -> dynamic Describe { value }"
+  , "fn describe(value: dynamic Describe) -> Str { value.describe() }"
+  ]
+
+selectedCollection :: Text -> Text -> [Text]
+selectedCollection result body =
+  [ "trait CollectionView { fn toArray(self: &Self) -> " <> result <> " }"
+  , "impl CollectionView for Str { fn toArray(self: &Self) -> " <> result <> " { " <> body <> " } }"
+  , "fn chooseCollection(view: dynamic View) -> Array[UInt8] { choose(view).toBytes().toArray() }"
+  ]
+
+selectedPredicate :: [Text]
+selectedPredicate =
+  [ "trait PredicateView { fn contains(self: &Self, key: Str) -> Str }"
+  , "impl PredicateView for Option[Str] {"
+  , "  fn contains(self: &Self, key: Str) -> Str { print(\"predicate\")\n \"wrong\" }"
+  , "}"
+  , "fn checkedPredicate(value: Int) -> Bool { choose(\"λ\".toBytes()).contains(\"x\") }"
+  ]
+
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
 
@@ -129,7 +1081,8 @@ renderingCallableModulePrograms =
       , "fn main() -> Int {"
       , "  print(display(A.renderer()(A.Token{value: 7}) == display(A.Token{value: 7})))"
       , "  print(display(B.renderer()(B.Token{value: \"x\"}) == display(B.Token{value: \"x\"})))"
-      , "  0", "}" ], "true\ntrue\n")]
+      , "  0", "}" ], "true\ntrue\n")
+  ]
  where
   provider name field = Text.unlines
     [ "module " <> name, "export type Token = { value: " <> field <> " }"

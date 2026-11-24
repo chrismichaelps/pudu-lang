@@ -7,6 +7,10 @@ aliases: [Backend Module Programs]
 ---
 # Backend Module Programs
 
+Resolved Grill Log. Retain a positional constructor through two import
+spellings, compare it, render its bare tag, order it within a tuple,
+and call it after passing it through a function.
+
 Word-map algebra (#810): register successes and refusals from [[Backend Word Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
 groups supplement these complete gates rather than replacing existing cases.
 ## Complete carried frozen data (#808)
@@ -152,3 +156,13 @@ The complete module corpus includes the store success, module and refusal progra
 
 Resolved Grill Log (#873): `modulePrograms` includes the qualified foreign
 calls of [[Backend Foreign Programs]].
+
+## Sum type aliases across modules (#993)
+
+Use an imported type alias in a function signature and reach its
+constructors through their declaring module in expressions and patterns.
+The explicit output is 5.
+
+Resolved Grill Log. Exercise construction, matching, and the alias's
+canonical type through the existing whole-program conformance harness.
+[[Program Graph Spec]]

@@ -30,6 +30,20 @@ Resolved Grill Log: arm results move into the match's destination. Binding a
 pattern from the subject still copies, because a failed guard tests the subject
 again.
 
+## Scalar constructor subjects
+
+Resolved Grill Log: A match over a freshly constructed scalar variant can
+use its payload slots directly when the first applicable arm is known and
+requires only plain bindings or wildcards. The constructor fields finish in
+written order before bindings become visible. A guarded or refutable arm
+that could accept the variant, and any arm that can use the whole value,
+keeps the ordinary match and its diagnostic path.
+
+Resolved Grill Log: distinct top-level variants can share one numeric
+dispatch when the only catch-all is last. A failed guard or payload pattern
+goes to that catch-all or the existing diagnostic. Repeated variant tags
+keep sequential arm evaluation.
+
 ## Sequence patterns (#558)
 
 Resolved Grill Log: the length is tested first, exactly without a rest and
@@ -37,6 +51,10 @@ at least the named count with one, as `matchPattern` does before reading.
 Front items are read by position, back items from the length minus the back
 count, and a bound rest is the slice between them. Pattern matching has no
 effects, so reading the back before binding the rest changes nothing.
+
+Resolved Grill Log: projected patterns assign shared locals only
+after the inner pattern succeeds. Alternative dispatch still stops
+at the first structural success.
 
 ## Referenced by
 

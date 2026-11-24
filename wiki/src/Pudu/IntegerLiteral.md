@@ -161,3 +161,7 @@ result (#429). Every other kind keeps the general bounds lookup.
 ### Resolved Grill Log
 - **Q:** Precompute the bounds of every kind? **A:** No; only the platform default is hot, and the
   other kinds already answer from a constant table.
+
+## Exact Int layout
+
+Resolved Grill Log: The internal exact Int layout has Int name, width and bounds. It has no source spelling and meets other integer kinds as Int.

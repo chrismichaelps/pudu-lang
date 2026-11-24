@@ -18,6 +18,46 @@ countdown =
   , "  }"
   , "}" ]
 
+sequenceView :: Text -> Text -> Text -> Text -> [Text]
+sequenceView checked checkedBody held heldBody =
+  [ "trait View { fn size(self: &Self) -> Int }"
+  , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+  , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+  , "fn select(value: dynamic View) -> Str { value.toText() }"
+  , "trait CheckedStep { fn step(self: &Self) -> " <> checked <> " }"
+  , "impl CheckedStep for Str { fn step(self: &Self) -> " <> checked <> " { " <> checkedBody <> " } }"
+  , "trait HeldStep { fn step(self: &Self) -> " <> held <> " }"
+  , "impl HeldStep for Option[Str] { fn step(self: &Self) -> " <> held <> " { " <> heldBody <> " } }"
+  ]
+
+{-| The checked builtin `length` has no trait provider, so a held Option[Str]
+    answers it through its own implementation. -}
+heldLength :: Text -> Text -> [Text]
+heldLength held heldBody =
+  [ "trait View { fn size(self: &Self) -> Int }"
+  , "impl View for Str { fn size(self: &Self) -> Int { self.length() } }"
+  , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+  , "fn select(value: dynamic View) -> Str { value.toText() }"
+  , "trait HeldLength { fn length(self: &Self) -> " <> held <> " }"
+  , "impl HeldLength for Option[Str] { fn length(self: &Self) -> " <> held <> " { " <> heldBody <> " } }"
+  ]
+
+stateSequence :: Text -> Text -> [Text]
+stateSequence beginBody advanceBody =
+  [ "trait Sequence[S, T] {"
+  , "  fn begin(self: &Self) -> S"
+  , "  fn advance(self: &Self, state: S) -> Option[(S, T)]"
+  , "}"
+  , "type Steps = { start: Int }"
+  , "impl Sequence[Int, Int] for Steps {"
+  , "  fn begin(self: &Self) -> Int { print(\"begin\")\n " <> beginBody <> " }"
+  , "  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {"
+  , "    print(show(state))"
+  , "    " <> advanceBody
+  , "  }"
+  , "}"
+  ]
+
 forSuccessPrograms :: [(String, Text, Text)]
 forSuccessPrograms =
   [ ("ranges walk their ends once, empty and single ranges included", program
@@ -55,6 +95,14 @@ forSuccessPrograms =
       , "  print(first(three) + \" \" + first(none))"
       , "  return 0", "}" ]
     , "t3\nt2\nt1\nt3 empty\n")
+  , ("a sequence carries the held next state through a skipped binder", program $
+      heldLength "Str" "\"next\"" <>
+      stateSequence "self.start" "if show(state) == \"2\" { Some((select(\"λ\".toBytes()).length(), 0)) } else { None }" <>
+      [ "fn main() -> Int {"
+      , "  for 9 in (Steps{start: 2}) { print(\"unreached\") }"
+      , "  print(\"done\")"
+      , "  0", "}" ]
+    , "begin\n2\n\"next\"\ndone\n")
   , ("for over Str, tuples and a sum's payload, and charFromCode", program
       [ "type Pair = Two(Int, Int) | One(Int) | Zero", "", "fn main() -> Int {"
       , "  for c in \"héllo\" { print(display(c)) }", "  for n in (1, 2, 3) { print(display(n * 10)) }", "  for v in Some(5) { print(display(v)) }"
@@ -71,6 +119,17 @@ forRefusalPrograms =
       [ "fn main() -> Int {", "  var total = 9223372036854775800"
       , "  for i in 0..10 {", "    print(display(i))", "    total = total + i", "  }"
       , "  return 0", "}" ])
+  , ("a malformed advance result fails after the call reports its effects", program $
+      sequenceView "Option[(Int, Int)]" "Some((1, 2))" "Option[Int]" "Some(3)" <>
+      stateSequence "self.start" "select(\"λ\".toBytes()).step()" <>
+      [ "fn main() -> Int {"
+      , "  for item in (Steps{start: 2}) { print(display(item)) }"
+      , "  0", "}" ])
+  , ("a transfer from begin reaches the caller before any step", program $
+      stateSequence "panic(\"stopped\")" "Some((0, 1))" <>
+      [ "fn main() -> Int {"
+      , "  for item in (Steps{start: 2}) { print(display(item)) }"
+      , "  0", "}" ])
   ]
 
 program :: [Text] -> Text

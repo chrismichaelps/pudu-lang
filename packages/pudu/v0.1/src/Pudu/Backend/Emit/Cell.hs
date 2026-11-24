@@ -3,15 +3,17 @@
     and comparability of a member, and the names of per-type helpers. -}
 module Pudu.Backend.Emit.Cell
   ( ownedType, cType, retained, released, mangle, mangleKey, aggregateHelper, aggregateNeed
-  , isAggregate, memberRender, memberEqual, memberCompare, memberComparable, cellName, number
+  , isAggregate, isDynamicBox, memberDisplay, memberRender, memberRuntimeKind, memberEqual, memberCompare, memberComparable, callbackTokenText, cellName, number
   ) where
 
 import Data.Text (Text)
+import Data.Maybe (isJust)
 import qualified Data.Text as Text
+import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Core (CoreType (..), coreTypeName)
+import Pudu.Core (CoreType (..), coreStaticRuntimeKind, coreTypeName, runtimeChoiceAlternatives)
 import Pudu.FloatLiteral (floatWidthType)
-import Pudu.IntegerLiteral (integerKindName)
+import Pudu.IntegerLiteral (IntegerKind (ExactIntKind), integerKindName)
 
 {-| Values a slot holds a reference to: the frame retains and releases them. -}
 ownedType :: CoreType -> Bool
@@ -74,6 +76,7 @@ released kind expression = case kind of
 
 mangle :: CoreType -> Text
 mangle kind = case kind of
+  CoreIntegerType ExactIntKind -> "Int_exact"
   CoreIntegerType integer -> integerKindName integer
   CoreFloatType width -> floatWidthType width
   CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"
@@ -128,9 +131,36 @@ memberRender kind expression = case kind of
   CoreDecimalType -> ("pudu_text_display_dec(" <> expression <> ")", ["text_display_dec"])
   CoreBoolType -> ("(" <> expression <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))", ["text_literal"])
   CoreUnitType -> ("pudu_text_literal(\"()\", 2)", ["text_literal"])
+  CoreCallbackType owner _ -> (callbackTokenText owner, ["text_literal"])
   CoreCharType -> ("pudu_char_show(" <> expression <> ")", ["char_show"])
   CoreTextType -> ("pudu_text_show(" <> expression <> ")", ["text_show"])
   _ -> (aggregateHelper "show" kind <> "(" <> expression <> ")", [aggregateNeed "show" kind])
+
+isDynamicBox :: CoreType -> Bool
+isDynamicBox (CoreSumType key []) = "dynamic." `Text.isPrefixOf` key
+isDynamicBox kind = isJust (runtimeChoiceAlternatives kind)
+
+memberDisplay :: CoreType -> Text -> (Text, [Text])
+memberDisplay kind expression = case kind of
+  CoreTextType -> ("pudu_text_retain(" <> expression <> ")", ["text_retain"])
+  CoreCharType -> ("pudu_char_text(" <> expression <> ")", ["char_text"])
+  _ | isDynamicBox kind -> (aggregateHelper "display" kind <> "(" <> expression <> ")", [aggregateNeed "display" kind])
+  _ -> memberRender kind expression
+
+callbackTokenText :: Text -> Text
+callbackTokenText owner =
+  "pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ")"
+ where
+  shown = "<" <> owner <> ">"
+
+memberRuntimeKind :: CoreType -> Text -> (Text, [Text])
+memberRuntimeKind kind expression = case kind of
+  CoreSumType{} -> named
+  CoreFunctionType{} -> named
+  _ -> ("pudu_text_literal(" <> cString label <> ", " <> number (cStringBytes label) <> ")", ["text_literal"])
+ where
+  label = coreStaticRuntimeKind kind
+  named = (aggregateHelper "name" kind <> "(" <> expression <> ")", [aggregateNeed "name" kind])
 
 {-| `==` on two members, as Value's Eq instance has it. -}
 memberEqual :: CoreType -> Text -> Text -> (Text, [Text])
@@ -151,8 +181,8 @@ memberCompare kind a b = case kind of
   CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ")", ["text_compare"])
   CoreDecimalType -> ("pudu_dec_compare(" <> a <> ", " <> b <> ")", ["dec_compare"])
   CoreUnitType -> ("0", [])
-  -- compareValues ranks two functions alike, so they never decide an order.
-  CoreFunctionType _ _ -> ("0", [])
+  -- The evaluator orders these values by shape rank alone.
+  CoreCallbackType _ _ -> ("0", [])
   _ | isAggregate kind -> (aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "compare" kind])
   _ -> ("(" <> a <> " > " <> b <> ") - (" <> a <> " < " <> b <> ")", [])
 

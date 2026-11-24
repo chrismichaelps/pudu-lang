@@ -54,17 +54,11 @@ multiMapBody blame name signature state at arguments = case signature of
         (withPair, pairLocal) = bindLocal withGroups "" pairType
         (after, countsLocal) = bindLocal withPair "" (countsOf key value)
         keyed kind operation local operands = expression kind (CoreKeyedMethod operation (reading local) operands)
-        group = expression groupType (CoreIfValue
-          (keyed CoreBoolType KeyedContains groupsLocal [reading keyLocal])
-          (CoreBlock [] (Just (expression groupType (CoreArrayMethod ArrayPushValue
-            (keyed groupType KeyedLookup groupsLocal [reading keyLocal]) [reading valueLocal]))))
-          (expression groupType (CoreArray [reading valueLocal])))
+        group = expression groupType (CoreArrayMethod ArrayPushValue
+          (keyed groupType KeyedLookupOrDefault groupsLocal [reading keyLocal]) [reading valueLocal])
         one = expression intType (CoreIntegerLiteral PlatformSigned 1)
-        count = expression intType (CoreIfValue
-          (keyed CoreBoolType KeyedContains countsLocal [reading pairLocal])
-          (CoreBlock [] (Just (expression intType (CoreBinary CoreAdd
-            (keyed intType KeyedLookup countsLocal [reading pairLocal]) one))))
-          one)
+        count = expression intType (CoreBinary CoreAdd
+          (keyed intType KeyedLookupOrDefault countsLocal [reading pairLocal]) one)
         statements = declares
           <> [orderable blame at "map key" (reading keyLocal) | mayHoldFunction types key]
           <> [ declare groupsLocal (expression (groupsOf key value) (CoreField "groups" (reading mapLocal)))

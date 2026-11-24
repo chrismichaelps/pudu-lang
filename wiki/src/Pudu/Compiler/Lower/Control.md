@@ -95,3 +95,40 @@ Resolved Grill Log: use defined unsigned bit patterns, validate counts before sh
 ## Text breaks (#515)
 
 A break operand may carry any native value type, Str included.
+
+## Checked loop result carriers (#956)
+
+Resolved Grill Log: an explicit loop records the checked carrier at its
+span before lowering the body. Each valued break widens to the carrier of
+its own destination, including a labelled outer destination. The observed
+break type is tracked separately so an operand that transfers control or
+a loop with no reachable break cannot create a result.
+
+## Held runtime conditions
+
+Resolved Grill Log. Select a held condition before branching. Strict
+conditions require Bool and report E7001 with the held kind at the
+operation's span. Match guards treat a held non-Bool as false after
+its effects. A condition that transfers keeps its original transfer.
+[[Compiler Lower Body]] · [[Compiler Lower Scalar]] · [[Compiler Lower Match]]
+
+## Held break values
+
+Collect the resulting carriers of the breaks that reach each loop.
+Use the checked carrier to guide projection and keep a single observed
+carrier directly. For mixed exits, settle a common aggregate or a
+runtime choice and lower the body against that destination layout.
+
+Resolved Grill Log. Lower all transfers targeting the same loop
+against the same carrier. Replaying from before the loop preserves
+lexical targets and publishes observations from the final pass. An
+inner transfer that prevents its enclosing break from running provides
+only its own result. Bare break supplies unit before projection.
+[[Backend Rendering Callable Programs]]
+
+## Held branch results
+
+Resolved Grill Log. Use one result carrier for the returning arms
+of an if or match. Try the checked layout, then a shared aggregate
+layout, then the reachable runtime carriers. Project inside each
+arm. Transfers remain unmodified and consume no result slot.

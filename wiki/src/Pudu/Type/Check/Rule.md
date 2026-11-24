@@ -224,3 +224,15 @@ Resolved Grill Log: field names and payload types come from one resolved owner/v
 Namespace name/member lookup consumes lookupBinding once. ValueBinding instantiates normally. ConstructorBinding uses its original label for named-value refusal and records the checked owner/label for executable lowering only when admitted. Never classify an ordinary value by spelling or result type.
 
 Resolved Grill Log: identity belongs to the selected binding; schemes remain type-only and ordinary shadows clear constructor roles. See [[Constructor Binding Delivery]].
+
+## Type-only module qualifiers (#993)
+
+After qualified binding lookup, use the declared import qualifiers as
+evidence of a module namespace. A missing member reports E3033 even when
+the module publishes no value bindings. Lexical shadowing and successful
+lookup retain priority.
+
+Resolved Grill Log. A value-frame prefix cannot establish the existence
+of a type-only module. The checker already records whole-module imports
+and can give the same export diagnostic for empty and populated namespaces.
+[[Program Graph Spec]]

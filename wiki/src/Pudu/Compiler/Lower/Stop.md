@@ -32,3 +32,9 @@ lowering. They run their arguments, then refuse E7007 "panic" with help
 (wrongPanicBody), as the interpreter does.
 
 Wording comes from Pudu.Diagnostic.Evaluation. (#633)
+
+## Panic through runtime layouts (#956)
+
+Resolved Grill Log: direct and stored panic both read the runtime
+alternative before choosing the message. Keep the source call as
+the diagnostic location in both forms.

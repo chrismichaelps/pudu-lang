@@ -45,6 +45,23 @@ methodSuccessPrograms =
       , "}"
       ]
     , "9\n")
+  , ("declared calls with defaults pass every written argument directly and as a value", program
+      [ "type Marker = { base: Int }"
+      , "fn next(value: Int) -> Int { print(\"default\")\n value + 1 }"
+      , "trait Count { fn count(self: &Self, first: Int, second: Int = next(first)) -> Int }"
+      , "impl Count for Marker {"
+      , "  fn count(self: &Self, first: Int, second: Int = next(first)) -> Int { self.base + first + second }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let item = Marker{base: 5}"
+      , "  print(show(item.count(2, 4)))"
+      , "  print(show(Marker.count(&item, 2, 5)))"
+      , "  let stored = item.count"
+      , "  print(show(stored(3, 1)))"
+      , "  0"
+      , "}"
+      ]
+    , "11\n12\n9\n")
   , ("qualified calls select by type and by trait", program $ named <>
       [ "trait Origin { fn origin() -> Self }"
       , "impl Origin for Point { fn origin() -> Point { Point{x: 0, y: 0} } }"

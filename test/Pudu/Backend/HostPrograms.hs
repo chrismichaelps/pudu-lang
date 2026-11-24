@@ -55,6 +55,16 @@ hostLibraryPrograms =
       , "  0"
       , "}"
       ] )
+  , ("odd lane lengths preserve signed zero and unordered arithmetic", program
+      [ "fn main() -> Int {"
+      , "  let left = lanesFromArray([0.0, -0.0, 0.0 / 0.0, 1.0 / 0.0, -2.0])"
+      , "  let right = lanesFromArray([-0.0, 0.0, 3.0, 0.0 / 0.0, 4.0])"
+      , "  for result in [lanesAdd(left, right), lanesSub(left, right), lanesMul(left, right),"
+      , "                 lanesDiv(left, right), lanesMin(left, right), lanesMax(left, right)] {"
+      , "    match result { case Some(values) => print(show(lanesToArray(values)))"
+      , "      case None => print(\"none\") }"
+      , "  }"
+      , "  0", "}" ])
   ]
 
 hostSuccessPrograms :: [(String, Text, Text)]

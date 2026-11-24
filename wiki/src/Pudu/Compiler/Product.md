@@ -78,3 +78,9 @@ Requires [[Compiler Pipeline]] and [[Compiler Cache]]. Consumed by
 ## Shapes (#563)
 
 A reused checked product has no shapes, like its other analysis fields.
+
+## Dynamic widening evidence (#956)
+
+Resolved Grill Log: retain proven widenings in analysis products used
+by native lowering. Execution products already carry the executable
+syntax selected by checking and do not need the widening metadata.

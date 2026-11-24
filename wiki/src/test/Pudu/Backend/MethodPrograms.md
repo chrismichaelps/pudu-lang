@@ -51,3 +51,11 @@ turning a function carrier's display text into a nominal type.
 
 The default-argument regression invokes a method with a written default
 and supplies the full checked arity. Its native result is 9.
+
+Resolved Grill Log: compare calls with full and omitted arguments.
+An omitted argument can use the value of an earlier supplied argument,
+and an explicit value suppresses evaluation of that default.
+Capture the same method and omit its default through the stored
+value to exercise the wrapper's supplied count.
+
+Resolved Grill Log. Method calls supply every written argument, directly and through a stored method value, because checking requires full method arity.

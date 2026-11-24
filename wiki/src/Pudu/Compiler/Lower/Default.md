@@ -30,3 +30,44 @@ conversion. A remaining type mismatch refuses with E6001; a Never default stops 
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Call]] · [[Compiler Lower Lambda]] · [[src/Pudu/Compiler/_MOC]]
+
+## Runtime supplied count
+
+Resolved Grill Log: the callee checks an actual missing required
+parameter in declaration order. Earlier omitted defaults execute
+before that check, and the failure points at the caller.
+
+## Selected method argument counts
+
+Resolved Grill Log: check for surplus values using the selected
+signature's written slots. With no defaults, an omitted slot names
+the first missing parameter. With defaults, pass the actual count
+so that the callee runs its defaults and diagnoses missing parameters
+in order. Report an invalid count only after supplied operands run.
+
+[[Compiler Lower Method]]
+
+## Stored callable argument profiles
+
+Named, lifted and bound callable templates identify their written
+parameters and whether their body accepts a supplied count.
+
+Resolved Grill Log: retain the evaluated callee and arguments before
+branching on callable identity. A fixed-arity function ending in Int
+can share its layout with a defaulted function. Use the layout to
+request discovery and the callable identity to choose the count.
+
+[[Compiler Lower Array Loop]] · [[Compiler Lower Lambda]]
+
+Resolved Grill Log: the same invocation profile can name exclusive
+parameter positions. Loan preparation retains places before selection,
+while each selected invocation uses only its own final positions.
+[[Compiler Lower Loan]]
+
+Resolved Grill Log: use the possible shape of an exclusive
+return tuple to schedule profile selection. The shape does not
+distinguish an ordinary tuple from a tuple carrying mutable finals.
+
+Resolved Grill Log: retain the builtin family and method name beside the
+selected callable's written count. A count mismatch evaluates every
+supplied operand before reporting the builtin's invocation diagnostic.

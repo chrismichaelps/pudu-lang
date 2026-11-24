@@ -22,6 +22,10 @@ Typed direct entries from [[Backend Typed Integer Calls]] are emitted before
 the stack entries that call them. The function table keeps the usual frame
 body, and the stack entry selects the typed form only for canonical inputs.
 
+Resolved Grill Log: compacted entry functions with at most 32 cells and no
+frame calls get fixed startup storage. All other entries continue through
+the ordinary dispatcher. Pass the actual compacted cell bound to the runtime.
+
 ## Resolved Grill Log
 
 - **Q:** Lower structured Core inside the backend? **A:** No; the compiler calls lowerFrames before this boundary.
@@ -232,3 +236,17 @@ Resolved Grill Log: one layout for every backend consumer.
 ## Resolved Grill Log for Objective-C delegates
 
 Delegate definitions are emitted after the foreign wrappers and before the frame bodies that construct delegates, so each constructor is declared before its first use.
+
+## Callback entry results (#956)
+
+Run the entry once and report its callback token using [[Backend Emit Cell]]'s
+shared token text renderer.
+
+### Resolved Grill Log
+
+Direct reporting and rendering from a cell share one canonical owner spelling.
+
+## Exact range cells
+
+Resolved Grill Log: range layouts require the exact integer cell even
+when no source function itself declares an exact integer.

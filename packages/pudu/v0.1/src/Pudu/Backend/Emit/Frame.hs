@@ -10,6 +10,7 @@ import Pudu.Backend.Emit.Foreign (foreignNeeds, foreignWrappers, foreignsOf, par
 import Pudu.Backend.Emit.Foreign.Callback (callbackArgumentTypes, callbackNeeds, callbackSignaturesOf, callbackUnregisterResults)
 import Pudu.Backend.Emit.Foreign.Delegate (delegateDefinitions, delegatesOf)
 import Pudu.Backend.Emit.Aggregate (aggregateSection, aggregateTypes, cellName, ownedKinds, ownedType, released, retained, aggregateHelper, aggregateNeed)
+import Pudu.Backend.Emit.Cell (callbackTokenText)
 import Pudu.Backend.Emit.Entry (EmittedUnit (..), EntryForm (..), entrySection)
 import Pudu.Backend.Emit.Export (ExportSection (..), exportSection)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
@@ -17,7 +18,7 @@ import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
 import Pudu.Backend.Emit.Frame.Fast (emitFastFunctions, fastEntry, fastFunctions)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Backend.Emit.State (EmitState (..), cString, cStringBytes, emptyEmitState, renderByteData, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameCallbackEngine, frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Host.Callback (callbackRuntime)
@@ -34,8 +35,8 @@ import qualified Data.Map.Strict as Map
 import Data.List (nub)
 import Pudu.Core (closureIsBuiltin, CoreCallbackSignature (..), CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
-  ( FrameFault (..), FrameFunction (..), FrameLabel (..)
-  , FrameModule (..), FrameSlot (..), FrameSlotId (..) )
+  ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
+  , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
 import Pudu.Source (Source)
 
 emitFrameProgram :: Text -> [Source] -> FrameModule -> Either FrameFault Text
@@ -97,9 +98,9 @@ emitFrameUnit form version sources logical = do
       , "  pudu_text_release(pudu_shown);"
       , "  return pudu_report_status;" ]
     -- A token is shown as the callback declaration it registers with.
-    CoreCallbackType _ name -> Right
+    CoreCallbackType owner _ -> Right
       [ "  (void)pudu_run_frames(" <> textOfInt entryId <> ");"
-      , "  return pudu_output_report(pudu_text_literal(" <> cString name <> ", " <> textOfInt (cStringBytes name) <> "));" ]
+      , "  return pudu_output_report(" <> callbackTokenText owner <> ");" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   let direct = directFunctions source
@@ -180,7 +181,7 @@ emitFrameUnit form version sources logical = do
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked))
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) (startupCells entry)
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
     -- Only a program that reads its arguments keeps them.
@@ -193,6 +194,14 @@ emitFrameUnit form version sources logical = do
     }
   where
     source = compactFrameSlots logical
+    startupCells function
+      | cells <= 32, all (returnsLocally . frameBlockTerminator) (frameFunctionBlocks function) = Just cells
+      | otherwise = Nothing
+      where cells = frameCells function
+    returnsLocally ending = case ending of
+      FrameCall{} -> False
+      FrameCallValue{} -> False
+      _ -> True
     -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"
@@ -265,6 +274,7 @@ frameUsesBig source = any usesBig (frameModuleFunctions source)
   usesBig function = any (mentions (frameModuleLayouts source) bigType) (frameFunctionResult function
     : map frameSlotType (frameFunctionParameters function <> frameFunctionSlots function))
   bigType (CoreIntegerType kind) = isBigInteger kind
+  bigType CoreRangeType = True
   bigType _ = False
 
 frameUsesDecimal :: FrameModule -> Bool

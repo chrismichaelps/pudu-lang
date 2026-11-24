@@ -58,6 +58,7 @@ Pudu is a statically typed native systems language for developers who need predi
   executable evidence, and explicit UI/audio/video gaps without copying AppKit's class surface.
 - [[architecture/PATTERNS]] — every design pattern written in Pudu and run: which dissolve, which are ordinary generics, and the one feature that was missing.
 - [[architecture/PERFORMANCE|Performance Constitution]] — compiler throughput, low-level IR, optimization barriers, and benchmarks.
+- [[Native Emission Performance]] — reported runtime costs, native baselines, and parity checks.
 - [[architecture/PACKAGES|Package System]] — manifests, lockfiles, resolution, cache security, and registry protocol.
 - [[architecture/WEBSITE|Pudu Website Architecture]] — generated API data, Pudu SSR, static canonical pages, dynamic search, SEO, and the Vercel boundary.
 - [[architecture/DEPLOYMENT-TARGETS|Deployment Targets]] — how a bundle's linking decides where it runs, the musl runtime, building for a platform from a machine that is not it, and what a bundle needs once it starts.

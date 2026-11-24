@@ -2,6 +2,7 @@
 module Pudu.Backend.Runtime.Text (textRuntimeParts, textRuntimeDependencies) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 
 textRuntimeParts :: [(Text, [Text])]
 textRuntimeParts =
@@ -38,14 +39,14 @@ textRuntimeParts =
       , "  return text;"
       , "}"
       ])
-  , ("text_allocate",
+  , ("text_try_allocate",
       [ "/* Room for length bytes, filled by the caller before the text is read. */"
-      , "static pudu_text pudu_text_allocate(size_t length, unsigned char **bytes) {"
+      , "static pudu_text pudu_text_try_allocate(size_t length, unsigned char **bytes) {"
       , "  pudu_text_owner *owner;"
       , "  pudu_text text;"
-      , "  if (length > (size_t)PTRDIFF_MAX - sizeof(pudu_text_owner)) pudu_memory_failure();"
+      , "  if (length > (size_t)PTRDIFF_MAX - sizeof(pudu_text_owner)) return (pudu_text){0};"
       , "  owner = malloc(sizeof(pudu_text_owner) + (length == 0 ? 1 : length));"
-      , "  if (owner == NULL) pudu_memory_failure();"
+      , "  if (owner == NULL) return (pudu_text){0};"
       , "  owner->count = 1;"
       , "  *bytes = owner->bytes;"
       , "  text.bytes = owner->bytes;"
@@ -54,6 +55,22 @@ textRuntimeParts =
       , "  return text;"
       , "}"
       ])
+  , ("text_allocate",
+      [ "static pudu_text pudu_text_allocate(size_t length, unsigned char **bytes) {"
+      , "  pudu_text text = pudu_text_try_allocate(length, bytes);"
+      , "  if (text.owner == NULL) pudu_memory_failure();"
+      , "  return text;"
+      , "}"
+      ])
+  , ("text_digit_pair",
+      ([ "static pudu_text pudu_text_digit_pair(unsigned char left, unsigned char right) {"
+       , "  static const unsigned char pairs[] =" ]
+       <> [ "    \"" <> Text.concat [Text.pack (show first <> show second) | second <- [0 .. 9 :: Int]] <> "\""
+          | first <- [0 .. 9 :: Int] ]
+       <> [ "    ;"
+          , "  if (left < '0' || left > '9' || right < '0' || right > '9') return (pudu_text){0};"
+          , "  return (pudu_text){pairs + 2 * (10 * (left - '0') + (right - '0')), 2, NULL};"
+          , "}" ]))
   , ("text_concat",
       [ "static pudu_text pudu_text_concat(pudu_text left, pudu_text right) {"
       , "  unsigned char *bytes;"
@@ -61,7 +78,14 @@ textRuntimeParts =
       , "  if (right.length == 0) return pudu_text_retain(left);"
       , "  if (left.length == 0) return pudu_text_retain(right);"
       , "  if (left.length > SIZE_MAX - right.length) pudu_memory_failure();"
-      , "  text = pudu_text_allocate(left.length + right.length, &bytes);"
+      , "  size_t length = left.length + right.length;"
+      , "  if (left.owner != NULL && left.owner == right.owner && left.bytes + left.length == right.bytes)"
+      , "    return pudu_text_retain((pudu_text){left.bytes, length, left.owner});"
+      , "  if (left.length == 1 && right.length == 1) {"
+      , "    text = pudu_text_digit_pair(left.bytes[0], right.bytes[0]);"
+      , "    if (text.bytes != NULL) return text;"
+      , "  }"
+      , "  text = pudu_text_allocate(length, &bytes);"
       , "  memcpy(bytes, left.bytes, left.length);"
       , "  memcpy(bytes + left.length, right.bytes, right.length);"
       , "  return text;"
@@ -107,13 +131,23 @@ textRuntimeParts =
       , "}"
       ])
   , ("text_copy",
-      [ "static pudu_text pudu_text_copy(const char *source, size_t length) {"
+      ([ "static pudu_text pudu_text_copy(const char *source, size_t length) {"
+       , "  static const unsigned char single_bytes[] = {" ]
+       <> [ "    " <> Text.intercalate ", " (map (Text.pack . show) [first .. first + 15]) <> ","
+          | first <- [0, 16 .. 240 :: Int] ]
+       <> [ "  };"
+      , "  if (length == 0) return (pudu_text){single_bytes, 0, NULL};"
+      , "  if (length == 1) return (pudu_text){single_bytes + (unsigned char)source[0], 1, NULL};"
+      , "  if (length == 2) {"
+      , "    pudu_text pair = pudu_text_digit_pair((unsigned char)source[0], (unsigned char)source[1]);"
+      , "    if (pair.bytes != NULL) return pair;"
+      , "  }"
       , "  unsigned char *bytes;"
       , "  pudu_text text = pudu_text_allocate(length, &bytes);"
       , "  memcpy(bytes, source, length);"
       , "  return text;"
       , "}"
-      ])
+      ]))
   , ("text_display_int",
       [ "static pudu_text pudu_text_display_int(pudu_int value) {"
       , "  char buffer[24], *end = buffer + sizeof buffer, *cursor = end;"
@@ -201,11 +235,13 @@ textRuntimeDependencies name = maybe [] id (lookup name
   , ("text_retain", ["text"])
   , ("text_slot_store", ["text"])
   , ("text_slot_move", ["text_slot_store"])
-  , ("text_allocate", ["text", "memory_failure"])
-  , ("text_concat", ["text_allocate", "text_retain"])
+  , ("text_try_allocate", ["text"])
+  , ("text_allocate", ["text_try_allocate", "memory_failure"])
+  , ("text_digit_pair", ["text"])
+  , ("text_concat", ["text_allocate", "text_retain", "text_digit_pair"])
   , ("text_compare", ["text"])
   , ("text_show", ["text_allocate"])
-  , ("text_copy", ["text_allocate"])
+  , ("text_copy", ["text_allocate", "text_digit_pair"])
   , ("text_display_int", ["text_copy", "magnitude"])
   , ("text_display_wide", ["text_copy", "wide_normal", "wide_magnitude", "word128_divide", "word128_zero"])
   , ("text_display_float", ["text_copy", "float_format"])

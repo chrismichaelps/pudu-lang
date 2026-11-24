@@ -23,14 +23,17 @@ frameTypes wide big decimal text boxes threads =
   ] <> (if boxes then
   [ "/* An aggregate: a reference count and its members. */"
   , "struct pudu_box { size_t count; pudu_cell fields[]; };"
-  , "static pudu_box *pudu_box_new(size_t members) {"
-  , "  pudu_box *box;"
-  , "  if (members > (SIZE_MAX - sizeof(pudu_box)) / sizeof(pudu_cell)) pudu_memory_failure();"
-  , "  box = malloc(sizeof(pudu_box) + members * sizeof(pudu_cell));"
-  , "  if (box == NULL) pudu_memory_failure();"
-  , "  box->count = 1;"
+  , "static inline pudu_box *pudu_box_allocate(size_t members, int report) {"
+  , "  pudu_box *box = NULL;"
+  , "  if (members <= (SIZE_MAX - sizeof(pudu_box)) / sizeof(pudu_cell)) {"
+  , "    box = malloc(sizeof(pudu_box) + members * sizeof(pudu_cell));"
+  , "    if (box != NULL) box->count = 1;"
+  , "  }"
+  , "  if (box == NULL && report) pudu_memory_failure();"
   , "  return box;"
   , "}"
+  , "#define pudu_box_new(members) pudu_box_allocate((members), 1)"
+  , "#define pudu_box_try_new(members) pudu_box_allocate((members), 0)"
   , "static inline pudu_box *pudu_box_retain(pudu_box *box) {"
   , "  if (box != NULL) box->count += 1;"
   , "  return box;"
@@ -62,9 +65,17 @@ frameTypes wide big decimal text boxes threads =
 
 {-| With owned slots, `pudu_drop_cell` and `pudu_retain_cell` must already be
     written; [[Native Aggregate Emission]] writes them. -}
-frameEngine :: Bool -> Bool -> Bool -> [Text]
-frameEngine owned threads stacked =
-  [ "/* A frame owns the references in its slots; letting it go releases them."
+frameEngine :: Bool -> Bool -> Bool -> Maybe Int -> [Text]
+frameEngine owned threads stacked startupCells =
+  [ "enum { PUDU_CACHED_FRAME_CELLS = 64 };"
+  , "static " <> local <> "pudu_frame *pudu_cached_frame = NULL;"
+  , "static " <> local <> "size_t pudu_cached_cells = 0;"
+  , "static void pudu_clear_frame_cache(void) {"
+  , "  free(pudu_cached_frame);"
+  , "  pudu_cached_frame = NULL;"
+  , "  pudu_cached_cells = 0;"
+  , "}"
+  , "/* A frame owns the references in its slots; letting it go releases them."
   , "   A stacked frame's storage belongs to the C function running it, so"
   , "   leaving one releases its slots and never reaches the allocator. */"
   , "static void pudu_release_slots(pudu_frame *frame) {"
@@ -77,7 +88,17 @@ frameEngine owned threads stacked =
   [ "}"
   , "static void pudu_free_frame(pudu_frame *frame) {"
   , "  pudu_release_slots(frame);"
-  , "  if (!frame->stacked) free(frame);"
+  , "  if (frame->parent == NULL) pudu_clear_frame_cache();"
+  , "  if (!frame->stacked) {"
+  , "    const pudu_function *definition = &pudu_functions[frame->function];"
+  , "    size_t cells = definition->slots + definition->arguments;"
+  , "    if (cells == 0) cells = 1;"
+  , "    if (frame->parent != NULL && cells <= PUDU_CACHED_FRAME_CELLS && cells >= pudu_cached_cells) {"
+  , "      pudu_clear_frame_cache();"
+  , "      pudu_cached_frame = frame;"
+  , "      pudu_cached_cells = cells;"
+  , "    } else free(frame);"
+  , "  }"
   , "}"
   , "static void pudu_unwind_frames(void) {"
   , "  while (pudu_active_frame != NULL) {"
@@ -85,6 +106,7 @@ frameEngine owned threads stacked =
   , "    pudu_active_frame = frame->parent;"
   , "    pudu_free_frame(frame);"
   , "  }"
+  , "  pudu_clear_frame_cache();"
   , "  pudu_frame_depth = 0;"
   , "}"
   , "static void pudu_invalid_frame(void) {"
@@ -103,8 +125,15 @@ frameEngine owned threads stacked =
   , "  if (cells == 0) cells = 1;"
   , "  if (cells > (SIZE_MAX - sizeof(pudu_frame)) / sizeof(pudu_cell)) pudu_memory_failure();"
   , "  bytes = sizeof(pudu_frame) + cells * sizeof(pudu_cell);"
-  , "  frame = calloc(1, bytes);"
-  , "  if (frame == NULL) pudu_memory_failure();"
+  , "  if (pudu_cached_cells >= cells) {"
+  , "    frame = pudu_cached_frame;"
+  , "    pudu_cached_frame = NULL;"
+  , "    pudu_cached_cells = 0;"
+  , "    memset(frame, 0, bytes);"
+  , "  } else {"
+  , "    frame = calloc(1, bytes);"
+  , "    if (frame == NULL) pudu_memory_failure();"
+  , "  }"
   , "  frame->slots = frame->cells;"
   , "  frame->arguments = frame->cells + definition->slots;"
   , "  frame->pc = definition->pc;"
@@ -172,10 +201,8 @@ frameEngine owned threads stacked =
   , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
   , "  pudu_cleanup_hook = pudu_unwind_frames;"
   , "  pudu_blame_hook = pudu_blamed_site;"
-  , "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
-  , "  pudu_frame_depth = 1;"
-  , "  result = pudu_run_active();"
-  , "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
+  ] <> maybe heapStartup fixedStartup startupCells <>
+  [ "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
   , "  pudu_cleanup_hook = NULL;"
   , "  pudu_blame_hook = NULL;"
   , "  return result;"
@@ -192,6 +219,30 @@ frameEngine owned threads stacked =
   , "  return pudu_run_active();"
   , "}"
   ] else [])
+ where
+  local = threadLocal threads
+  heapStartup =
+    [ "  pudu_active_frame = pudu_new_frame(entry, NULL, 0);"
+    , "  pudu_frame_depth = 1;"
+    , "  result = pudu_run_active();" ]
+  fixedStartup cells =
+    let size = Text.pack (show cells)
+     in [ "  if (entry >= sizeof pudu_functions / sizeof pudu_functions[0]) pudu_invalid_frame();"
+        , "  const pudu_function *definition = &pudu_functions[entry];"
+        , "  if (definition->parameter_count == 0 && definition->slots <= " <> size
+            <> " && definition->arguments <= " <> size <> " - definition->slots) {"
+        , "    pudu_cell pudu_startup_slots[" <> size <> "] = {0};"
+        , "    pudu_frame startup = {.slots = pudu_startup_slots, .arguments = pudu_startup_slots + definition->slots,"
+        , "      .pc = definition->pc, .function = entry, .stacked = 1};"
+        , "    pudu_active_frame = &startup;"
+        , "    pudu_frame_depth = 1;"
+        , "    pudu_step step = definition->body(&startup);"
+        , "    if (step.kind != PUDU_RETURN) pudu_invalid_frame();"
+        , "    pudu_active_frame = NULL;"
+        , "    pudu_frame_depth = 0;"
+        , "    pudu_release_slots(&startup);"
+        , "    result = step.result;"
+        , "  } else {" ] <> map ("  " <>) heapStartup <> ["  }"]
 
 {-| A callback's protected invocation has already suspended the parent frame.
     Pass its closure environment ahead of the borrowed arguments when needed. -}
@@ -241,6 +292,7 @@ stackFrames owned =
   , "static inline void pudu_stack_leave(pudu_frame *frame) {"
   , "  pudu_active_frame = frame->parent;"
   , "  pudu_release_slots(frame);"
+  , "  if (pudu_active_frame == NULL) pudu_clear_frame_cache();"
   , "}"
   ]
 

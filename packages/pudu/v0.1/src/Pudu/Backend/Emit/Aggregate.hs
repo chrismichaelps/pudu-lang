@@ -14,6 +14,7 @@ module Pudu.Backend.Emit.Aggregate
   , aggregateHelper, aggregateNeed, aggregateTypes, aggregateSection
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -21,18 +22,19 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.Cell
-  ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable
-  , memberEqual, memberRender, number, ownedType, released, retained )
+  ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, isDynamicBox, memberCompare, memberComparable
+  , memberDisplay, memberEqual, memberRender, memberRuntimeKind, number, ownedType, released, retained )
 import Pudu.Backend.Emit.Array (arrayHelpers)
+import Pudu.Backend.Emit.CrossComparison (Comparison (..), crossHelpers, differentLayoutCall, payloadRank)
 import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers, storeHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
 import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.Handle (handleHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
-import Pudu.Core.Closure (isTextMethod)
+import Pudu.Core.Closure (constructorIdentity, isTextMethod)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
-import Pudu.IntegerLiteral (IntegerKind (BigIntKind))
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind))
 
 type Layouts = Map CoreType CoreLayout
 
@@ -67,7 +69,7 @@ aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
 {-| Ownership kinds the frame engine switches on: 1 is text, then each
     aggregate type in `aggregateTypes` order. -}
 ownedKinds :: [CoreType] -> [(CoreType, Int)]
-ownedKinds tuples = (CoreTextType, 1) : (CoreIntegerType BigIntKind, 2) : (CoreDecimalType, 3) : zip tuples [4 ..]
+ownedKinds tuples = (CoreTextType, 1) : (CoreIntegerType BigIntKind, 2) : (CoreDecimalType, 3) : (CoreIntegerType ExactIntKind, 4) : zip tuples [5 ..]
 
 {-| The helpers the needs name, their own needs included, in an order where
     each comes after what it calls; and the runtime parts they use. Drop
@@ -90,7 +92,26 @@ aggregateSection identities layouts tuples needs = (concat prototypes <> concat 
   chosen = map snd selected
   runtime = Set.fromList (concat [filter (not . ("agg_" `Text.isPrefixOf`)) (fst entry)
     | (name, entry) <- catalogue, Set.member name wanted])
-  catalogue = concat [helpers identities layouts kind | kind <- tuples]
+  catalogue = concat [helpers identities layouts kind | kind <- tuples] <> crossHelpers identities layouts crossPairs
+  crossPairs =
+    [ (left, right)
+    | kind <- tuples, isDynamicBox kind, Just (CoreSumLayout variants) <- [Map.lookup kind layouts]
+    , leftVariant <- variants, [(_, left)] <- [coreVariantFields leftVariant]
+    , rightVariant <- variants, [(_, right)] <- [coreVariantFields rightVariant]
+    , left /= right ]
+    <> [(left, right) | kind <- tuples, Just (CoreClosureLayout entries) <- [Map.lookup kind layouts]
+                      , (_, left, _, right) <- differentMethodCaptures entries]
+
+differentMethodCaptures :: [(key, CoreClosureInfo)] -> [(key, CoreType, key, CoreType)]
+differentMethodCaptures entries =
+  [ (a, left, b, right)
+  | members <- Map.elems sites
+  , (left, leftKeys) <- Map.toList members, (right, rightKeys) <- Map.toList members, left /= right
+  , a <- leftKeys, b <- rightKeys ]
+ where
+  sites = Map.fromListWith (Map.unionWith (<>))
+    [(closureSite info, Map.singleton capture [key])
+    | (key, info) <- entries, Just _ <- [closureMethod info], capture : _ <- [closureCaptures info]]
 
 helpers :: Map Text Int -> Layouts -> CoreType -> [(Text, ([Text], [Text]))]
 helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
@@ -127,14 +148,16 @@ closureHelpers kind entries =
       [ "static pudu_text " <> aggregateHelper "show" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString shown <> ", " <> number (cStringBytes shown) <> ");"
-         | (identity, info) <- entries, let shown = if isTask info then closureDisplayName info else "<" <> label info <> " " <> closureDisplayName info <> ">" ]
+         | (identity, info) <- entries, let shown = closureText info ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "name" kind, (["text_literal"],
       [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
-      <> [ "    case " <> number identity <> ": return pudu_text_literal(\"" <> kindName <> "\", " <> number (Text.length kindName) <> ");"
+      <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString kindName <> ", " <> number (cStringBytes kindName) <> ");"
          | (identity, info) <- entries
          , let kindName = case closureMethod info of
+                 _ | Just (_, tag) <- constructorIdentity info -> tag
+                 _ | Just special <- crossingKind info -> special
                  _ | isTask info -> "task"
                  _ | closureIsBuiltin info -> "builtin"
                  _ | isTextMethod info -> "text method"
@@ -142,10 +165,28 @@ closureHelpers kind entries =
                  _ -> "function" ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   , (aggregateNeed "comparable" kind, ([],
-      [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {", "  (void)box;", "  return 0;", "}" ]))
-  , (aggregateNeed "compare" kind, ([],
-      [ "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {", "  (void)a; (void)b;", "  return 0;", "}" ]))
-  , (aggregateNeed "equal" kind, (concat [snd (memberEqual receiver "" "") | (_, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info))],
+      [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number identity <> ": return 1;"
+         | (identity, info) <- entries, Just _ <- [fmap snd (constructorIdentity info) <|> crossingKind info] ]
+      <> [ "    default: return 0;", "  }", "}" ]))
+  , (aggregateNeed "compare" kind, ([aggregateNeed "rank" kind] <> [aggregateNeed "constructor_order" kind | not (null constructors)],
+      [ "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {"
+      , "  int left = " <> aggregateHelper "rank" kind <> "(a);"
+      , "  int right = " <> aggregateHelper "rank" kind <> "(b);" ]
+      <> (if null constructors then [] else
+         [ "  if (left == 8 && right == 8) {"
+         , "    left = " <> aggregateHelper "constructor_order" kind <> "(a);"
+         , "    right = " <> aggregateHelper "constructor_order" kind <> "(b);"
+         , "  }" ])
+      <> [ "  return (left > right) - (left < right);", "}" ]))
+  , (aggregateNeed "rank" kind, ([],
+      [ "static int " <> aggregateHelper "rank" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number identity <> ": return " <> number (closureRank info) <> ";" | (identity, info) <- entries ]
+      <> [ "    default: return 10;", "  }", "}" ]))
+  , (aggregateNeed "equal" kind, (concatMap snd crossEquality
+      <> concat [snd (memberEqual receiver "" "") | (_, receiver) <- methodReceivers],
       [ "static int " <> aggregateHelper "site" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return " <> number (siteNumber info) <> ";" | (identity, info) <- entries ]
@@ -154,11 +195,19 @@ closureHelpers kind entries =
          , "  if (" <> aggregateHelper "site" kind <> "(a) != " <> aggregateHelper "site" kind <> "(b)) return 0;" ]
       -- A method value also carries its receiver, and equal receivers are
       -- what make two of them equal.
+      <> map fst crossEquality
       <> [ "  if (a->fields[0].scalar == " <> number identity <> ") return "
              <> fst (memberEqual receiver (capture "a" 0 receiver) (capture "b" 0 receiver)) <> ";"
-         | (identity, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info)) ]
+         | (identity, receiver) <- methodReceivers ]
       <> [ "  return 1;", "}" ]))
   ] <>
+  [ (aggregateNeed "constructor_order" kind, ([],
+      [ "static int " <> aggregateHelper "constructor_order" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number identity <> ": return " <> number order <> ";"
+         | (identity, key) <- constructors, Just order <- [Map.lookup key constructorOrder] ]
+      <> [ "    default: return -1;", "  }", "}" ]))
+  | not (null constructors) ] <>
   [ (aggregateNeed ("closure" <> number identity) kind, (concat [snd (retained member "") | (_, member) <- captures info],
       [ "static pudu_box *" <> aggregateHelper ("closure" <> number identity) kind <> "("
           <> (if null (captures info) then "void" else Text.intercalate ", " [cType member <> " m" <> number position | (position, member) <- captures info]) <> ") {"
@@ -168,7 +217,27 @@ closureHelpers kind entries =
       <> [ "  return box;", "}" ]))
   | (identity, info) <- entries ]
  where
+  methodReceivers = [(identity, member) | (identity, info) <- entries
+                    , Just _ <- [closureMethod info], member : _ <- [closureCaptures info]]
+  crossEquality =
+    [ ("  if (a->fields[0].scalar == " <> number a <> " && b->fields[0].scalar == " <> number b <> ") return "
+        <> answer <> ";", needs)
+    | (a, left, b, right) <- differentMethodCaptures entries
+    , let (answer, needs) = differentLayoutCall Equality left right (capture "a" 0 left) (capture "b" 0 right) ]
+  crossingKind info
+    | "$foreign:" `Text.isPrefixOf` closureSite info = Just "foreign function"
+    | "$callback:" `Text.isPrefixOf` closureSite info = Just ("callback registration " <> closureDisplayName info)
+    | "$unregister:" `Text.isPrefixOf` closureSite info = Just "callback unregister method"
+    | otherwise = Nothing
+  closureText info
+    | Just (_, tag) <- constructorIdentity info = tag
+    | "$foreign:" `Text.isPrefixOf` closureSite info = "<foreign " <> closureDisplayName info <> ">"
+    | Just crossing <- crossingKind info = "<" <> crossing <> ">"
+    | isTask info = closureDisplayName info
+    | otherwise = "<" <> label info <> " " <> closureDisplayName info <> ">"
   captures info = zip [0 :: Int ..] (closureCaptures info)
+  constructors = [(identity, key) | (identity, info) <- entries, Just key <- [constructorIdentity info]]
+  constructorOrder = Map.fromAscList (zip (Map.keys (Map.fromList [(key, ()) | (_, key) <- constructors])) [0 :: Int ..])
   label info
     | closureIsBuiltin info = "builtin"
     | isTextMethod info = "method"
@@ -177,6 +246,28 @@ closureHelpers kind entries =
   capture box position member = box <> "->fields[" <> number (position + 1) <> "]." <> cellName member
   sites = foldr (\site found -> if site `elem` found then found else site : found) [] [closureSite info | (_, info) <- entries]
   siteNumber info = length (takeWhile (/= closureSite info) sites)
+
+closureRank :: CoreClosureInfo -> Int
+closureRank info
+  | Just _ <- constructorIdentity info = 8
+  | isTask info = 11
+  | "$foreign:" `Text.isPrefixOf` site = 25
+  | "$callback:" `Text.isPrefixOf` site || "$unregister:" `Text.isPrefixOf` site = 33
+  | "$trait-method:" `Text.isPrefixOf` site = 32
+  | closureIsBuiltin info = 12
+  | isTextMethod info = 29
+  | otherwise = case closureMethod info of
+      Just CoreArrayType{} -> 13
+      Just CoreTextType -> 14
+      Just CoreCharType -> 15
+      Just CoreMapType{} -> 19
+      Just CoreSetType{} -> 20
+      Just CoreBytesType -> 22
+      Just CoreStoreType{} -> 24
+      Just CoreRangeType -> 28
+      _ -> 10
+ where
+  site = closureSite info
 
 {-| Tuples and records: one shape, members in cells 0.. -}
 helpersOf :: CoreType -> [(Text, CoreType)] -> Maybe Text -> [(Text, ([Text], [Text]))]
@@ -235,8 +326,6 @@ helpersOf kind labelled recordName =
   field index member = on "box" index member
   on box index member = box <> "->fields[" <> number index <> "]." <> cellName member
 
-{-| Sums: cell 0 is the variant index, the payload follows. Each variant gets
-    its own make; drop, show and equal switch on the index. -}
 sumHelpers :: CoreType -> [CoreVariant] -> [(Text, ([Text], [Text]))]
 sumHelpers kind variants =
   [ (aggregateNeed "drop" kind, ([aggregateNeed "drop" member | member <- allMembers, isAggregate member],
@@ -257,19 +346,29 @@ sumHelpers kind variants =
       , "  switch (box->fields[0].scalar) {" ]
       <> concat [ showVariant tag variant | (tag, variant) <- tagged ]
       <> [ "    default: break;", "  }", "  (void)parts;", "  return pudu_text_literal(\"\", 0);", "}" ]))
-  , (aggregateNeed "equal" kind, (concat [snd (memberEqual member "" "") | member <- allMembers],
+  , (aggregateNeed "equal" kind, (concat [snd (memberEqual member "" "") | member <- allMembers] <> concatMap fst crossEqualities,
       [ "static int " <> aggregateHelper "equal" kind <> "(pudu_box *a, pudu_box *b) {"
-      , "  if (a->fields[0].scalar != b->fields[0].scalar) return 0;"
+      ] <> concatMap snd crossEqualities <>
+      [ "  if (a->fields[0].scalar != b->fields[0].scalar) return 0;"
       , "  switch (a->fields[0].scalar) {" ]
       <> concat [ [ "    case " <> number tag <> ": return " <> conjunction variant <> ";" ] | (tag, variant) <- tagged ]
       <> [ "    default: return 1;", "  }", "}" ]))
-  , (aggregateNeed "compare" kind, (concat [snd (memberCompare member "" "") | member <- allMembers],
-      [ "/* compareValues: the variants' names first, then the payload in order. */"
+  , (aggregateNeed "rank" kind, (rankNeeds,
+      [ "static int " <> aggregateHelper "rank" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number tag <> ": return " <> rankOfVariant variant <> ";" | (tag, variant) <- tagged ]
+      <> [ "    default: return 0;", "  }", "}" ]))
+  , (aggregateNeed "compare" kind, (concat [snd (memberCompare member "" "") | member <- allMembers]
+      <> concatMap fst crossOrders,
+      [ "/* Compare the active shapes before nominal identities and payloads. */"
       , "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {"
-      , "  static const int rank[] = {" <> Text.intercalate ", " [number (nameRank variant) | (_, variant) <- tagged] <> "};"
-      , "  int order;"
-      , "  if (a->fields[0].scalar != b->fields[0].scalar) return rank[a->fields[0].scalar] < rank[b->fields[0].scalar] ? -1 : 1;"
-      , "  switch (a->fields[0].scalar) {" ]
+      , "  static const int rank[] = {" <> Text.intercalate ", " (if null tagged then ["0"] else [number (nameRank variant) | (_, variant) <- tagged]) <> "};"
+      , "  int order;" ]
+      <> concatMap snd crossOrders
+      <> [ "  if (a->fields[0].scalar != b->fields[0].scalar) {" ]
+      <> [ "    return rank[a->fields[0].scalar] < rank[b->fields[0].scalar] ? -1 : 1;"
+         , "  }"
+         , "  switch (a->fields[0].scalar) {" ]
       <> concat [ ["    case " <> number tag <> ":"]
                   <> concat [ [ "      order = " <> fst (memberCompare member (payload "a" position member) (payload "b" position member)) <> ";"
                               , "      if (order != 0) return order;" ] | (position, member) <- members variant ]
@@ -284,13 +383,19 @@ sumHelpers kind variants =
              present -> Text.intercalate " && " [fst (memberComparable member (payload "box" position member)) | (position, member) <- present]) <> ";"
          | (tag, variant) <- tagged ]
       <> [ "    default: return 1;", "  }", "}" ]))
-  , (aggregateNeed "name" kind, (["text_literal"],
+  , (aggregateNeed "name" kind, ("text_literal" : concatMap (snd . variantName) variants,
       [ "static pudu_text " <> aggregateHelper "name" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
-      <> [ "    case " <> number tag <> ": return pudu_text_literal(" <> cString (coreVariantName variant) <> ", "
-             <> number (cStringBytes (coreVariantName variant)) <> ");" | (tag, variant) <- tagged ]
+      <> [ "    case " <> number tag <> ": return " <> fst (variantName variant) <> ";" | (tag, variant) <- tagged ]
       <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
   ] <>
+  [ (aggregateNeed "display" kind, (["text_literal"] <> concat [snd (memberDisplay member "") | member <- allMembers],
+      [ "static pudu_text " <> aggregateHelper "display" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number tag <> ": return " <> fst (memberDisplay member (payload "box" position member)) <> ";"
+         | (tag, variant) <- tagged, [(position, member)] <- [members variant] ]
+      <> [ "    default: return pudu_text_literal(\"\", 0);", "  }", "}" ]))
+  | dynamic ] <>
   [ (aggregateNeed ("make" <> number tag) kind, (concat [snd (retained member "") | (_, member) <- members variant],
       [ "static pudu_box *" <> aggregateHelper ("make" <> number tag) kind <> "("
           <> (if null (members variant) then "void" else Text.intercalate ", " [cType member <> " m" <> number position | (position, member) <- members variant]) <> ") {"
@@ -301,13 +406,33 @@ sumHelpers kind variants =
   | (tag, variant) <- tagged ]
  where
   tagged = zip [0 :: Int ..] variants
-  dynamic = case kind of
-    CoreSumType key [] -> "dynamic." `Text.isPrefixOf` key
-    _ -> False
-  nameRank variant = length [() | other <- variants, coreVariantName other < coreVariantName variant]
+  dynamic = isDynamicBox kind
+  crossOrders = crossCases Ordering memberCompare
+  crossEqualities = crossCases Equality memberEqual
+  crossCases comparison sameLayout =
+    [ (needs, ["  if (a->fields[0].scalar == " <> number aTag <> " && b->fields[0].scalar == " <> number bTag <> ") return " <> value <> ";"])
+    | dynamic, (aTag, aVariant) <- tagged, (bTag, bVariant) <- tagged, aTag /= bTag
+    , [(aPosition, aKind)] <- [members aVariant]
+    , [(bPosition, bKind)] <- [members bVariant]
+    , let left = payload "a" aPosition aKind
+          right = payload "b" bPosition bKind
+          (value, needs) = if aKind == bKind then sameLayout aKind left right
+            else differentLayoutCall comparison aKind bKind left right ]
+  nameRank variant = length [() | other <- variants, orderKey other < orderKey variant]
+  orderKey variant = (not dynamic && coreVariantRecord variant, coreVariantName variant)
+  rankOfVariant variant = case members variant of
+    [(position, member)] | dynamic -> fst (payloadRank member (payload "box" position member))
+    _ -> if coreVariantRecord variant then "31" else "8"
+  rankNeeds
+    | dynamic = concat [snd (payloadRank member "") | member <- allMembers]
+    | otherwise = []
   members variant = zip [0 :: Int ..] (map snd (coreVariantFields variant))
   allMembers = concatMap (map snd . coreVariantFields) variants
   payload box position member = box <> "->fields[" <> number (position + 1) <> "]." <> cellName member
+  variantName variant = case members variant of
+    [(position, member)] | dynamic -> memberRuntimeKind member (payload "box" position member)
+    _ -> let name = coreVariantName variant
+          in ("pudu_text_literal(" <> cString name <> ", " <> number (cStringBytes name) <> ")", [])
   conjunction variant = case members variant of
     [] -> "1"
     present -> Text.intercalate " && " [fst (memberEqual member (payload "a" position member) (payload "b" position member)) | (position, member) <- present]

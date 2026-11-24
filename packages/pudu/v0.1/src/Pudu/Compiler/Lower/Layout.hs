@@ -91,6 +91,7 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreForeignCall declared arguments -> concatMap callbackSlotTypes (coreForeignCallbacks declared) <> concatMap expression arguments
   CoreClosure _ captures -> concatMap expression captures
   CoreCapture _ operand -> expression operand
+  CoreClosureIs _ operand -> expression operand
   CoreCallValue callee arguments -> concatMap expression (callee : arguments)
   CoreArray members -> concatMap expression members
   CoreArrayMethod _ receiver arguments -> concatMap expression (receiver : arguments)
@@ -121,6 +122,8 @@ pattern shape = case shape of
   CoreRecordPattern members -> concatMap pattern members
   CoreVariantPattern _ members -> concatMap pattern members
   CoreAlternativePattern members -> concatMap pattern members
+  CoreProjectPattern inner copies ->
+    pattern inner <> concat [coreLocalType local : expression value | (local, value) <- copies]
   CoreArrayPattern front rest back -> concatMap pattern (front <> back) <> foldMap (foldMap (pure . coreLocalType)) rest
   CoreWildcardPattern -> []
 

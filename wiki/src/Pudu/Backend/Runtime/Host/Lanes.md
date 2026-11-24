@@ -15,6 +15,13 @@ Packed binary64 lanes held in byte sequences. A kernel that finds its operands o
 
 Each kernel keeps the interpreter's operation order, so sums and products round the same way; floating contraction is off for them.
 
+Elementwise zip selects its operation before entering the loop and tells
+the compiler the newly allocated output is exclusive. Loads through byte
+copies preserve alignment and effective type. Each lane uses the same
+operation as before, including the ordered NaN behavior of min and max.
+Vector instructions depend on the target and compiler, with the same loop
+serving scalar targets. Reductions retain their original operation order.
+
 ## Broad phase (#846)
 
 `pudu_host_lanes_overlap_pairs` answers as `Pudu.Runtime.Broadphase`: None for

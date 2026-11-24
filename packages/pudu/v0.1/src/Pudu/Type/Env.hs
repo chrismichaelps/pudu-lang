@@ -67,6 +67,7 @@ module Pudu.Type.Env
   , recordSelection
   , recordProvider
   , recordProviderSelection
+  , recordDynamicWidening
   , recordOwner
   , recordTraitMethodOwner
   , recordVariantOwner
@@ -297,6 +298,7 @@ data CheckerState = CheckerState
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, ProviderSelection)]
+  , stateDynamicWideningsRev :: ![(Span, NominalId, Type)]
   , stateOwnersRev :: ![(Span, OwnerSelection)]
   , statePatternTests :: !(Set Span)
   {-| Expressions whose value is the enclosing function's result: a body's
@@ -335,6 +337,7 @@ data CheckerProducts = CheckerProducts
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
   , producedProviders :: ![(Span, ProviderSelection)]
+  , producedDynamicWidenings :: ~[(Span, NominalId, Type)]
   , producedOwners :: ![(Span, OwnerSelection)]
   }
 
@@ -377,6 +380,7 @@ runChecker (Checker action) = case action initialState of
     , stateDeclaredMethodsRev = methods
     , stateSelectionsRev = selections
     , stateProvidersRev = providers
+    , stateDynamicWideningsRev = widenings
     , stateOwnersRev = owners
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
@@ -385,6 +389,8 @@ runChecker (Checker action) = case action initialState of
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
       , producedProviders = reverse (map (fmap (resolveProvider substitution)) providers)
+      , producedDynamicWidenings =
+          [(at, trait, resolveFinal substitution payload) | (at, trait, payload) <- reverse widenings]
       , producedOwners = reverse owners
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
@@ -443,6 +449,7 @@ initialState =
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
     , stateProvidersRev = []
+    , stateDynamicWideningsRev = []
     , stateOwnersRev = []
     , statePatternTests = Set.empty
     , stateResultSpans = Set.empty
@@ -590,6 +597,10 @@ recordProvider at owner = recordProviderSelection at (ProviderSelection owner []
 recordProviderSelection :: Span -> ProviderSelection -> Checker ()
 recordProviderSelection at selected = Checker $ \state ->
   ((), state{stateProvidersRev = (at, selected) : stateProvidersRev state})
+
+recordDynamicWidening :: Span -> NominalId -> Type -> Checker ()
+recordDynamicWidening at trait payload = Checker $ \state ->
+  ((), state{stateDynamicWideningsRev = (at, trait, payload) : stateDynamicWideningsRev state})
 
 {-| A checked implementation target retains its full alias-expanded parameter shape. -}
 recordImplementationOwner :: Span -> Type -> Checker ()

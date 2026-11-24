@@ -65,3 +65,31 @@ membership probe reads both locals. The checker types `in` as
 Resolved Grill Log: reuse `KeyedContains` instead of a new Core operator;
 the probe applies no orderability check, matching `Set.contains` and the
 interpreter's `setContains`.
+
+## Dynamic keys and values (#956)
+
+Resolved Grill Log: set literals and keyed methods widen their supplied
+values to their checked carriers before membership, ordering, or storage.
+Only the carrier changes. Operand order, rejected-key spans and collection
+ownership stay with the existing operations.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Construction reads the lowered item layouts. Updates and binary operations rebuild wider carriers from the retained entries. Lookups return an Option whose payload carrier matches the stored value.
+
+Resolved Grill Log. A set literal uses the array literal's carrier
+join for its items. A map builder joins the actual pair fields so
+key and value storage retain their separate layouts.
+
+## Held collection member selection
+
+Resolved Grill Log: Keyed calls consume a retained receiver, so a missing member stops before keys or values evaluate.
+
+## Held keyed method arguments
+
+Resolved Grill Log: a store validates and folds an integer key,
+whereas maps and sets accept arbitrary held keys and values. Merge
+and set algebra check the argument family after evaluation and then
+settle a shared collection layout.
+
+Resolved Grill Log: a store folds every key into one signed word before lookup, insertion and removal, an Int already beyond that word included, so its keys always read back within Int as evaluation keeps them.

@@ -47,3 +47,7 @@ answers its parameters' finals beside it. See [[Compiler Lower Loan]].
 awaiting function with that failure, joining every scope open around it. The
 failure is in hand before the joins run. Resolved Grill Log: one unwrap path
 keeps `?` and await failure spans, loaned finals and scope joins identical.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Read the physical success and failure payload types. Rebuild a failure in the enclosing result carrier before returning and joining scopes.

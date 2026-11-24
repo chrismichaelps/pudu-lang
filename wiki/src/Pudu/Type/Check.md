@@ -292,3 +292,9 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Widening proof publication (#956)
+
+Resolved Grill Log: the detailed module check returns proven dynamic
+widenings with its other checked facts. The diagnostics-only interface
+continues to answer the same types and diagnostics.

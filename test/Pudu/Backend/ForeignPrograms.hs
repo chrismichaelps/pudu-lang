@@ -23,6 +23,17 @@ foreignSuccessPrograms =
       , "  }"
       , "  0"
       , "}" ])
+  , ("stored foreign functions retain their crossing identity and can be passed", program
+      [ "foreign \"c\" { fn magnitude symbol \"abs\" (value: Int32) -> Int32 }"
+      , "fn apply(callable: unsafe(foreign) fn(Int32) -> Int32, value: Int32) -> Int32 {"
+      , "  unsafe(foreign) { callable(value) }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let callable = magnitude"
+      , "  print(show(callable))"
+      , "  print(display(callable == magnitude))"
+      , "  print(display(apply(callable, -3i32)))"
+      , "  0", "}" ])
   , ("text and lent bytes cross to the C library and text comes back", program
       [ "foreign \"c\" {"
       , "  fn strlen(text: Str) -> Int64"
@@ -87,7 +98,14 @@ foreignSuccessPrograms =
 
 foreignRefusalPrograms :: [(String, Text)]
 foreignRefusalPrograms =
-  [ ("text holding a nought stops before the call", program
+  [ ("a stored foreign function blames the indirect call site", program
+      [ "foreign \"c\" { fn missing symbol \"pudu_nonexistent_value_symbol\" () -> Int32 }"
+      , "fn main() -> Int {"
+      , "  let callable = missing"
+      , "  print(\"before\")"
+      , "  unsafe(foreign) { print(display(callable())) }"
+      , "  0", "}" ])
+  , ("text holding a nought stops before the call", program
       [ "foreign \"c\" {"
       , "  fn strlen(text: Str) -> Int64"
       , "}"
@@ -189,12 +207,14 @@ foreignModulePrograms =
         , "fn main() -> Int {"
         , "  unsafe(foreign) {"
         , "    print(display(Clib.labs(-9000000000i64)) + \" \" + display(C.strlen(\"pudu\")))"
+        , "    let length = C.strlen"
+        , "    print(display(length(\"pudu\")))"
         , "    let held = C.strdup(\"native\")"
         , "    print(display(Clib.strlen_of(held)))"
         , "    Clib.free(held)"
         , "  }"
         , "  0", "}" ]
-    , "9000000000 4\n6\n" ) ]
+    , "9000000000 4\n4\n6\n" ) ]
 
 handleProgram :: [Text] -> [Text] -> Text
 handleProgram bindings body = program $
@@ -255,6 +275,39 @@ foreignCallbackPrograms =
       , "    let _gone = token.unregister()"
       , "    print(display(each(3i64, token)))"
       , "  }"
+      , "  0"
+      , "}" ])
+  , ("callback tokens render directly and in aggregates and compare by registration", program $ callbackBindings <>
+      [ "fn identity(index: Int64) -> Int64 { index }"
+      , "fn main() -> Int {"
+      , "  let first = Visit(identity)"
+      , "  let second = Visit(identity)"
+      , "  let same = first"
+      , "  print(display(first))"
+      , "  print(show((first,)))"
+      , "  print(show((first == same, first != second)))"
+      , "  print(show((second, 0) < (first, 1)))"
+      , "  print(display(setOf([first, second]).size()))"
+      , "  0"
+      , "}" ])
+  , ("a stored callback constructor renders and registers with its declared identity", program $ callbackBindings <>
+      [ "fn identity(index: Int64) -> Int64 { index }"
+      , "fn main() -> Int {"
+      , "  let register = Visit"
+      , "  print(show(register))"
+      , "  print(display(register == Visit))"
+      , "  let token = register(identity)"
+      , "  print(show(token))"
+      , "  0", "}" ])
+  , ("a callback token can be returned from the entry", program $ callbackBindings <>
+      [ "fn identity(index: Int64) -> Int64 { index }"
+      , "fn main() -> Visit { Visit(identity) }" ])
+  , ("a callback token names its declaration in a unary refusal", program $ callbackBindings <>
+      [ "fn identity(index: Int64) -> Int64 { index }"
+      , "fn main() -> Int {"
+      , "  let token = Visit(identity)"
+      , "  let invalid = ~{ print(\"registered\")\n token }"
+      , "  print(show(invalid))"
       , "  0"
       , "}" ])
   , ("a callback's failure fails the foreign call at the callback", program $ callbackBindings <>
@@ -371,6 +424,16 @@ foreignCrossingPrograms =
       , "  print(show(items))"
       , "  0"
       , "}" ], "false\ntrue\ntrue\n[11, 2]\n")
+  , ("a stored foreign function writes a mutable run back through its caller", program
+      [ "foreign \"c\" {"
+      , "  fn mutate symbol \"pudu_ffi_mutate_run\" (data: &mut Array[Int32], count: Int64 elements of data) -> Bool"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let change = mutate"
+      , "  var items = [1i32, 2i32]"
+      , "  unsafe(foreign) { print(display(change(&mut items, 1i64))) }"
+      , "  print(show(items))"
+      , "  0", "}" ], "true\n[11, 2]\n")
   , ("returned runs are copied and released before publication", program
       [ "foreign \"c\" {"
       , "  type Storage"

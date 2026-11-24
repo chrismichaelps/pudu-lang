@@ -12,6 +12,9 @@ in [[Core Frame IR]]. [[Backend Frame Slots]] uses the same traversal
 to collect references and rewrite them. Preserve constructors, spans,
 metadata and reference order.
 
+Resolved Grill Log: a variant switch rewrites only its subject slot. Tags
+and labels are independent of physical slot allocation.
+
 ## Resolved Grill Log
 
 - **Q:** Use a catch-all for standalone value shapes? **A:** Cover every
@@ -30,3 +33,7 @@ Foreign loan settlement refers to no frame slots.
 ## Referenced by
 
 [[Backend Frame Slots]] · [[Core Frame IR]]
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: The closure-target test refers to its closure slot. Linked body identity is independent of slot allocation.

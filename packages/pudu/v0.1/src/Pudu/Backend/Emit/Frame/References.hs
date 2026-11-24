@@ -17,6 +17,7 @@ terminatorSlots :: Applicative f => (FrameSlot -> f FrameSlot) -> FrameTerminato
 terminatorSlots slot terminator = case terminator of
   FrameJump{} -> pure terminator
   FrameBranch at condition yes no -> (\value -> FrameBranch at value yes no) <$> slot condition
+  FrameSwitchVariant at subject cases fallback -> (\value -> FrameSwitchVariant at value cases fallback) <$> slot subject
   FrameCall at name arguments destination next ->
     (\args result -> FrameCall at name args result next) <$> traverse slot arguments <*> traverse slot destination
   FrameCallValue at callee arguments destination next ->
@@ -66,6 +67,7 @@ valueSlots slot value = (\shape -> value{frameValueShape = shape}) <$> case fram
   FrameZero -> pure FrameZero
   FrameClosure name captures -> FrameClosure name <$> traverse slot captures
   FrameCapture index source -> FrameCapture index <$> slot source
+  FrameClosureIs target source -> FrameClosureIs target <$> slot source
   FrameArray items -> FrameArray <$> traverse slot items
   FrameArrayMethod method receiver arguments -> FrameArrayMethod method <$> slot receiver <*> traverse slot arguments
   FrameIndex source index -> FrameIndex <$> slot source <*> slot index

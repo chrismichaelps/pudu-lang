@@ -78,3 +78,7 @@ Resolved Grill Log: identity comes from the declaration or native ABI, not a glo
 Freeze named sum data only when every field freezes. Persist kind 17 with canonical owner, label, field count and name/value pairs; restore with existing bounded counted decoding. The executable fingerprint invalidates predecessor products.
 
 Resolved Grill Log: represent named sums independently of ordinary records and positional sums. Preserve existing field order and public labels. Source publication follows in its own tested partition. See [[Named Sum Value Delivery]].
+
+## Exact Int layout
+
+Resolved Grill Log: The internal exact Int layout is not a source evaluator value. Persist its logical Int kind if it reaches the frozen boundary.

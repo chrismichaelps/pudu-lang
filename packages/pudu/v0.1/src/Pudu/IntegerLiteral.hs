@@ -88,6 +88,7 @@ data IntegerKind
   | PlatformSigned
   | PlatformUnsigned
   | BigIntKind
+  | ExactIntKind
   deriving stock (Eq, Ord, Show, Generic)
 
 {-| The pointer width this build targets.
@@ -130,6 +131,7 @@ integerKindName kind = case kind of
   PlatformSigned -> "Int"
   PlatformUnsigned -> "UInt"
   BigIntKind -> "BigInt"
+  ExactIntKind -> "Int"
 
 {-| How many bits a kind has, or nothing for the one that has no bound.
 
@@ -142,6 +144,7 @@ integerKindWidth kind = case kind of
   PlatformSigned -> Just targetPointerWidth
   PlatformUnsigned -> Just targetPointerWidth
   BigIntKind -> Nothing
+  ExactIntKind -> Just targetPointerWidth
 
 {-| Whether a kind admits negative values. -}
 integerKindSigned :: IntegerKind -> Bool
@@ -151,6 +154,7 @@ integerKindSigned kind = case kind of
   PlatformSigned -> True
   PlatformUnsigned -> False
   BigIntKind -> True
+  ExactIntKind -> True
 
 {-| Whether a value lies inside a kind's interval.
 
@@ -177,6 +181,7 @@ integerKindBounds kind = case kind of
   PlatformSigned -> Just (signedBounds targetPointerWidth)
   PlatformUnsigned -> Just (0, widthMask targetPointerWidth)
   BigIntKind -> Nothing
+  ExactIntKind -> Just (platformLow, platformHigh)
 
 signedBounds :: Int -> (Integer, Integer)
 signedBounds width = case width of
@@ -195,6 +200,7 @@ signedBounds width = case width of
 integerKindWrap :: IntegerKind -> Integer -> Integer
 integerKindWrap kind value = case kind of
   BigIntKind -> value
+  ExactIntKind -> wrapSigned targetPointerWidth value
   PlatformSigned -> wrapSigned targetPointerWidth value
   PlatformUnsigned -> wrapUnsigned targetPointerWidth value
   SignedKind width -> wrapSigned width value
@@ -306,6 +312,8 @@ widthMask width = case width of
     program the checker already agreed about. -}
 integerKindMeet :: IntegerKind -> IntegerKind -> IntegerKind
 integerKindMeet left right
+  | left == ExactIntKind = integerKindMeet PlatformSigned right
+  | right == ExactIntKind = integerKindMeet left PlatformSigned
   | left == right = left
   | otherwise = case (left, right) of
       {-| Arbitrary precision absorbs. A `BigInt` met with anything narrower

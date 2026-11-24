@@ -23,3 +23,25 @@ callback.
 [[Native Arrays]] · [[Backend Module Programs]] · [[Backend Text Leak Tests]]
 
 Resolved Grill Log (#828): Check same-binding reads, receiver snapshots across reassignment, and receiver-before-callback preparation.
+
+Resolved Grill Log: Use a compound scalar operand in the build loop and
+check a retained alias across compound updates. Use a zero divisor to
+exercise diagnostic parity when receiver taking is unavailable.
+Keep an owned element across a write to its source array, and use an
+index that reassigns the source to check the retained receiver snapshot.
+
+## Join and unary failures (#956)
+
+Exercise direct and bound joins over empty typed arrays, and fail after both
+operands finish for nonempty non-text arrays. A unit member receives the same
+diagnostic as any other invalid member. Dynamic members join when they all
+hold text and refuse when a member holds another implementation.
+An array unary refusal also preserves
+its operand output.
+
+### Resolved Grill Log
+
+compare the full streams and status to catch misplaced
+method-value blame and accidental evaluation loss.
+
+Resolved Grill Log. sortBy with an annotated tuple comparison asks the comparison at every merge step.

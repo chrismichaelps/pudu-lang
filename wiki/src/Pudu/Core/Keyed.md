@@ -29,3 +29,6 @@ Resolved Grill Log: project existing checked semantics; no inference, fallback, 
 ## Indexed stores (#840)
 
 KeyedPut inserts with the new key's spelling replacing an equal held key. KeyedMixHash and KeyedHash take the hashed value itself as the receiver and answer an Int. Resolved Grill Log: the two hashes ride the keyed family instead of adding a Core and frame shape each; the emitter validates the receiver's carrier.
+
+Resolved Grill Log: `KeyedLookupOrDefault` uses one lookup with a typed
+default. The only admitted defaults are an empty array or platform Int zero.

@@ -73,6 +73,9 @@ Supporting judgements:
   before typing, and a non-variant member through a type reports `E3034` during typing.
 - A module qualifier names a namespace and has no runtime value. Bare value use reports E2010; selected exported values and ordinary lexical shadows retain their value identity.
 - Imports never re-export implicitly.
+- A module can export a type alias. Qualified constructor lookup still requires
+  a constructor export from the named module. A missing export reports
+  `E3033`, including when the module exports only types.
 - Ambiguous unqualified references are errors with related spans for every candidate.
 - Trait method lookup considers inherent methods first, then in-scope traits; multiple applicable trait methods require qualification.
 - Cyclic module imports are allowed only for declaration signatures. Module-scope values are compile-time constants, so initialization cycles and module-load execution do not exist.

@@ -1,6 +1,8 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
+  ( CallableTemplate (..), CallableSource (..), callableTemplateLayout
+  , CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
+  , MutableSite (MutableParameterSite, MutableReceiverSite), mutableSite, bindMutable, observeMutableLayout
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
   , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupDelegate, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
@@ -48,13 +50,44 @@ data LowerContext = LowerContext
   {-| The module whose function is being lowered; names resolve in it. -}
   , contextModule :: !Text
   , contextSignatures :: !(Map Text (Maybe CoreSignature))
+  , contextRuntimeResults :: !(Map Text (Set CoreType))
+  , contextObservedResults :: !(Map Text (Set CoreType))
+  , contextTaskFailures :: !(Map CoreType (Set CoreType))
+  , contextObservedTaskFailures :: !(Map CoreType (Set CoreType))
+  , contextMutableLayouts :: !(Map MutableSite (Set CoreType))
+  , contextObservedMutableLayouts :: !(Map MutableSite (Set CoreType))
   , contextQueue :: ![Text]
   , contextVisited :: !(Set Text)
   , contextRefusals :: ![Diagnostic]
   , contextFunctions :: ![CoreFunction]
   {-| Lifted lambdas and function-value forwarders made so far. -}
   , contextClosures :: !(Map Text CoreClosureInfo)
+  , contextKnownCallables :: !(Map Text CallableTemplate)
+  , contextObservedCallables :: !(Map Text CallableTemplate)
+  , contextActiveCallables :: !(Set Text)
+  , contextNeedsCallableReplay :: !Bool
   }
+
+data CallableTemplate = CallableTemplate
+  { callableTemplateType :: !CoreType
+  , callableTemplateSource :: !CallableSource
+  }
+
+data CallableSource
+  = NamedCallable !(Text, Located Function) !CoreSignature !(Maybe Instance)
+  | LiftedCallable !LowerTypes !Text !Text !Span !Function !CoreType ![CoreType] ![CoreLocal]
+  | MethodCallable !LowerTypes !Text !Span !(Located Expression) !Text !(Maybe CoreType) !CoreType !Type
+  | IntrinsicCallable !Span !Text !CoreType
+  | ConstructorCallable !Text !Text !CoreType
+
+callableTemplateLayout :: CallableTemplate -> (CoreType, [CoreType])
+callableTemplateLayout template =
+  (callableTemplateType template, case callableTemplateSource template of
+    NamedCallable{} -> []
+    LiftedCallable _ _ _ _ _ _ _ captures -> map coreLocalType captures
+    MethodCallable _ _ _ _ _ bound _ _ -> foldMap pure bound
+    IntrinsicCallable{} -> []
+    ConstructorCallable{} -> [])
 
 {-| An implementation's head: its own parameters and their bounds, the type
     it is for, and the trait's arguments, all in those parameters. A
@@ -130,9 +163,12 @@ data LowerState = LowerState
   { lowerContext :: !LowerContext
   , lowerNextLocal :: !Int
   , lowerScopes :: ![[(Text, CoreLocal)]]
+  , lowerMutableSites :: !(Map Int MutableSite)
   , lowerNextLoop :: !Int
   , lowerLoops :: ![LoopFrame]
   , lowerFunctionResult :: !(Maybe CoreType)
+  , lowerFlexibleResult :: !Bool
+  , lowerObservedReturns :: !(Set CoreType)
   {-| The entry's checked result, which only `?` reads: the entry's own
       result handling still starts from nothing, so a body ending in print's
       Result keeps refusing. -}
@@ -150,12 +186,35 @@ data LowerState = LowerState
   , lowerTypeArguments :: ![CoreType]
   }
 
-{-| A lexical loop destination and the scalar type observed at its breaks.
-    Frames survive operand traversal so nested transfers update their target. -}
+data MutableSite
+  = MutableBindingSite !Text !Span !Text
+  | MutableParameterSite !Text !Int
+  | MutableReceiverSite !Text
+  deriving stock (Eq, Ord)
+
+mutableSite :: LowerState -> Span -> Text -> MutableSite
+mutableSite state at name = MutableBindingSite (lowerCurrentKey state) at name
+
+bindMutable :: LowerState -> MutableSite -> Text -> CoreType -> (LowerState, CoreLocal)
+bindMutable state site name kind =
+  let (bound, local) = bindLocal state name kind
+   in (bound{lowerMutableSites = Map.insert (coreLocalId local) site (lowerMutableSites bound)}, local)
+
+observeMutableLayout :: LowerState -> CoreLocal -> CoreType -> LowerState
+observeMutableLayout state local required = case Map.lookup (coreLocalId local) (lowerMutableSites state) of
+  Just site | required /= coreLocalType local ->
+    let context = lowerContext state
+     in state{lowerContext = context{contextObservedMutableLayouts =
+          Map.insertWith Set.union site (Set.singleton required) (contextObservedMutableLayouts context)}}
+  _ -> state
+
+{-| The checked loop result guides widening. Only an observed break supplies
+    a result, so a divergent operand cannot make the loop return. -}
 data LoopFrame = LoopFrame
   { loopIdentity :: !CoreLoopId
   , loopLabel :: !(Maybe Text)
-  , loopBreakType :: !(Maybe CoreType)
+  , loopExpectedBreakType :: !(Maybe CoreType)
+  , loopBreakTypes :: !(Set CoreType)
   }
 
 {-| @Compiler.Lower.Signature — a validated non-entry function: its parameter
@@ -183,6 +242,16 @@ emptyContext root entryName modules table instances methods traitMethods heads =
     , contextHeads = heads
     , contextModule = root
     , contextSignatures = Map.empty
+    , contextRuntimeResults = Map.empty
+    , contextObservedResults = Map.empty
+    , contextTaskFailures = Map.empty
+    , contextObservedTaskFailures = Map.empty
+    , contextMutableLayouts = Map.empty
+    , contextObservedMutableLayouts = Map.empty
+    , contextKnownCallables = Map.empty
+    , contextObservedCallables = Map.empty
+    , contextActiveCallables = Set.empty
+    , contextNeedsCallableReplay = False
     , contextQueue = []
     , contextVisited = Set.empty
     , contextRefusals = []
@@ -198,6 +267,7 @@ startFunction state parameters resultType =
     { lowerNextLoop = 0
     , lowerLoops = []
     , lowerNextLocal = length parameters
+    , lowerMutableSites = Map.empty
     , lowerScopes =
         [ [ (coreLocalName local, local)
           | parameter <- parameters
@@ -205,6 +275,8 @@ startFunction state parameters resultType =
           ]
         ]
     , lowerFunctionResult = resultType
+    , lowerFlexibleResult = False
+    , lowerObservedReturns = Set.empty
     , lowerDeclaredResult = Nothing
     , lowerLoaned = []
     , lowerOpenScopes = []

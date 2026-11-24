@@ -53,3 +53,40 @@ A record or record variant whose declared field is `dynamic` widens the
 written value of an implementing type to the declared type before building the
 Core record. Resolved Grill Log: the declaration's field type, not the
 initializer's, chooses the widening.
+
+## Dynamic fields in record updates (#956)
+
+Resolved Grill Log: project each written replacement through the checked
+layout of the retained base. Record updates reuse the same field widening
+as construction and still evaluate the base before the written fields.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: Build records using their actual field layouts. An update preserves the base layout of untouched fields and may widen written fields. Field reads select the held carrier.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Record-style variants reuse the sum payload construction after evaluating fields in source order.
+
+Resolved Grill Log. Use a represented concrete field layout after
+trying the checked projection. A record update retains untouched
+fields and settles each written replacement independently.
+
+## Held record update base
+
+Resolved Grill Log. Evaluate the base and all written replacements
+before testing the held base. A held record keeps its owner and
+fields. A written replacement for a missing field runs for its
+effects. A non-record base reports the evaluator's E7001 at the
+update after the field effects, unless an operand already transferred.
+
+## Held member reads
+
+Resolved Grill Log. A member read selects the held layout and reads
+its field, including fields of a named sum variant. A held field
+takes priority over a declared method. Preserve the actual result
+layout and the receiver's missing-member diagnostic.
+
+Resolved Grill Log. When the held receiver has a builtin member instead
+of a field, use [[Compiler Lower Method Value]] to form the closure from
+the held receiver's signature and layout.

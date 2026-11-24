@@ -33,6 +33,23 @@ Host allocation failures use [[Host Failure Vocabulary]], stderr and status 1;
 they do not fabricate E7002. Source depth failures keep their original call site.
 This scalar allocator cannot claim owned-value drop or concurrency coverage.
 
+## Reusing heap frame storage
+
+Retain one returned heap frame of at most 64 cells per active execution
+thread. Cache storage only after releasing owned slots. Reuse it only when
+the original capacity holds the requested frame, and zero the header and
+requested cells before copying parameters. Discard storage when the last
+frame leaves or unwinds, including a stacked root. The cache never contains
+an active frame or carries references between calls.
+
+## Fixed startup storage
+
+Resolved Grill Log: a proven non-suspending entry can use a small zeroed
+cell array in the entry runner. Check the emitted descriptor against that
+array before publishing the frame. Install the same cleanup and blame
+hooks, count entry at depth one, and release owned slots before process
+cleanup. The dispatcher owns entries that need heap frames.
+
 ## Resolved Grill Log
 
 - **Q:** Use automatic storage proportional to source size/depth? **A:** No; each payload is heap-owned and callbacks have constant arity.
@@ -41,6 +58,10 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 - **Q:** Match arbitrary OS kills? **A:** No; catchable/reported host exhaustion has the shared process contract.
 - **Q:** Keep stack frames in the active chain? **A:** Yes: unwinding must release their owned values and blame must see the innermost frame. _Rejected:_ unlinked fast frames with different failure behavior.
 - **Q:** Why a separate slot release when `pudu_free_frame` already checks `stacked`? **A:** Once leaving is inlined into the C function that owns the stack frame, an optimizing compiler sees a `free` of a local object on a path it cannot prove dead and warns (GCC's free-nonheap-object), which strict builds reject. _Rejected:_ relying on the flag check alone.
+- **Q:** Can returning storage skip normal cleanup or change recursion depth?
+  **A:** Release owned slots before caching, leave live frames in the same
+  chain, and clear cached storage at the execution boundary. A cache miss
+  follows the ordinary allocation and failure path.
 
 ## Dependencies and consumers
 
@@ -108,6 +129,10 @@ and `pudu_box_retain`. `pudu_owned` pairs a slot with its kind, and
 `pudu_function` carries `owned_count`, `owned` and `result_kind`. The engine
 retains entering arguments, releases owned slots when a frame ends, and drops
 a replaced destination or a discarded result through `pudu_drop_cell`.
+
+Resolved Grill Log: the fallible box allocator lets the JSON reader clean
+up partial values. The reporting wrapper preserves all other allocation
+callers' failure behavior.
 
 ## Named callable dispatch (#568)
 

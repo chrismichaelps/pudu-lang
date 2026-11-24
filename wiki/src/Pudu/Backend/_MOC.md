@@ -87,6 +87,7 @@ aliases: [Backend Module Map]
 - [[Native Bytes Runtime]] · [[Backend Emit Bytes]] · [[Backend Bytes Programs]] — byte sequences (#565).
 - [[Native Char Runtime]] · [[Backend Char Programs]] — native Char values and charAt.
 - [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — native tuples.
+- [[Backend Cross Comparison]] — equality and ordering across native payload layouts.
 - [[Compiler Lower Record]] · [[Backend Record Programs]] — native records.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.

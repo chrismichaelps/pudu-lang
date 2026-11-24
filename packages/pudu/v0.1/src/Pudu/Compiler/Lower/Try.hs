@@ -1,10 +1,15 @@
 {-| @Pudu.Compiler.Lower.Try — `value?` as a match on the success variant. -}
 module Pudu.Compiler.Lower.Try (lowerTry, unwrapOrLeave) where
 
+import qualified Data.Set as Set
+import Data.List (find)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, runtimeCarriers)
 import Pudu.Compiler.Lower.Loan (loanedValue)
 import Pudu.Compiler.Lower.Scope (leaving)
-import Pudu.Compiler.Lower.State (LowerState (..), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.Sum (constructVariant)
+import Pudu.Compiler.Lower.Types (sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
@@ -27,37 +32,65 @@ unwrapOrLeave :: LowerState -> Span -> CoreExpression -> CoreType -> (LowerState
 unwrapOrLeave after at core kind
   | kind == CoreNeverType = (after, Just (core, CoreNeverType))
   | expressionIsPrintValued core = halt at "? on a Result[(), Str] value" after
-  | otherwise = case (kind, returning) of
-        (CoreSumType "Result" [success, failure], Just result@(CoreSumType "Result" [_, returned]))
-          | failure == returned -> unwrap after core success "Ok" (Just ("Err", failure)) result
-        (CoreSumType "Option" [success], Just result@(CoreSumType "Option" [_])) ->
-          unwrap after core success "Some" Nothing result
-        _ -> halt at ("? on a " <> coreTypeName kind <> " in a function returning " <> maybe "an unknown type" coreTypeName returning) after
+  | Just selected <- mapRuntimeChoice after at CoreNeverType core
+      (\current held -> fmap (fmap fst) (unwrapOrLeave current at held (coreExpressionType held))) = selected
+  | CoreSumType owner _ <- kind
+  , Just result <- returning
+  , let candidates = [candidate | candidate@(CoreSumType family _) <- Set.toAscList (runtimeCarriers result), family == owner]
+  , not (null candidates)
+  , Just variants <- sumVariants types kind
+  , Just (good, success, bad, failure) <- continuation owner variants =
+      unwrap after core good success bad failure result candidates
+  | otherwise = halt at ("? on a " <> coreTypeName kind <> " in a function returning " <> maybe "an unknown type" coreTypeName returning) after
  where
   returning = maybe (lowerDeclaredResult after) Just (lowerFunctionResult after)
-  unwrap current held success good bad result =
+  types = contextTypes (lowerContext after)
+  continuation owner variants
+    | owner == "Result"
+    , Just [(_, success)] <- fields "Ok"
+    , Just [(_, failure)] <- fields "Err" = Just ("Ok", success, "Err", Just failure)
+    | owner == "Option"
+    , Just [(_, success)] <- fields "Some"
+    , Just [] <- fields "None" = Just ("Some", success, "None", Nothing)
+    | otherwise = Nothing
+   where
+    fields label = coreVariantFields <$> find ((== label) . coreVariantName) variants
+  unwrap current held good success bad failure expected candidates =
     let opened = current{lowerScopes = [] : lowerScopes current}
         (withValue, value) = bindLocal opened "" success
-        (withFailure, failed) = case bad of
-          Just (_, failure) -> fmap Just (bindLocal withValue "" failure)
+        (withFailure, failed) = case failure of
+          Just failureKind -> fmap Just (bindLocal withValue "" failureKind)
           Nothing -> (withValue, Nothing)
         closed = withFailure{lowerScopes = drop 1 (lowerScopes withFailure)}
         reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
-        rebuilt = case (bad, failed) of
-          (Just (name, _), Just local) -> CoreConstruct name [("0", reading local)]
-          _ -> CoreConstruct "None" []
-        (left, returned) = loanedValue closed at (CoreExpression at result rebuilt)
-        -- The failure is in hand before the scopes it leaves are joined.
-        (withKept, kept) = bindLocal left "" result
-        (joined, joins) = leaving withKept at
-        leave = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
-          (if null joins then [CoreStatement at (CoreReturn (Just returned))]
-           else [CoreStatement at (CoreDeclare kept returned)] <> joins
-             <> [CoreStatement at (CoreReturn (Just (CoreExpression at result (CoreReadLocal kept))))]) Nothing))
-        failing = case (bad, failed) of
-          (Just (name, _), Just local) -> CoreVariantPattern name [CoreBindPattern local]
-          _ -> CoreVariantPattern "None" []
-        arms =
-          [ CoreArm at (CoreVariantPattern good [CoreBindPattern value]) Nothing (reading value)
-          , CoreArm at failing Nothing leave ]
-     in (if null joins then left else joined, Just (CoreExpression at success (CoreMatch held arms), success))
+        payload = [("0", reading local) | Just local <- [failed]]
+     in case failureValue closed expected candidates bad payload of
+          (ready, Just rebuilt) ->
+            let recorded
+                  | lowerFlexibleResult ready = ready
+                      {lowerObservedReturns = lowerObservedReturns ready <> runtimeCarriers (coreExpressionType rebuilt)}
+                  | otherwise = ready
+                (left, returned) = loanedValue recorded at rebuilt
+                -- The failure is in hand before the scopes it leaves are joined.
+                (withKept, kept) = bindLocal left "" (coreExpressionType returned)
+                (joined, joins) = leaving withKept at
+                leave = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
+                  (if null joins then [CoreStatement at (CoreReturn (Just returned))]
+                   else [CoreStatement at (CoreDeclare kept returned)] <> joins
+                     <> [CoreStatement at (CoreReturn (Just (reading kept)))]) Nothing))
+                arms =
+                  [ CoreArm at (CoreVariantPattern good [CoreBindPattern value]) Nothing (reading value)
+                  , CoreArm at (CoreVariantPattern bad (map CoreBindPattern (foldMap pure failed))) Nothing leave ]
+             in (if null joins then left else joined, Just (CoreExpression at success (CoreMatch held arms), success))
+          (ready, Nothing) -> refused ready
+  failureValue current expected candidates bad payload = choose candidates Nothing
+   where
+    choose [] (Just fallback) | lowerFlexibleResult current = fmap Just fallback
+    choose [] _ = halt at "a propagated failure with an incompatible return layout" current
+    choose (candidate : rest) fallback = case constructVariant current at candidate bad payload of
+      (ready, Just (rebuilt, _)) ->
+        let (projected, value) = projectRuntimeValue types ready expected rebuilt
+         in if coreExpressionType value == expected
+              then (projected, Just value)
+              else choose rest (Just (ready, rebuilt))
+      (_, Nothing) -> choose rest fallback

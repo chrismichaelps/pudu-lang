@@ -32,6 +32,7 @@ lowerFrames source = do
               targets terminator = case terminator of
                 FrameJump _ target -> [target]
                 FrameBranch _ _ yes no -> [yes, no]
+                FrameSwitchVariant _ _ cases fallback -> fallback : map snd cases
                 FrameCall _ _ _ _ resume -> [resume]
                 FrameCallValue _ _ _ _ resume -> [resume]
                 FrameReturn _ _ -> []

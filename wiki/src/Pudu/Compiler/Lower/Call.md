@@ -56,3 +56,35 @@ how a value of an implementing type reaches a `dynamic` parameter, defaults
 included. Resolved Grill Log: argument order and effects stay left to right;
 widening happens after every operand ran and only where the parameter expects
 the dynamic type.
+
+## Rendering differing runtime result carriers (#956)
+
+Resolved Grill Log: display, show and standard output consume the held
+runtime result. Output uses raw text for Str and the value renderer for
+other shapes, as the interpreter does, then writes through the existing
+output Result path.
+
+## Output from retained runtime alternatives (#956)
+
+Resolved Grill Log: dispatch the runtime alternatives before output
+chooses how to render the held value. A Str is written verbatim and
+other values use their ordinary shown form.
+
+## Copies for runtime argument carriers (#956)
+
+Resolved Grill Log: after ordinary checked widening, a nonloaned direct
+call with a runtime alternative uses a copy with the exact parameter
+carrier. Memoize the copy by original specialization and argument layout.
+The copy's native result is settled independently.
+
+Resolved Grill Log: direct calls share native signature registration
+with callbacks that name a function. Only the direct call inserts
+omitted arguments into its call instruction.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: Direct output and output callable bodies use one conversion to stream text. The held runtime alternative determines whether text is written raw or rendered.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: Project checked dynamic arguments before specializing or invoking a named callable.

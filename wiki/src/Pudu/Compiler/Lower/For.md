@@ -80,3 +80,54 @@ is missing, as `evaluateFor` does once nothing else applies.
 ## Referenced by
 
 [[Compiler Lower Body]]
+
+## Array runtime elements (#956)
+
+Resolved Grill Log: a checked array uses the lowered receiver's element
+carrier for the item local and its binder on every turn.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Iteration reads keys and entries with the lowered collection carrier. The binder uses the corresponding item layout.
+
+## Exact stored range iteration
+
+Keep the direct Int loop for written Int bounds. For a stored or
+wider range, walk the exact cursor without materializing the interval.
+Check boundedness before the body. Read the ordinary Int payload
+when every visited member fits.
+
+Resolved Grill Log: the iteration step uses exact arithmetic even
+when the exclusive upper endpoint is beyond Int. An early break
+consumes only the prefix reached by the loop.
+
+## Exact Int layout
+
+Resolved Grill Log: The exact cursor advances at mathematical precision. An out-of-range binder value exposes Int identity.
+
+## Held iterable and binder layouts
+
+Select the loop from the retained iterable value. Use the evaluator's order
+for built-in sources, declared sequence methods, and sum payloads. A value
+outside these sources reports E7001 at the loop after the iterable ran.
+Tuples and sum payloads keep their individual layouts in an array of the
+actual item carriers. Empty payloads evaluate the source and yield unit.
+
+Resolved Grill Log. The lowered value already carries the representation
+that the loop must read. Dispatch before building a cursor. A binder proved
+impossible by [[Compiler Lower Match]] skips its body and leaves the cursor
+advance intact. [[Backend Rendering Callable Programs]]
+
+## Held sequence state and results
+
+Settle the cursor from the initial state and every reachable next-state
+layout in the advance results. Select the current state before calling
+the advance body. Decode the returned variant and its pair independently
+of the signature's original layout. Publish the next state before
+testing the binder, including when the binder will skip the item.
+
+Resolved Grill Log. Carrier discovery grows the set of reachable state
+layouts and restarts lowering when a new one appears. A malformed step
+fails at the loop after that call's effects, using its held variant or
+value kind. A transfer from either method passes through the loop.
+[[Backend For Programs]]

@@ -205,3 +205,9 @@ See [[Bound Provider Delivery]].
 Pass moduleOwners separately into executable projection before folding and caching. Authored tooling syntax remains unchanged.
 
 Resolved Grill Log: separate semantic roles even at identical generated spans. No runtime span lookup, provider overwrite or shortened owner. See [[Canonical Runtime Owner Delivery]].
+
+## Native widening evidence (#956)
+
+Resolved Grill Log: the full compilation product carries the module's
+successful dynamic widenings. Frontend-only and unchecked results carry
+an empty collection. The source of evidence is checking.

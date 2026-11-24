@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan, shar
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
 import Pudu.Eval.Frozen (freeze, thaw)
-import Pudu.Eval.Value (Value (FloatValue, ArrayValue, StrValue, RangeValue))
+import Pudu.Eval.Value (Value (FloatValue, ArrayValue, StrValue))
 import qualified Data.Sequence as Seq
 import Pudu.Frontend.Syntax (Module (..), ModuleName (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind))
@@ -103,9 +103,9 @@ testConstantFacts = do
                   (loweredAtUse supplied)
               , counterexample "the corpus matches folding's product"
                   (Map.member "HELD" (compileFolded checked) === represented)
-              , if initializer `elem` ["[1, 2]", "1..3"] then case freeze
-                  (if initializer == "[1, 2]" then ArrayValue (Seq.singleton (StrValue "wrong element"))
-                   else RangeValue (Just (2 ^ (64 :: Int))) False Nothing) of
+              -- Ranges carry exact endpoints, so only an element layout can contradict the checked type.
+              , if initializer == "[1, 2]" then case freeze
+                  (ArrayValue (Seq.singleton (StrValue "wrong element"))) of
                   Just mismatched -> refusedAtUse (lowerModuleFolded "main" facts (Map.singleton "HELD" mismatched) parsed)
                   Nothing -> counterexample "the malformed typed product is still portable data" (False === True)
                 else True === True

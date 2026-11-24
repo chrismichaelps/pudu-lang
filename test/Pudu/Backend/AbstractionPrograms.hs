@@ -253,6 +253,161 @@ abstractionSuccessPrograms =
       , "  0"
       , "}" ]
     , "none 0 0\n" )
+  , ("dynamic unary results keep their implementation and admit concrete comparisons", program
+      (operatorTypes <>
+        [ "fn operand() -> dynamic Operated { print(\"operand\")\n platform(7) }"
+        , "fn main() -> Int {"
+        , "  let value = operand()"
+        , "  let negative = -value"
+        , "  let inverted = ~value"
+        , "  print(display(negative.number()) + \" \" + display(inverted.number()))"
+        , "  let expected: Int = -7"
+        , "  print(show((negative == expected, inverted != expected, value == \"7\")))"
+        , "  0", "}" ])
+    , "operand\n-7 -8\n(true, true, false)\n")
+  , ("dynamic binary operations use the held numeric and text carriers", program
+      (operatorTypes <>
+        [ "fn left() -> dynamic Operated { print(\"left\")\n platform(7) }"
+        , "fn right() -> dynamic Operated { print(\"right\")\n 7i8 }"
+        , "fn total() -> dynamic Operated { left() + right() }"
+        , "fn main() -> Int {"
+        , "  let x: dynamic Operated = 125i8"
+        , "  let y: dynamic Operated = platform(10)"
+        , "  let label: dynamic Operated = \"pu\""
+        , "  let suffix: dynamic Operated = \"du\""
+        , "  print(show(total()))"
+        , "  print(show((x &+ y, x +| y, x -| y, x % y)))"
+        , "  print(show((left() == right(), x > y, y < x, x >> 1)))"
+        , "  print(display(label + suffix))"
+        , "  0", "}" ])
+    , "left\nright\n14\n(-121, 127, 115, 5)\nleft\nright\n(true, true, true, 62)\npudu\n")
+  , ("dynamic display and show preserve raw and quoted payload text", program
+      [ "trait Rendered { fn ignored(self: &Self) -> Int }"
+      , "impl Rendered for Str { fn ignored(self: &Self) -> Int { 0 } }"
+      , "impl Rendered for Char { fn ignored(self: &Self) -> Int { 0 } }"
+      , "fn main() -> Int {"
+      , "  let word: dynamic Rendered = \"é\""
+      , "  let letter: dynamic Rendered = 'λ'"
+      , "  print(display(word) + display(letter))"
+      , "  print(show(word) + show(letter))"
+      , "  0", "}" ]
+    , "éλ\n\"é\"'λ'\n")
+  , ("dynamic aggregate ordering and set membership compare the held numbers", program
+      [ "trait Ranked { fn rank(self: &Self) -> Int }"
+      , "impl Ranked for Int { fn rank(self: &Self) -> Int { 0 } }"
+      , "impl Ranked for Int8 { fn rank(self: &Self) -> Int { 1 } }"
+      , "impl Ranked for Float64 { fn rank(self: &Self) -> Int { 2 } }"
+      , "impl Ranked for BigInt { fn rank(self: &Self) -> Int { 3 } }"
+      , "fn ordinary() -> Int { 6 }"
+      , "fn enormous() -> BigInt { 18446744073709551616 }"
+      , "fn main() -> Int {"
+      , "  let first: dynamic Ranked = ordinary()"
+      , "  let second: dynamic Ranked = 1i8"
+      , "  let fraction: dynamic Ranked = 1.5f64"
+      , "  let duplicate: dynamic Ranked = 6i8"
+      , "  let huge: dynamic Ranked = enormous()"
+      , "  print(display((first, 0) > (second, 0)))"
+      , "  print(display((fraction, 0) > (second, 0)))"
+      , "  print(display((huge, 0) > (first, 0)))"
+      , "  let values = setOf([first, second, fraction, duplicate])"
+      , "  print(show(values))"
+      , "  print(display(duplicate in values))"
+      , "  0", "}" ]
+    , "true\ntrue\ntrue\n#{1, 1.5, 6}\ntrue\n")
+  , ("dynamic and concrete sums order by the held shape before their names", program
+      [ "trait Ranked { fn rank(self: &Self) -> Int }"
+      , "type Choice = Alpha{ count: Int } | Zulu"
+      , "type Item = { count: Int }"
+      , "impl Ranked for Choice { fn rank(self: &Self) -> Int { 0 } }"
+      , "impl Ranked for Item { fn rank(self: &Self) -> Int { 1 } }"
+      , "impl Ranked for Int { fn rank(self: &Self) -> Int { 2 } }"
+      , "impl Ranked for Decimal { fn rank(self: &Self) -> Int { 3 } }"
+      , "fn ordinary() -> Int { 1 }"
+      , "fn main() -> Int {"
+      , "  let positional: dynamic Ranked = Zulu"
+      , "  let named: dynamic Ranked = Alpha{count: 4}"
+      , "  let record: dynamic Ranked = Item{count: 3}"
+      , "  let integer: dynamic Ranked = ordinary()"
+      , "  let decimal: dynamic Ranked = 2.5d"
+      , "  print(show(((Zulu, 0) < (Alpha{count: 4}, 0), (named, 0) > (positional, 0))))"
+      , "  print(show(((positional, 0) < (record, 0), (named, 0) < (record, 0))))"
+      , "  print(show(((integer, 0) < (decimal, 0), (decimal, 0) > (integer, 0))))"
+      , "  print(show(setOf([named, decimal, record, positional, integer]).toArray()))"
+      , "  0", "}" ]
+    , "(true, true)\n(true, false)\n(true, true)\n[1, Zulu, Item{count: 3}, 2.5, Alpha{count: 4}]\n")
+  , ("dynamic fields and collection slots accept concrete replacements", program
+      [ "trait Named { fn label(self: &Self) -> Str }"
+      , "type Word = { text: Str }"
+      , "type Number = { value: Int }"
+      , "impl Named for Word { fn label(self: &Self) -> Str { self.text } }"
+      , "impl Named for Number { fn label(self: &Self) -> Str { display(self.value) } }"
+      , "type Shelf = { mut first: dynamic Named, mut rest: Array[dynamic Named] }"
+      , "fn index() -> Int { print(\"index\")\n 0 }"
+      , "fn replacement() -> Word { print(\"replacement\")\n Word{text: \"new\"} }"
+      , "fn main() -> Int {"
+      , "  var shelf = Shelf{first: Word{text: \"old\"}, rest: [Number{value: 1}]}"
+      , "  let saved = shelf"
+      , "  shelf.first = Number{value: 2}"
+      , "  shelf.rest[index()] = replacement()"
+      , "  let revised = Shelf{..shelf, first: Word{text: \"revised\"}}"
+      , "  let append = revised.rest.push"
+      , "  let items = append(Number{value: 3}).insert(0, Word{text: \"start\"})"
+      , "  print(saved.first.label() + \" \" + shelf.first.label() + \" \" + revised.first.label())"
+      , "  print(show(items))"
+      , "  print(show((items.contains(Number{value: 3}), items.indexOf(Word{text: \"new\"}))))"
+      , "  let keys: Set[dynamic Named] = #{Word{text: \"key\"}}"
+      , "  let extended = keys.insert(Number{value: 3})"
+      , "  print(show((extended.contains(Number{value: 3}), extended.remove(Word{text: \"key\"}).size())))"
+      , "  let empty: Map[dynamic Named, dynamic Named] = mapOf([])"
+      , "  let map = empty.insert(Word{text: \"key\"}, Number{value: 9})"
+      , "  print(show(map.get(Word{text: \"key\"})))"
+      , "  0", "}" ]
+    , "index\nreplacement\nold 2 revised\n[Word{text: \"start\"}, Word{text: \"new\"}, Number{value: 3}]\n(true, 1)\n(true, 1)\nSome(Number{value: 9})\n")
+  , ("a concrete argument widens beside a loan in direct and stored calls", program
+      [ "trait Score { fn points(self: &Self) -> Int }"
+      , "type Points = { amount: Int }"
+      , "impl Score for Points { fn points(self: &Self) -> Int { self.amount } }"
+      , "fn add(total: &mut Int, score: dynamic Score) -> Int {"
+      , "  *total = *total + score.points()"
+      , "  *total"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var total = 1"
+      , "  let direct = add(&mut total, Points{amount: 2})"
+      , "  let stored = add"
+      , "  let indirect = stored(&mut total, Points{amount: 3})"
+      , "  print(show((direct, indirect, total)))"
+      , "  0", "}" ]
+    , "(3, 6, 6)\n")
+  , ("loop breaks widen to the checked carrier of their own destination", program
+      [ "trait Named { fn label(self: &Self) -> Str }"
+      , "type Leaf = { name: Str }"
+      , "type Branch = { labelText: Str }"
+      , "impl Named for Leaf { fn label(self: &Self) -> Str { self.name } }"
+      , "impl Named for Branch { fn label(self: &Self) -> Str { self.labelText } }"
+      , "fn choose(first: Bool) -> dynamic Named {"
+      , "  let held: dynamic Named = Leaf{name: \"existing\"}"
+      , "  @outer loop {"
+      , "    if first { break @outer held }"
+      , "    loop { break {"
+      , "      print(\"operand\")"
+      , "      break @outer Branch{labelText: \"concrete\"}"
+      , "    } }"
+      , "  }"
+      , "}"
+      , "fn collection(first: Bool) -> Array[dynamic Named] {"
+      , "  let held: Array[dynamic Named] = [Leaf{name: \"kept\"}]"
+      , "  loop {"
+      , "    if first { break held }"
+      , "    break [Branch{labelText: \"wrapped\"}]"
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(choose(true).label())"
+      , "  print(choose(false).label())"
+      , "  print(collection(true)[0].label() + \" \" + collection(false)[0].label())"
+      , "  0", "}" ]
+    , "existing\noperand\nconcrete\nkept wrapped\n")
   ]
 
 abstractionRefusalPrograms :: [(String, Text)]
@@ -276,6 +431,60 @@ abstractionRefusalPrograms =
       , "  0"
       , "}"
       ] )
+  , ("dynamic unary failure names its held text after operand effects", program
+      (operatorTypes <>
+        [ "fn operand() -> dynamic Operated { print(\"operand\")\n \"word\" }"
+        , "fn main() -> Int { let invalid = -operand()\n print(show(invalid))\n 0 }" ]))
+  , ("dynamic unary failure names its held sum variant", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let value: dynamic Operated = Witness(1)"
+        , "  let invalid = ~value"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("dynamic integer negation retains the overflow diagnostic", program
+      (operatorTypes <>
+        [ "fn minimum() -> Int { -9223372036854775808 }"
+        , "fn main() -> Int {"
+        , "  let value: dynamic Operated = minimum()"
+        , "  let invalid = -value"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("mixed dynamic checked arithmetic names the resulting integer kind", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let wide: dynamic Operated = platform(1)"
+        , "  let narrow: dynamic Operated = 127i8"
+        , "  let invalid = wide + narrow"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("mixed dynamic division by zero keeps the division site", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let numerator: dynamic Operated = 5i8"
+        , "  let denominator: dynamic Operated = platform(0)"
+        , "  let invalid = numerator / denominator"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  , ("dynamic binary failure names the actual left and right kinds", program
+      (operatorTypes <>
+        [ "fn main() -> Int {"
+        , "  let lhs: dynamic Operated = \"value\""
+        , "  let rhs: dynamic Operated = Witness(1)"
+        , "  let invalid = lhs - rhs"
+        , "  print(show(invalid))"
+        , "  0", "}" ]))
+  ]
+
+operatorTypes :: [Text]
+operatorTypes =
+  [ "trait Operated { fn number(self: &Self) -> Int }"
+  , "type Marker = Witness(Int) | Empty"
+  , "fn platform(value: Int) -> Int { value }"
+  , "impl Operated for Int { fn number(self: &Self) -> Int { *self } }"
+  , "impl Operated for Int8 { fn number(self: &Self) -> Int { 8 } }"
+  , "impl Operated for Str { fn number(self: &Self) -> Int { self.length() } }"
+  , "impl Operated for Marker { fn number(self: &Self) -> Int { 0 } }"
   ]
 
 program :: [Text] -> Text

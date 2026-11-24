@@ -80,3 +80,103 @@ tuple or array it was given. `hasSequencePattern` finds the test anywhere
 inside, and `lowerLetSequence` leaves an ordinary `let` untouched. Resolved
 Grill Log: reuse CoreMatch rather than generate a comparison per element; the
 interpreter's E7013 message and hint are preserved.
+
+## Checked aggregate arm joins (#956)
+
+Resolved Grill Log: when the arm carriers differ, use the checked result
+carrier if widening every reachable arm succeeds. An aggregate can contain
+dynamic members at any depth, and guards remain outside the widened result.
+
+## Nominal narrowing of dynamic values (#956)
+
+Resolved Grill Log: checked record and constructor patterns carry a
+canonical owner. Match the outer dynamic tag by that owner, then reuse
+the ordinary pattern for the payload. A named sum additionally tests its
+own variant tag. Identical display names across declarations never select
+the same dynamic alternative. The existing pattern path owns guard,
+fallback, nesting and binding behavior.
+
+## Narrowing through the payload owner (#956)
+
+Resolved Grill Log: use the checked pattern owner to select the held
+nominal type and test that alternative's tag. Tag spelling remains internal
+to the dynamic layout.
+
+## Narrowing multiple instantiations of one owner (#956)
+
+Resolved Grill Log: a nominal test selects every tag of that owner and
+reuses the same bound locals across those alternatives. Refuse a binding
+if a payload would need an incompatible local carrier. Matching an
+ordinary field shared by every instantiation uses its declared layout.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: Match arms with differing native product layouts project to their shared layout after each guard and body. Pattern types still come from the subject carrier.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Normalize compatible selected sum carriers before lowering source patterns. Each payload binder gets its actual slot type.
+
+## Held shapes in refutable patterns
+
+Resolved Grill Log: select the held shape before lowering match arms.
+Structurally impossible arms skip their guards and bodies. Sequence
+binding failure names the held subject, and let-else uses its fallback
+when the selected pattern is impossible.
+
+## Escaping refutable bindings
+
+Resolved Grill Log: each held subject layout and written alternative
+gets private pattern locals. A successful arm projects those values
+to shared enclosing slots after the complete pattern matches.
+Failure sees only the original scope.
+
+## Nested alternative binding layouts
+
+Resolved Grill Log: isolate captures in every alternative and project
+new names to shared slots after that alternative matches. Use the
+same projection for selected runtime tags and written alternatives.
+A guard runs once after the first structural success.
+
+## Statically impossible loop binders
+
+Resolved Grill Log. Export the structural impossibility check to
+[[Compiler Lower For]]. The same check that skips unreachable match arms
+also skips a loop body whose binder cannot match the retained element.
+
+## Canonical owner checks on held patterns
+
+Resolved Grill Log. Executable constructor and named-record paths carry
+canonical owners. Check that owner before inspecting same-label variants
+or same-named records. A named sum payload path applies only to a named
+variant. Preserve the evaluator's short-name matching for paths without
+a resolved owner. [[Backend Rendering Callable Programs]]
+
+Resolved Grill Log. Join returning arm layouts through [[Compiler Lower Control]].
+Guards and bindings remain inside their arms, and a projection can run
+only after the arm body returns.
+
+## Structural patterns on held payloads
+
+An anonymous record pattern tests the fields of a held record or a
+named sum payload. Each candidate variant supplies its actual field
+layout. A positional variant or a missing field cannot match. For
+structural patterns on dynamic values, select the payload before
+testing its shape. A bare binding retains the complete dynamic value.
+
+Resolved Grill Log. Join captures only from successful structural
+alternatives. Use the same private captures and publication as written
+alternatives, so guard order, fallback scopes, and loop skips agree
+with the evaluator. [[Backend Rendering Callable Programs]]
+
+## Held match guards
+
+Resolved Grill Log. Apply the guard's truth rule only after structural
+success. A non-Bool result falls through after its effects. A guard
+that transfers suppresses its arm body. [[Compiler Lower Control]]
+
+## Mutable sequence bindings
+
+Resolved Grill Log. Keep sequence captures private until the match
+succeeds. Publish mutable captures through [[Compiler Lower Place]]
+after success. Preserve the original failure path and span.

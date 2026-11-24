@@ -17,9 +17,30 @@ which they use.
 ## Resolved Grill Log
 
 - The box never moves when its items grow, so slots holding it stay valid.
+- Small initial item buffers share the box allocation at an aligned offset.
+  A unique array that outgrows this storage copies only its initialized cells
+  into a separate buffer. Larger initial arrays allocate their own buffers so
+  later growth does not retain large unused inline storage. All release paths
+  use the same storage helper to distinguish the two cases.
+- The fallible construction and growth parts leave existing array storage
+  intact on failure. The JSON reader can unwind the partial document before
+  reporting host exhaustion. The reporting wrappers serve ordinary updates.
 - One part per helper, so a program carries only what it calls and the C has
   no unused functions.
 
 ## Referenced by
 
 [[Backend Emit Array]] · [[Native Arrays]]
+
+## Empty joins and invalid members (#956)
+
+The non-text join helper reads the held array's length. An empty array returns
+empty text. A nonempty array fails with E7001 and the supplied site. The text
+join checks separator and member lengths separately before adding them.
+
+### Resolved Grill Log
+
+the helper needs no element pointer or separator because
+operand evaluation has already finished and neither changes the outcome.
+
+Resolved Grill Log: an item buffer is inline exactly when its capacity is at most the inline cell count, and every heap buffer holds more. Release and growth read the storage from capacity, never from the buffer address, because a separate heap buffer may be placed at the address the inline cells would occupy.

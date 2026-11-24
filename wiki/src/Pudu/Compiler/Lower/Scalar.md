@@ -192,3 +192,77 @@ Resolved Grill Log: Use runtime kinds for callable as well as sum operand failur
 ## Indexed stores (#840)
 
 runtimeKind names a store `store`, as the evaluator's operator refusals do. Resolved Grill Log: ordering operators on stores stay a runtime E7001.
+
+## Unary runtime refusals (#956)
+
+After checking settles the operand carrier, every admitted ordinary value
+without a unary operation uses the interpreter's E7001 wording. Callable
+and sum values supply their runtime kind.
+
+### Resolved Grill Log
+
+reuse the ordered operator failure so the operand runs
+once, and preserve the source operation's span. Keep the existing successful
+numeric, Boolean and reference paths ahead of the diagnostic path.
+
+## Dynamic operands and callback tokens (#956)
+
+Unary operations match the held variant of a dynamic operand before
+selecting its operation. A successful negation or complement is wrapped in
+the same variant. Binary operations hold both operands in order, select their actual variants,
+and reuse scalar emission. Same-layout equality uses the box when its cases
+all have the same equality as their payloads. A dynamic result wraps the
+selected result type through the same widening used at assignments. Callback token refusals use
+the declaration's canonical owner.
+
+### Resolved Grill Log
+
+The dynamic wrapper decides dispatch and preserves the checked result type.
+The held carrier decides whether an operator succeeds, which arithmetic
+helper runs, and which runtime kind appears in a refusal. A mixed-width integer
+uses the evaluator's kind selection. Checking and saturation act on the exact
+intermediate, while wrapping and bit operations use the result width. Mixed
+integer comparisons compare the original mathematical values.
+
+## Equality of held aggregate layouts (#956)
+
+Resolved Grill Log: after integer and same-carrier dispatch, reuse a
+checked common dynamic carrier when both held operands can widen into
+it. Its equality compares the payloads across layout tags. Direct
+mixed-width integer equality still compares mathematical values.
+
+## Shared runtime kind labels (#956)
+
+Resolved Grill Log: use the Core label for operands whose runtime shape is
+determined by their carrier. Active variants and callables keep the
+runtime lookup.
+
+Resolved Grill Log: share the named failure builder with method calls
+whose checked dynamic view selects a noncallable field.
+
+## Operators on runtime alternatives (#956)
+
+Resolved Grill Log: select preserved native value carriers before applying
+an operator, using the same rules as held dynamic operands. Equality also
+accepts a concrete value and a selected result.
+
+## Runtime keyed layouts (#956)
+
+Resolved Grill Log: Set membership preserves source evaluation order while projecting the probe to the set carrier.
+
+## Exact Int layout
+
+Resolved Grill Log: Use exact operands for checked arithmetic and comparisons of extended Int values. Checked results use the source kind limits. Remainder retains the exact Int layout when its result can exceed Int.
+
+## Dynamic exact Int operands
+
+Resolved Grill Log: dispatch on the held payload before choosing
+checked exact arithmetic. Trait layout tags do not choose
+a different arithmetic kind.
+
+## Held logical operands
+
+Resolved Grill Log. Use strict Bool validation on both operands at
+the written operation. The right operand stays on the taken
+short-circuit path. A left-side transfer suppresses right-side lowering.
+[[Compiler Lower Control]]

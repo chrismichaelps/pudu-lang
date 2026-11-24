@@ -58,3 +58,10 @@ are. No handmade Core or generated C is used.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Emit Tests]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]]
+
+## Transfer before dynamic method invocation (#956)
+
+Resolved Grill Log: a Never block in an exclusive parameter position
+returns from the caller before any following argument or method body can
+run. A second call holds an earlier loan before returning from a later
+argument, leaving the borrowed value intact.

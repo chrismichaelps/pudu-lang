@@ -7,6 +7,13 @@ aliases: [Native Aggregate Emission]
 ---
 # Native Aggregate Emission
 
+## Retained positional constructors
+
+Resolved Grill Log. A retained constructor renders and reports its
+variant label. Its canonical identity governs equality and ordering
+among constructor keys. It is an ordered empty positional sum value
+even when stored in a callable slot. [[Core Closure Identities]]
+
 ## Purpose and interface
 
 Export ownedType, ownedKinds, retained, released, cType, memberRender,
@@ -109,9 +116,12 @@ Resolved Grill Log: Callable show helpers use builtin versus function rendering 
 
 Show prints `<kind method name>` and the runtime kind is `kind method`, with
 the interpreter's words (text, array, map, set, range, character, byte).
-Equality compares sites, then a method closure's receivers with memberEqual.
-Resolved Grill Log: two values of one method on equal receivers are equal,
-as in the interpreter.
+Equality compares sites, then a method closure's receivers. Use the
+cross-layout helper when a site admits two capture layouts.
+Resolved Grill Log. Each side's closure index determines its capture
+layout. Seed the existing helper graph with the distinct capture pairs
+and retain the direct member comparison for shared layouts.
+[[Compiler Lower Method Value]] · [[Backend Cross Comparison]]
 
 ## Trait method closures (#646)
 
@@ -158,3 +168,56 @@ would carry the same trap).
 ## Foreign handles (#853)
 
 Handle types register the lifetime, rendering and comparison helpers from [[Backend Emit Foreign Handle]].
+
+## Dynamic display (#956)
+
+The dynamic display helper selects the held payload and uses its display
+renderer. The show helper uses the held payload's quoted rendering.
+
+### Resolved Grill Log
+
+Text and characters keep their display behavior after widening. Aggregate
+members and entry results keep the payload's show behavior.
+
+## Foreign callable identity and dynamic integer order (#956)
+
+Foreign function and callback-registration closures render by crossing
+identity. Their runtime kind and comparability follow the recorded value
+class. Dynamic variants holding integers compare exact magnitudes across
+widths, including in tuples and ordered collections.
+
+### Resolved Grill Log
+
+A numeric payload pair takes its shared value order before nominal tag
+ordering. Converting a mixed pair for comparison does not narrow either
+operand and releases any temporary carrier.
+
+
+## Ordering erased payloads and mixed sums (#956)
+
+Dynamic boxes use the rank of the held value when two tags differ. Numeric
+pairs still use numeric comparison. A sum's rank follows its active variant,
+so positional and named variants of one type can rank differently.
+
+### Resolved Grill Log
+
+Compare shapes before nominal names. Use canonical owner order when distinct
+record or sum implementations share a shape, and use the variant name when
+comparing variants of one sum with the same shape.
+
+## Comparisons across dynamic payload layouts (#956)
+
+Resolved Grill Log: dynamic tags select held layouts. A pair of distinct
+tags dispatches to [[Backend Cross Comparison]], which walks each side's
+layout and compares their held values. Same-tag helpers retain the
+usual dependency closure.
+
+## Held kinds in dynamic diagnostics (#956)
+
+Resolved Grill Log: a dynamic tag describes a layout. Diagnostics obtain
+the held carrier's runtime label, following an ordinary sum's active
+variant or a callable's actual kind.
+
+## Exact Int layout
+
+Resolved Grill Log: Exact Int has its own ownership discriminator so both integer layouts release through their matching cell.

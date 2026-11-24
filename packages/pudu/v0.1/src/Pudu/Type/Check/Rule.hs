@@ -179,11 +179,9 @@ namespaceNameType spanValue names = do
 {-| The type of `Qualifier.member`, when the qualifier names something that has
     members rather than a value with fields.
 
-    A qualifier that binds nothing at all is not a module, so the miss is left
-    to ordinary member typing on whatever the target turns out to be. A
-    qualifier that binds *something* is a module, and then a member it does not
-    export is the mistake — reported here rather than left to become an
-    `undefined name` at run time naming the alias instead of the member. -}
+    A module can export only types, so its qualifier is known even when no
+    value binding shares its prefix. Diagnose a missing export before
+    checking the qualifier as a receiver. -}
 qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
 qualifiedMemberType declared spanValue target member = do
   local <- localValueHead target
@@ -248,7 +246,8 @@ namespaceMemberType declared spanValue target member = case target of
       Nothing -> do
         ownsMembers <- qualifiesSomething owner
         selfIsValue <- lookupName owner
-        if ownsMembers && selfIsValue == Nothing
+        if (Set.member owner (declaredQualifiers declared) || ownsMembers)
+            && selfIsValue == Nothing
           then do
             unqualified <- lookupName member
             {-| The checker's environment also holds other modules' declarations

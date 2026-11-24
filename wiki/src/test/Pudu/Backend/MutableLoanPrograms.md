@@ -52,3 +52,9 @@ higher-order function and a defaulted function value. A failure adds an
 element out of range lent through a value, after the callee ran.
 
 Resolved Grill Log (#828): A receiver index runs before the supplied argument. A bad receiver index fails at the root before any supplied argument effects.
+
+## Forwarded dynamic loans (#956)
+
+Resolved Grill Log: a function passes its exclusive parameter by name
+to two implementations through a dynamic receiver. The caller observes
+both returned results and each final written back to its place.

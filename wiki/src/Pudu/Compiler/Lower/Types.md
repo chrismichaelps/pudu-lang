@@ -265,3 +265,40 @@ a record or sum key beside its prefix arguments, never a fresh type.
 ## Foreign handles (#853)
 
 Known foreign nominal identities form as CoreHandleType, including values received from imported bindings.
+
+## Restricted callable loans (#956)
+
+Read mutable input positions through a checked callable's capability wrapper.
+
+### Resolved Grill Log
+
+Capability admission happens in checking. The native callable still needs
+its loan positions for copy-in and writeback.
+
+## Runtime alternative layouts (#956)
+
+Resolved Grill Log: form the reserved sum directly from its concrete
+arguments. Each alternative carries exactly one value with its own type.
+Keep these layouts distinct from a trait's implementation table.
+
+## Shapes during callable replay (#956)
+
+Resolved Grill Log: a copied closure uses the captured source facts
+and substitutions with the current module's native layouts. A replay
+can add a proved layout between discovering the closure and using it.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: A record layout suffix supplies field types in declaration order. It does not affect nominal lookup, checker substitutions, or the public type spelling.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Read the declared variants first and apply only the matching payload overrides. Preserve variant labels and declaration order.
+
+## Exact Int layout
+
+Resolved Grill Log: Exact Int is a represented integer layout. The source type name resolves to ordinary Int.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: A dynamic trait with an Int implementation has another native variant for the exact Int layout. The variant name is internal and cannot collide with a source owner.

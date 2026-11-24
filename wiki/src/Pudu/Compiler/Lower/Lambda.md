@@ -7,6 +7,13 @@ aliases: [Compiler Lower Lambda]
 ---
 # Compiler Lower Lambda
 
+Resolved Grill Log. A retained constructor specializes through
+[[Compiler Lower Sum]], has no captures, and retains its variant identity.
+
+Resolved Grill Log. Indirect calls specialize when a retained native
+argument cannot project to the checked slot, including concrete
+layouts. Select the stored body by identity and retain its captures.
+
 ## Purpose and interface
 
 Function values under [[Native Closures]].
@@ -93,3 +100,64 @@ inside an `async with scope` offers it to the innermost scope and the scope's
 joiner, which runs it and stashes a failure for the scope's function. Resolved
 Grill Log: one lifted function serves a written lambda and its async form; a
 task lends no `&mut` parameters and runs only when awaited or joined.
+
+## Calls through runtime callable alternatives (#956)
+
+Resolved Grill Log: match the saved callable before making its ordinary
+typed call. Each reachable arm uses the declared input carriers and the
+actual closure result carrier. Join heterogeneous results after the call.
+A noncallable value retains the normal runtime call diagnostic.
+
+## Array callback signatures (#956)
+
+Resolved Grill Log: a written callback uses the array's native input
+carriers when they differ from checking's. Each lifted body receives the
+carriers used by its call site, and its key includes those inputs.
+Named callbacks use the same exact copies as direct calls. Both explicit
+returns and the tail contribute native result carriers before frame emission.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: Select a stored callable by native body identity and build a typed copy using the held capture values. Hold the callee and arguments once and keep their evaluation order.
+
+## Runtime layouts in stored methods and builtins (#956)
+
+Resolved Grill Log: A selected method copy reads the original receiver capture. A selected intrinsic copy has no environment and keeps the intrinsic call-depth rule.
+
+Resolved Grill Log: a selected open traversal derives its instantiated fact
+and result carrier from the supplied callback or seed when building a copy.
+The copy keeps the captured receiver and original method identity.
+The collection entry can select any bound builtin traversal template.
+A concrete template uses the supplied callable layout and records the
+result discovered by lowering its body. Other callbacks retain the
+ordinary mismatch diagnostic.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: A task retains its captures and settles its actual result. Its joiner stashes a selected failure in the exact carrier used by the scope.
+
+## Native mutable loan layouts (#956)
+
+Resolved Grill Log: A named or lifted loaned callable advertises the actual result tuple. An indirect call selects its body while retaining the original closure environment.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: Keep the requested input vector in the lifted body template. Rebuilding the original callable must reproduce its body key when its mutable parameters have widened.
+
+## Selected indirect call arity
+
+Resolved Grill Log: [[Compiler Lower Default]] selects arity using
+the retained callable. Projection and specialization use the written
+slots after selection. Unreachable operands do not run after an
+earlier control transfer.
+
+## Mutable finals through ordinary checked calls
+
+Resolved Grill Log: inspect the retained callable's physical
+signature for a possible final tuple, including alternatives.
+Pass the already evaluated callee into [[Compiler Lower Loan]]
+before lowering arguments. A matching tuple is only a reason to
+preserve places. The selected callable profile still decides which
+positions, if any, return finals.
+
+Resolved Grill Log: collection callback specialization prefers bound builtin traversals and otherwise adapts any matching stored callable to the held item layout, as indirect calls do.

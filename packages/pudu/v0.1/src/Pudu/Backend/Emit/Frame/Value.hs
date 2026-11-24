@@ -10,6 +10,7 @@ import Numeric (showHex)
 import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
   ( EmitState (..), byteData, cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+import Pudu.Backend.Emit.Cell (callbackTokenText, isDynamicBox, memberDisplay, memberRuntimeKind)
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isBigInteger, isWideInteger, limbsOf, zeroValue)
@@ -25,7 +26,7 @@ import Pudu.Core.Frame
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind))
 
 slotNumber :: FrameSlot -> Text
 slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
@@ -112,8 +113,7 @@ frameValue state value = case frameValueShape value of
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
   FrameRuntimeKind held -> do
     source <- slotText held
-    let kind = frameSlotType held
-    plain (aggregateHelper "name" kind <> "(" <> source <> ")") [aggregateNeed "name" kind]
+    uncurry plain (memberRuntimeKind (frameSlotType held) source)
   FrameMember position tuple -> do
     source <- slotText tuple
     member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))
@@ -129,6 +129,11 @@ frameValue state value = case frameValueShape value of
     source <- slotText closure
     member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameClosureIs name closure -> case Map.lookup name (emitFunctionIds state) of
+    Nothing -> done state "0" []
+    Just identity -> do
+      source <- slotText closure
+      plain ("(" <> source <> "->fields[0].scalar == " <> textOfInt identity <> ")") []
   FrameArray members -> do
     let kind = frameValueType value
         cells = Text.intercalate ", " ["frame->slots[" <> slotNumber member <> "]" | member <- members]
@@ -166,7 +171,14 @@ frameValue state value = case frameValueShape value of
       ArraySliceOf -> helper "slice"
       ArrayConcatWith -> helper "concat"
       ArrayReversed -> helper "reverse"
-      ArrayJoinWith -> plain ("pudu_array_join(" <> Text.intercalate ", " (target : operands) <> ")") ["array_join"]
+      ArrayJoinWith -> case (kind, map frameSlotType arguments, operands) of
+        (CoreArrayType CoreTextType, [CoreTextType], [separator]) ->
+          plain ("pudu_array_join(" <> target <> ", " <> separator <> ")") ["array_join"]
+        (CoreArrayType _, [CoreTextType], [_]) ->
+          let (after, number) = failureSite state at "E7001" "join expects an array of text"
+           in Right (after, "pudu_array_join_nontext(" <> target <> ", &pudu_sites[" <> textOfInt number <> "])"
+              , Set.singleton "array_join_nontext")
+        _ -> refused "an array join without matching receiver and separator carriers"
   FrameKeyedMethod name receiver arguments -> do
     target <- slotText receiver
     operands <- traverse slotText arguments
@@ -174,6 +186,10 @@ frameValue state value = case frameValueShape value of
           KeyedFromArray -> frameValueType value
           _ -> frameSlotType receiver
         keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+        defaultLookupResult result = case result of
+          CoreArrayType{} -> True
+          CoreIntegerType PlatformSigned -> True
+          _ -> False
         wordKeyed operation = case (kind, map frameSlotType arguments, frameValueType value) of
           (CoreMapType _ (CoreIntegerType (UnsignedKind 64)), [other], result)
             | kind == other && kind == result -> keyed operation
@@ -189,6 +205,11 @@ frameValue state value = case frameValueShape value of
       KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
       KeyedContains -> keyed "contains"
       KeyedLookup -> keyed "lookup"
+      KeyedLookupOrDefault -> case (kind, map frameSlotType arguments) of
+        (CoreMapType key result, [argument])
+          | key == argument, result == frameValueType value, defaultLookupResult result ->
+              keyed "lookup_default"
+        _ -> refused "a keyed default lookup without matching key and result carriers"
       KeyedInsert -> keyed "insert"
       KeyedPut -> keyed "put"
       KeyedRemove -> keyed "remove"
@@ -220,12 +241,12 @@ frameValue state value = case frameValueShape value of
   FrameRangeValue low inclusive high -> do
     lowText <- traverse slotText low
     highText <- traverse slotText high
-    let end = maybe ("0, pudu_make(0, 0)") ("1, " <>)
+    let end = maybe "0, NULL" ("1, " <>)
     plain ("pudu_range_make(" <> end lowText <> ", " <> (if inclusive then "1" else "0") <> ", " <> end highText <> ")") ["range"]
   FrameRangeMethod name receiver arguments -> do
     target <- slotText receiver
     operands <- traverse slotText arguments
-    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name target operands
+    let (after, text, needs) = rangeMethodCall state (frameValueSpan value) name (frameValueType value) target operands
     Right (after, text, Set.fromList needs)
   FrameBytesMethod name receiver arguments -> do
     target <- slotText receiver
@@ -248,7 +269,9 @@ frameValue state value = case frameValueShape value of
     source <- slotText slot
     plain ("pudu_output_write(" <> (if errors then "2" else "1") <> ", "
       <> (if newline then "1" else "0") <> ", " <> source <> ")") ["output_error"]
-  FrameDisplay slot -> rendered slot
+  FrameDisplay slot
+    | isDynamicBox (frameSlotType slot) -> slotText slot >>= uncurry plain . memberDisplay (frameSlotType slot)
+    | otherwise -> rendered slot
   FrameTextMethod _ _ _ | Just selected <- frameTextView slotText state value -> selected
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver
@@ -411,6 +434,9 @@ frameValue state value = case frameValueShape value of
           CoreBoolType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           CoreCharType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           CoreUnitType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
+          kind@CoreCallbackType{}
+            | kind == frameSlotType right, symbol `elem` ["==", "!="] ->
+                done state (lhs <> " " <> symbol <> " " <> rhs) []
           _ -> refused "an unrepresented comparison operand"
     case coreScalarOperator scalar of
       CoreAdd -> checked "add" CheckedAdd
@@ -472,6 +498,7 @@ frameValue state value = case frameValueShape value of
         CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
         CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
         CoreCharType -> plain ("pudu_char_text(" <> text <> ")") ["char_text"]
+        CoreCallbackType owner _ -> plain (callbackTokenText owner) ["text_literal"]
         kind | isAggregate kind -> plain (aggregateHelper "show" kind <> "(" <> text <> ")") [aggregateNeed "show" kind]
         _ -> refused "a rendered value without a native representation"
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))

@@ -1,19 +1,31 @@
 {-| @Pudu.Compiler.Lower.Signature — memoized admission of reachable native signatures. -}
-module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal) where
+module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal, taskResultKey, taskSignatureResult) where
 
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Default (trailingDefaults)
+import Pudu.Compiler.Lower.Dynamic (runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
+  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite), intType, refuse )
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings)
 import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring, ReferenceTypeValue, RestrictedType), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Function (..), FunctionBody (..), Located (..), Parameter (..), TypeParam (..) )
-import Pudu.Source (Span)
+import Pudu.Source (Span, spanStart, unOffset)
+
+taskResultKey :: Text -> Span -> Text
+taskResultKey parent at = parent <> "#" <> Text.pack (show (unOffset (spanStart at)))
+
+taskSignatureResult :: LowerContext -> Text -> Function -> CoreType -> CoreType
+taskSignatureResult context parent function checked = case (functionBody function, checked) of
+  (Just body, CoreFunctionType [] result) ->
+    CoreFunctionType [] (runtimeResultType result
+      (Map.findWithDefault Set.empty (taskResultKey parent (locatedSpan body)) (contextRuntimeResults context)))
+  _ -> checked
 
 {-| Admit each reachable monomorphic signature once, including refusals,
     memoized by the function's canonical name. The scheme is read from the
@@ -36,11 +48,19 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
         , requiredCount required <= length inputs ->
             let (afterParameters, given) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)
-                parameters = given <> [CoreParameter (CoreLocal (length inputs) suppliedCountName intType) atName | requiredCount required < length inputs]
                 loaned = [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
+                parameters = zipWith carry [0 ..] given
+                  <> [CoreParameter (CoreLocal (length inputs) suppliedCountName intType) atName | requiredCount required < length inputs]
+                carry index parameter
+                  | index `elem` loaned =
+                      let local = coreParameterLocal parameter
+                          kind = settledMutableLayout context (MutableParameterSite key index) (coreLocalType local)
+                       in parameter{coreParameterLocal = local{coreLocalType = kind}}
+                  | otherwise = parameter
                 (afterReturn, answered) = validateReturn afterParameters result
                 -- An async function answers the task of its body.
-                resultType = if asynchronous then CoreFunctionType [] answered else answered
+                resultType = if asynchronous then taskSignatureResult context key function (CoreFunctionType [] answered)
+                  else runtimeResultType answered (Map.findWithDefault Set.empty key (contextRuntimeResults context))
                 added = length (contextRefusals (lowerContext afterReturn))
                   - length (contextRefusals context)
              in if added == 0

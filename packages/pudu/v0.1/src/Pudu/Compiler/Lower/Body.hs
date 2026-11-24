@@ -3,49 +3,53 @@
 module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpression) where
 
 import Data.List.NonEmpty (NonEmpty (..))
-import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (recordFields, typeForSpan, nativeIntegerKind, nativeValueType, treeType, writtenLabel)
+import qualified Data.Set as Set
+import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary)
+import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeForSpan, nativeIntegerKind, nativeValueType, treeType, unformed, withFacts, writtenLabel)
 import Pudu.Compiler.Lower.Control
-  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
+  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinBranchValues
+  , ConditionUse (StrictCondition), lowerCondition
   , expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, isModuleQualifier, lookupConstant, lookupLocal, refuse, refused, resolveFunction )
-import Pudu.Compiler.Lower.Text (lowerTextMethod)
-import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerOwnedMethod, lowerQualifiedMethod)
+  , bindLocal, halt, isModuleQualifier, lookupConstant, lookupLocal
+  , observeMutableLayout, refuse, refused, resolveFunction )
+import Pudu.Compiler.Lower.Text (lowerSelectedMember, lowerTextMethod)
+import Pudu.Compiler.Lower.Method (lowerHeldMethod, lowerMethodCall, lowerOwnedMethod, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWith)
-import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
-import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
+import Pudu.Compiler.Lower.Array (lowerArrayLiteral, lowerArrayMethod, takeReceiver)
+import Pudu.Compiler.Lower.Slice (lowerBracketIndex)
 import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
-import Pudu.Compiler.Lower.Bytes (lowerBytesMethod, lowerBytesOf)
+import Pudu.Compiler.Lower.Bytes (lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry, unwrapOrLeave)
 import Pudu.Compiler.Lower.Scope (leaving, leavingLoop, lowerScope, released)
 import Pudu.Compiler.Lower.Decimal (decimalLiteral)
-import Pudu.Compiler.Lower.Dynamic (isDynamic, widen, widenBlock, widenTo)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
 import Pudu.Compiler.Lower.Foreign
-  (lowerQualifiedForeignCall, lowerCallbackRegistration, lowerCallbackUnregister
+  (lowerQualifiedForeignCall, lowerForeignValue, lowerCallbackRegistration, lowerCallbackUnregister
   , lowerCallbackValue, lowerCallbackUnregisterValue )
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
-import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
-import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
-import Pudu.Compiler.Lower.Place (lowerPlaceAssignment)
+import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable, specializeTraversalCallback)
+import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
+import Pudu.Compiler.Lower.Place (declareLocal, lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
 import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
-import Pudu.Compiler.Lower.Sum (lowerVariant)
+import Pudu.Compiler.Lower.Sum (lowerConstructorValue, lowerVariant)
 import Pudu.Compiler.Lower.Constant (lowerConstant)
 import Pudu.Compiler.Lower.Match (hasSequencePattern, ifLetArms, lowerLetElse, lowerLetSequence, lowerMatch, whileLetLoop)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Core
+import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax
   ( Block (..), Declaration (..), Expression (..)
   , Function, Literal (..), Located (..), Statement (..), TypeSyntax (NamedType) )
@@ -86,7 +90,7 @@ lowerBlockResult state located@(Located expressionSpan expression) = case expres
     | Just (after, assigned) <- lowerPlaceAssignment lowerExpression state expressionSpan target right ->
         (after, maybe [] pure assigned, Nothing, CoreUnitType)
   BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
-    | Just local <- lookupLocal state name -> case fmap (widenTo (contextTypes (lowerContext state)) (coreLocalType local)) <$> lowerExpression state right of
+    | Just local <- lookupLocal state name -> case lowerLocalReplacement state local right of
         (after, Just (coreRight, coreType))
           | expressionIsPrintValued coreRight ->
               (refuse expressionSpan "assigning a Result[(), Str] value" after, [], Nothing, CoreUnitType)
@@ -120,18 +124,19 @@ foldStatements state = go state []
   where
     go current collected [] = (current, reverse collected, False)
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
-      LetPatternStatement _ pattern _ subject | hasSequencePattern pattern ->
-        case lowerLetSequence lowerExpression current statementSpan pattern subject of
-          (after, Just lowered) -> binding after collected [lowered] rest
+      LetPatternStatement kind pattern _ subject | hasSequencePattern pattern ->
+        case lowerLetSequence lowerExpression current statementSpan kind pattern subject of
+          (after, Just statements) -> binding after collected statements rest
           (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
-      LetPatternStatement _ pattern annotation subject
-        -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
+      LetPatternStatement kind pattern _ subject
+        -> case lowerTuplePattern lowerExpression current statementSpan kind pattern subject of
             (after, Just statements) -> binding after collected statements rest
             (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
+      LetElseStatement pattern' subject fallback ->
+        case lowerLetElse lowerExpression current statementSpan pattern' subject fallback of
+          (after, Just statements) -> binding after collected statements rest
+          (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       _ -> case lowerStatement current one of
-        (after, Just lowered)
-          | LetElseStatement{} <- statement, blockType [lowered] Nothing == CoreNeverType ->
-              (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
         (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
 
@@ -139,32 +144,47 @@ foldStatements state = go state []
       | blockType statements Nothing == CoreNeverType = (after, reverse collected <> statements, True)
       | otherwise = go after (reverse statements <> collected) rest
 
+lowerLocalReplacement :: LowerState -> CoreLocal -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+lowerLocalReplacement state local value = case lowerExpression state value of
+  (after, Just (core, _)) ->
+    let types = contextTypes (lowerContext after)
+        expected = coreLocalType local
+        (ready, projected) = projectRuntimeValue types after expected core
+        actual = coreExpressionType projected
+        recorded
+          | expected /= actual, nativeValueType actual =
+              observeMutableLayout ready local (storageCarrier types expected [actual])
+          | otherwise = ready
+     in (recorded, Just (projected, actual))
+  (after, Nothing) -> (after, Nothing)
+
+lowerBindingValue :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+lowerBindingValue state written = case lowerExpression state written of
+  (after, Just (core, _)) ->
+    let types = contextTypes (lowerContext after)
+        (ready, held) = normalizeAggregateValue types (typeForSpan types (locatedSpan written)) after core
+     in (ready, Just (held, coreExpressionType held))
+  (after, Nothing) -> refused after
+
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
-  DeclarationStatement (Located declarationSpan (BindingDeclaration _ _ (Located _ name) annotation value))
-    -> let panicked = annotatedPanic state annotation value in case maybe (lowerExpression state value) id panicked of
+  DeclarationStatement (Located declarationSpan (BindingDeclaration _ binding (Located _ name) annotation value))
+    -> let panicked = annotatedPanic state annotation value in case maybe (lowerBindingValue state value) id panicked of
         (after, Just (coreValue, coreType))
           | expressionIsPrintValued coreValue -> halt declarationSpan "binding a Result[(), Str] value" after
           -- A binding annotated dynamic holds the value widened.
           | Just written <- annotation, Just declared <- writtenCoreType after written, declared /= coreType
-          , let widened = widen (contextTypes (lowerContext after)) declared coreValue
+          , let (ready, widened) = projectRuntimeValue (contextTypes (lowerContext after)) after declared coreValue
           , coreExpressionType widened == declared ->
-              let (withLocal, local) = bindLocal after name declared
-               in (withLocal, Just (CoreStatement declarationSpan (CoreDeclare local widened)))
+              declareLocal binding ready declarationSpan name widened
           | Just _ <- annotation
           , Nothing <- panicked
+          , not (hasRuntimeChoice coreType)
           , let solved = typeForSpan (contextTypes (lowerContext state)) (locatedSpan value)
           , solved == Nothing || (coreType /= CoreNeverType && solved /= Just coreType) ->
               halt declarationSpan "a binding without matching solved native type facts" after
           | nativeValueType coreType || coreType == CoreNeverType ->
-              let (withLocal, local) = bindLocal after name coreType
-               in ( withLocal
-                  , Just
-                      CoreStatement
-                        { coreStatementSpan = declarationSpan
-                        , coreStatementShape = CoreDeclare local coreValue
-                        }
-                  )
+              declareLocal binding after declarationSpan name coreValue
           | otherwise -> halt declarationSpan ("bindings of type " <> coreTypeName coreType) after
         (after, Nothing) -> refused after
   DeclarationStatement (Located declarationSpan _) ->
@@ -181,7 +201,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
     BinaryExpression target "=" right
       | Just lowered <- lowerPlaceAssignment lowerExpression state statementSpan target right -> lowered
     BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
-      | Just local <- lookupLocal state name -> case fmap (widenTo (contextTypes (lowerContext state)) (coreLocalType local)) <$> lowerExpression state right of
+      | Just local <- lookupLocal state name -> case lowerLocalReplacement state local right of
           (after, Just (coreRight, coreType))
             | expressionIsPrintValued coreRight -> halt statementSpan "assigning a Result[(), Str] value" after
             | coreType == coreLocalType local || coreType == CoreNeverType ->
@@ -196,9 +216,11 @@ lowerStatement state (Located statementSpan statement) = case statement of
           (after, Nothing) -> refused after
     -- Expression lowering hands `=` back here; refuse rather than loop.
     BinaryExpression _ "=" _ -> halt statementSpan "this assignment target" state
-    IfExpression condition thenBlock elseExpression -> case lowerExpression state condition of
-      (afterCondition, Just (coreCondition, conditionType))
-        | conditionType `elem` [CoreBoolType, CoreNeverType] ->
+    IfExpression condition thenBlock elseExpression ->
+      case lowerCondition StrictCondition (locatedSpan locatedExpression) lowerExpression state condition of
+        (after, Just (coreCondition, CoreNeverType)) ->
+          (after, Just (CoreStatement statementSpan (CoreIf coreCondition (CoreBlock [] Nothing) Nothing)))
+        (afterCondition, Just (coreCondition, _)) ->
           let (afterThen, coreThen, _) = lowerBlock afterCondition thenBlock
            in case elseExpression of
                 Nothing ->
@@ -219,9 +241,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
                           }
                     )
                   (afterElse, Nothing) -> refused afterElse
-      (afterCondition, Just (_, coreType)) ->
-        halt (locatedSpan condition) ("an if condition of type " <> coreTypeName coreType) afterCondition
-      (afterCondition, Nothing) -> refused afterCondition
+        (afterCondition, Nothing) -> refused afterCondition
     _ -> case lowerExpression state locatedExpression of
       (after, Just (coreExpression, _)) ->
         ( after
@@ -236,16 +256,16 @@ lowerStatement state (Located statementSpan statement) = case statement of
     let (joined, joins) = leaving state statementSpan
         (after, shape) = loanedReturn joined statementSpan Nothing
      in (observeReturn CoreUnitType after, Just (afterJoins statementSpan joins CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape}))
-  ReturnStatement (Just located) -> case fmap (maybe id (widenTo (contextTypes (lowerContext state))) (lowerFunctionResult state)) <$> lowerExpression state located of
+  ReturnStatement (Just located) -> case projectedReturn state located of
     (after, Just (coreValue, _))
       | expressionIsPrintValued coreValue ->
           halt (locatedSpan located) "returning a Result[(), Str] value" after
     (after, Just (coreValue, coreType))
-      | allowedResultType (lowerFunctionResult state) coreType, null (lowerOpenScopes after) || coreType == CoreNeverType ->
+      | allowedReturn coreType, null (lowerOpenScopes after) || coreType == CoreNeverType ->
           let (left, shape) = loanedReturn after statementSpan (Just coreValue)
            in (observeReturn coreType left, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape})
       -- The value is in hand before the scopes the return leaves are joined.
-      | allowedResultType (lowerFunctionResult state) coreType ->
+      | allowedReturn coreType ->
           let (withKept, kept) = bindLocal after "" coreType
               (joined, joins) = leaving withKept statementSpan
               (left, shape) = loanedReturn joined statementSpan (Just (CoreExpression statementSpan coreType (CoreReadLocal kept)))
@@ -256,9 +276,19 @@ lowerStatement state (Located statementSpan statement) = case statement of
     (after, Nothing) -> refused after
   BreakStatement label operand -> joiningTransfer (lowerTransfer lowerExpression statementSpan label (Just operand) state)
   ContinueStatement label -> joiningTransfer (lowerTransfer lowerExpression statementSpan label Nothing state)
-  LetElseStatement pattern' subject fallback -> lowerLetElse lowerExpression state statementSpan pattern' subject fallback
+  LetElseStatement{} -> halt statementSpan "refutable pattern bindings" state
   LetPatternStatement{} -> halt statementSpan "pattern bindings" state
   InvalidStatement -> halt statementSpan "this statement" state
+ where
+  allowedReturn kind = allowedResultType (lowerFunctionResult state) kind
+    || (lowerFlexibleResult state && nativeValueType kind)
+
+projectedReturn :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+projectedReturn state located = case lowerExpression state located of
+  (after, Just (value, _)) | Just expected <- lowerFunctionResult state ->
+    let (ready, projected) = projectRuntimeValue (contextTypes (lowerContext after)) after expected value
+     in (ready, Just (projected, coreExpressionType projected))
+  outcome -> outcome
 
 {-| A statement that leaves, after the joins it owes. -}
 afterJoins :: Span -> [CoreStatement] -> CoreStatement -> CoreStatement
@@ -288,6 +318,8 @@ joiningTransfer other = other
     no trailing expression. Checked programs already agree on return types. -}
 observeReturn :: CoreType -> LowerState -> LowerState
 observeReturn CoreNeverType state = state
+observeReturn resultType state | lowerFlexibleResult state =
+  state{lowerObservedReturns = Set.union (lowerObservedReturns state) (runtimeCarriers resultType)}
 observeReturn resultType state = case lowerFunctionResult state of
   Nothing -> state{lowerFunctionResult = Just resultType}
   Just _ -> state
@@ -309,6 +341,43 @@ allowedResultType declared operand = case declared of
     CoreRangeType -> True
     CoreBytesType -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType, CoreDecimalType]
+
+lowerArrayCallback :: [CoreType] -> LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+lowerArrayCallback inputs state written@(Located at shape) = case shape of
+  LambdaExpression function ->
+    lowerLambdaWithInputs lowerExpression lowerBlock inputs state at function
+  TypeApplication inner arguments ->
+    lowerArrayCallback inputs (writtenTypeArguments state at inner arguments) inner
+  NameExpression (first :| rest)
+    | Nothing <- lookupLocal state first
+    , Just selected <- named (first : rest) -> selected
+  MemberExpression (Located _ (NameExpression (owner :| []))) (Located _ member)
+    | isModuleQualifier state owner
+    , Just selected <- named [owner, member] -> selected
+  _ -> case lowerExpression state written of
+    (after, Just (core, _)) -> specializeCallable lowerExpression lowerBlock inputs after core
+    (after, Nothing) -> refused after
+ where
+  named path = do
+    key <- resolveFunction state path
+    entry <- lookup key (contextTable (lowerContext state))
+    pure (lowerFunctionValueWithInputs inputs state at key entry)
+
+lowerAwaited :: LowerState -> Span -> CoreExpression -> (LowerState, Maybe (CoreExpression, CoreType))
+lowerAwaited state at task
+  | kind == CoreNeverType = (state, Just (task, kind))
+  | Just selected <- mapRuntimeChoice state at CoreNeverType task
+      (\current held -> fmap (fmap fst) (lowerAwaited current at held)) = selected
+  | CoreFunctionType [] answered <- kind =
+      let (ready, ran) = released state at task answered
+          isResult (CoreSumType "Result" _) = True
+          isResult _ = False
+       in if not (Set.null (runtimeCarriers answered)) && all isResult (runtimeCarriers answered)
+            then unwrapOrLeave ready at ran answered
+            else (ready, Just (ran, answered))
+  | otherwise = halt at ("awaiting a " <> coreTypeName kind <> " value") state
+ where
+  kind = coreExpressionType task
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
@@ -334,6 +403,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     Nothing | Just lowered <- lowerConstant lowerExpression state spanValue [name] -> lowered
     Nothing | Just key <- resolveFunction state [name], Just entry <- lookup key (contextTable (lowerContext state)) ->
       lowerFunctionValue state spanValue key entry
+    Nothing | Just lowered <- lowerForeignValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerCallbackValue state spanValue [name] -> lowered
     Nothing | Just lowered <- lowerIntrinsicValue state spanValue name -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
@@ -348,6 +418,7 @@ lowerExpression state (Located spanValue expression) = case expression of
       Nothing
         | Just key <- resolveFunction state (first : rest), Just entry <- lookup key (contextTable (lowerContext state)) ->
             lowerFunctionValue state spanValue key entry
+      Nothing | Just lowered <- lowerForeignValue state spanValue (first : rest) -> lowered
       Nothing | Just lowered <- lowerCallbackValue state spanValue (first : rest) -> lowered
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
@@ -362,12 +433,12 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Nothing <- lookupLocal state "convertInteger"
     , Nothing <- resolveFunction state ["convertInteger"] -> lowerConvertInteger lowerExpression state spanValue arguments
   CallExpression callee@(Located _ (TypeApplication (Located _ (NameExpression ("::trait-method::" :| [_, _]))) _)) arguments ->
-    lowerValueCall lowerExpression state spanValue callee arguments
+    lowerValueCall lowerExpression lowerBlock state spanValue callee arguments
   CallExpression (Located application (TypeApplication inner written)) arguments ->
     lowerExpression (writtenTypeArguments state application inner written) (Located spanValue (CallExpression inner arguments))
   CallExpression (Located callee (NameExpression (name :| []))) arguments
-    | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
-    | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
+    | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (NameExpression (name :| []))) arguments
+    | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [name] arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
@@ -389,13 +460,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
-    | Just lowered <- lowerMethodCall lowerExpression clean spanValue callee receiver member arguments -> lowered
-    | functionField receiver member -> lowerValueCall lowerExpression clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | Just lowered <- lowerArrayMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerKeyedMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerRangeMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerBytesMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | otherwise -> lowerTextMethod lowerExpression clean spanValue receiver member arguments
+    | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
+        clean spanValue callee receiver member arguments -> lowered
+    | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+        clean spanValue callee receiver member arguments
   CallExpression (Located callee (MemberExpression (Located owner (TypeApplication (Located _ (NameExpression path)) written)) (Located _ member))) arguments
     | Just kind <- writtenCoreType clean (Located owner (NamedType (ModuleName path) written))
     , Just lowered <- lowerOwnedMethod lowerExpression clean spanValue callee kind member arguments -> lowered
@@ -405,24 +474,22 @@ lowerExpression state (Located spanValue expression) = case expression of
     , Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee (Text.intercalate "." (first : rest)) member arguments -> lowered
   CallExpression (Located callee (MemberExpression receiver named@(Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
-    | Just lowered <- lowerMethodCall lowerExpression clean spanValue callee receiver member arguments -> lowered
-    | functionField receiver member -> lowerValueCall lowerExpression clean spanValue (Located callee (MemberExpression receiver named)) arguments
-    | Just lowered <- lowerArrayMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerKeyedMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerRangeMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | Just lowered <- lowerBytesMethod lowerExpression clean spanValue receiver member arguments -> lowered
-    | otherwise -> lowerTextMethod lowerExpression clean spanValue receiver member arguments
+    | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
+        clean spanValue callee receiver member arguments -> lowered
+    | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
+    | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
+        clean spanValue callee receiver member arguments
   CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
-    lowerValueCall lowerExpression state spanValue callee' arguments
+    lowerValueCall lowerExpression lowerBlock state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue (first : rest) arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
-    | Just _ <- lookupConstant state (first : rest) -> lowerValueCall lowerExpression state spanValue callee' arguments
+    | Just _ <- lookupConstant state (first : rest) -> lowerValueCall lowerExpression lowerBlock state spanValue callee' arguments
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression (Located _ (RecordExpression written@(ModuleName ("::constructor::" :| _)) [])) arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (writtenLabel written) arguments -> lowered
-  CallExpression callee arguments -> lowerValueCall lowerExpression state spanValue callee arguments
+  CallExpression callee arguments -> lowerValueCall lowerExpression lowerBlock state spanValue callee arguments
   MemberExpression receiver (Located _ member)
     | Located _ (NameExpression (owner :| [])) <- receiver
     , Just lowered <- lowerConstant lowerExpression state spanValue [owner, member] -> lowered
@@ -430,26 +497,21 @@ lowerExpression state (Located spanValue expression) = case expression of
     , Just key <- resolveFunction state [owner, member], Just entry <- lookup key (contextTable (lowerContext state)) ->
         lowerFunctionValue state spanValue key entry
     | Located _ (NameExpression (owner :| [])) <- receiver
+    , Just lowered <- lowerForeignValue state spanValue [owner, member] -> lowered
+    | Located _ (NameExpression (owner :| [])) <- receiver
     , Just lowered <- lowerCallbackValue state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
     | member == "unregister"
     , Just lowered <- lowerCallbackUnregisterValue lowerExpression state spanValue receiver -> lowered
     | Just lowered <- lowerMethodValue lowerExpression state spanValue receiver member -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
-  IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
-    (lowerRangeIndex lowerExpression state receiver key <|> lowerArrayIndex lowerExpression state spanValue receiver key)
+  IndexExpression receiver key -> lowerBracketIndex lowerExpression state spanValue receiver key
   RangeExpression low inclusive high -> lowerRangeValue lowerExpression state spanValue low inclusive high
   TryExpression operand -> lowerTry lowerExpression state spanValue operand
   -- Awaiting runs the task's body now; a failure it answers leaves this
   -- function as `?` would.
   AwaitExpression target -> case lowerExpression state target of
-    (after, Just (task, CoreFunctionType [] answered)) ->
-      let (let', ran) = released after spanValue task answered
-       in case answered of
-            CoreSumType "Result" _ -> unwrapOrLeave let' spanValue ran answered
-            _ -> (let', Just (ran, answered))
-    (after, Just (stopped, CoreNeverType)) -> (after, Just (stopped, CoreNeverType))
-    (after, Just (_, kind)) -> halt spanValue ("awaiting a " <> coreTypeName kind <> " value") after
+    (after, Just (task, _)) -> lowerAwaited after spanValue task
     (after, Nothing) -> refused after
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
   -- `(x,)` is a tuple of one member, as the evaluator holds it.
@@ -465,10 +527,10 @@ lowerExpression state (Located spanValue expression) = case expression of
     lowerTraitMethodValue lowerExpression state spanValue provider member
   -- `identity[Int]` as a value: the copy the written type arguments select.
   TypeApplication inner written -> lowerExpression (writtenTypeArguments state spanValue inner written) inner
-  RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
-    maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])
+  RecordExpression (ModuleName ("::constructor::" :| [owner, label])) [] ->
+    lowerConstructorValue lowerExpression state spanValue owner label
   RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields
-  RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
+  RecordUpdateExpression written source fields -> lowerRecordUpdate lowerExpression state spanValue (writtenLabel written) source fields
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block
         refusalCount = length . contextRefusals . lowerContext
@@ -476,25 +538,21 @@ lowerExpression state (Located spanValue expression) = case expression of
           then refused after
           else typed after (CoreBlockValue coreBlock) resultType
   IfExpression condition thenBlock (Just elseExpression) ->
-    case lowerExpression state condition of
-      (afterCondition, Just (coreCondition, conditionType))
-        | conditionType `elem` [CoreBoolType, CoreNeverType] ->
-          let (afterThen, coreThen, thenType) = lowerBlock afterCondition thenBlock
-           in case lowerExpression afterThen elseExpression of
-                (afterElse, Just (coreElse, elseType))
-                  | Just resultType <- joinType thenType elseType ->
-                      typed afterElse (CoreIfValue coreCondition coreThen coreElse) (eagerType resultType [coreCondition])
-                  -- Branches of different implementing types widen to the dynamic type the `if` has.
-                  | Just expected <- typeForSpan (contextTypes (lowerContext afterElse)) spanValue, isDynamic expected
-                  , let widenedThen = widenBlock (contextTypes (lowerContext afterElse)) expected coreThen
-                        widenedElse = widen (contextTypes (lowerContext afterElse)) expected coreElse
-                  , all (`elem` [expected, CoreNeverType]) [blockType (coreBlockStatements widenedThen) (coreBlockResult widenedThen), coreExpressionType widenedElse] ->
-                      typed afterElse (CoreIfValue coreCondition widenedThen widenedElse) (eagerType expected [coreCondition])
-                  | otherwise ->
-                      halt (locatedSpan elseExpression) "an if whose branches have different types" afterElse
-                (afterElse, Nothing) -> refused afterElse
-      (afterCondition, Just (_, conditionType)) ->
-        halt (locatedSpan condition) ("an if condition of type " <> coreTypeName conditionType) afterCondition
+    case lowerCondition StrictCondition spanValue lowerExpression state condition of
+      (after, Just stopped@(_, CoreNeverType)) -> (after, Just stopped)
+      (afterCondition, Just (coreCondition, _)) ->
+        let (afterThen, coreThen, thenType) = lowerBlock afterCondition thenBlock
+            thenValue = CoreExpression (locatedSpan thenBlock) thenType (CoreBlockValue coreThen)
+            branch value' = case coreExpressionShape value' of
+              CoreBlockValue entered -> entered
+              _ -> CoreBlock [] (Just value')
+         in case lowerExpression afterThen elseExpression of
+              (afterElse, Nothing) -> refused afterElse
+              (afterElse, Just (coreElse, _)) ->
+                let checked = typeForSpan (contextTypes (lowerContext afterElse)) spanValue
+                 in case joinBranchValues afterElse checked [thenValue, coreElse] of
+                      Just (ready, result, [yes, no]) -> typed ready (CoreIfValue coreCondition (branch yes) no) result
+                      _ -> halt (locatedSpan elseExpression) "an if whose branches have incompatible native layouts" afterElse
       (afterCondition, Nothing) -> refused afterCondition
   IfExpression _ _ Nothing ->
     case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of
@@ -523,6 +581,44 @@ lowerExpression state (Located spanValue expression) = case expression of
     -- `Shape.Circle(3)`: the receiver names a type, not a local.
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
+    selectedMemberCall callee receiver member arguments current held place =
+      lowerSelectedMember lowerExpression (\ready selected -> heldMember callee receiver member arguments ready selected place)
+        current spanValue callee member arguments held
+    heldMember callee receiver member arguments current held place =
+      unqualified fieldCall <|> unqualified collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
+     where
+      -- A checked trait member names neither a field nor a builtin method.
+      (provider, plain) = selectedMember member
+      unqualified found = maybe found (const Nothing) provider
+      kind = coreExpressionType held
+      types = contextTypes (lowerContext current)
+      checked owner = case typeForSpan types (locatedSpan receiver) of
+        Just expected | ownerKeyOf expected == Just owner -> expected
+        _ -> kind
+      fieldCall = do
+        field <- recordFields types kind >>= lookup plain
+        let reading = CoreExpression callee field (CoreField plain held)
+            name = Located callee (MemberExpression receiver (Located callee plain))
+            lowerFieldValue ready syntax
+              | locatedSpan syntax == callee = (ready, Just (reading, field))
+              | otherwise = lowerExpression ready syntax
+            context = lowerContext current
+            opened = current{lowerContext = context{contextTypes = withFacts [(callee, unformed field)] types}}
+            (after, result) = lowerValueCall lowerFieldValue lowerBlock opened spanValue name arguments
+         in Just (after{lowerContext = (lowerContext after){contextTypes = types}}, result)
+      collection = do
+        owner <- ownerKeyOf kind
+        let specialize = specializeTraversalCallback lowerExpression lowerBlock
+        if plain == "toText" || plain `notElem` builtinMethodNamesFor owner then Nothing else
+          case kind of
+            CoreArrayType element ->
+              let input = case checked owner of
+                    CoreArrayType declared -> declared
+                    _ -> element
+               in Just (lowerArrayMethod lowerExpression lowerArrayCallback specialize current spanValue input held plain arguments)
+            CoreRangeType -> Just (lowerRangeMethod lowerExpression lowerArrayCallback specialize current spanValue held plain arguments)
+            _ | treeType kind -> Just (lowerKeyedMethod lowerExpression current spanValue (checked owner) held plain arguments)
+            _ -> Nothing
     -- With no method of that name, a call reads the field and calls what it holds.
     functionField receiver member = case typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver) of
       Just kind@(CoreRecordType _ _) | Just (CoreFunctionType _ _) <- recordFields (contextTypes (lowerContext state)) kind >>= lookup member -> True

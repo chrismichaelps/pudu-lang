@@ -6,9 +6,14 @@
 module Pudu.Compiler.Lower.Scope (released, lowerScope, leaving, leavingLoop) where
 
 import Data.Text (Text)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
-import Pudu.Compiler.Lower.State (LoopFrame (..), LowerState (..), bindLocal)
-import Pudu.Compiler.Lower.Types (nativeValueType)
+import Pudu.Compiler.Lower.Dynamic (projectRuntimeValue, runtimeCarriers)
+import Pudu.Compiler.Lower.Loan (loanedValue)
+import Pudu.Compiler.Lower.State (LoopFrame (..), LowerContext (..), LowerState (..), bindLocal)
+import Pudu.Compiler.Lower.Sum (constructVariant)
+import Pudu.Compiler.Lower.Types (nativeValueType, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block, Located (..))
 import Pudu.Source (Span)
@@ -85,16 +90,53 @@ joinAll state at (_ : outer) =
     stops, since nothing can carry it. -}
 failing :: LowerState -> Span -> (LowerState, [CoreStatement])
 failing state at = case maybe (lowerDeclaredResult state) Just (lowerFunctionResult state) of
-  Just result@(CoreSumType "Result" [_, failure]) | nativeValueType failure ->
-    let carrier = CoreTupleType [failure]
-        (bound, kept) = bindLocal state "" carrier
-        present = CoreExpression at CoreBoolType (CoreKernel KernelPresent [] [reading at kept])
-        answer = CoreExpression at result (CoreConstruct "Err" [("0", CoreExpression at failure (CoreTupleIndex 0 (reading at kept)))])
-     in (bound, [ CoreStatement at (CoreDeclare kept (host at carrier "scope_stashed" []))
-                , CoreStatement at (CoreIf (CoreExpression at CoreBoolType (CoreNot present)) (CoreBlock [stopped] Nothing) Nothing)
-                , CoreStatement at (CoreReturn (Just answer)) ])
+  Just expected ->
+    let candidates = [(result, declared, held)
+          | result@(CoreSumType "Result" native) <- Set.toList (runtimeCarriers expected)
+          , [_, declared] <- [fst (sumCarrierParts native)]
+          , Just variants <- [sumVariants types result]
+          , variant <- variants, coreVariantName variant == "Err"
+          , [(_, held)] <- [coreVariantFields variant] ]
+        failures = Set.toList (Set.unions
+          [ Set.fromList [declared, held] <> Map.findWithDefault Set.empty declared known
+          | (_, declared, held) <- candidates ])
+        (ready, probes) = foldl' (probe expected candidates) (state, []) failures
+     in (ready, reverse probes <> [stopped])
   _ -> (state, [stopped])
  where
+  context = lowerContext state
+  types = contextTypes context
+  known = Map.unionWith Set.union (contextTaskFailures context) (contextObservedTaskFailures context)
+  probe expected candidates (current, done) failure
+    | not (nativeValueType failure) = (current, done)
+    | otherwise =
+        let carrier = CoreTupleType [failure]
+            (bound, kept) = bindLocal current "" carrier
+            present = CoreExpression at CoreBoolType (CoreKernel KernelPresent [] [reading at kept])
+            payload = CoreExpression at failure (CoreTupleIndex 0 (reading at kept))
+         in case select expected bound payload candidates of
+              Nothing -> (current, done)
+              Just (ready, answer) ->
+                let recorded
+                      | lowerFlexibleResult ready = ready
+                          {lowerObservedReturns = lowerObservedReturns ready <> runtimeCarriers (coreExpressionType answer)}
+                      | otherwise = ready
+                    (final, returned) = loanedValue recorded at answer
+                    branch = CoreStatement at (CoreIf present (CoreBlock
+                      [CoreStatement at (CoreReturn (Just returned))] Nothing) Nothing)
+                    saved = CoreStatement at (CoreDeclare kept (host at carrier "scope_stashed" []))
+                 in (final, branch : saved : done)
+  select _ _ _ [] = Nothing
+  select expected current payload ((result, declared, actual) : rest)
+    | let failure = coreExpressionType payload
+    , failure `elem` [declared, actual] || Set.member failure (Map.findWithDefault Set.empty declared known)
+    , (built, Just (rebuilt, _)) <- constructVariant current at result "Err" [("0", payload)] =
+        let (ready, projected) = projectRuntimeValue types built expected rebuilt
+         in if coreExpressionType projected == expected then Just (ready, projected)
+              else case select expected current payload rest of
+                Nothing | lowerFlexibleResult current -> Just (built, rebuilt)
+                selected -> selected
+    | otherwise = select expected current payload rest
   stopped = CoreStatement at (CoreEvaluate (CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing
     (CoreExpression at CoreTextType (CoreTextLiteral "a task joined by this scope failed where its function answers no such failure")) Nothing)))
 

@@ -26,8 +26,8 @@ functions serves every program.
 `length` is the distance between the ends, plus one when inclusive, and nought
 when the end is below the start; past Int it is E7005. A method that needs the
 values fails with E7004 naming itself when an end is missing. `step` refuses a
-stride below one before it looks at the ends. `sum` adds exactly in 128 bits
-and fails with E7005 only when the total does not fit. Two ranges compare by
+stride below one before it looks at the ends. `sum` computes the exact
+arithmetic progression and fails with E7005 only when the total does not fit. Two ranges compare by
 start, then end, then inclusiveness, an absent end sorting first.
 
 ## Resolved Grill Log
@@ -35,10 +35,10 @@ start, then end, then inclusiveness, an absent end sorting first.
 - **Q:** Why a box rather than five loose values? **A:** A range is a value
   that is passed, stored in collections and compared; a box keeps it one cell
   like every other aggregate.
-- **Q:** Why sum by iteration rather than a formula? **A:** The evaluator adds
-  the values one at a time over exact integers, and only the final total must
-  fit. A 128-bit accumulator holds every partial sum of 64-bit values over any
-  range that can be walked, so the answer and the failure are the same.
+- **Q:** Why use a progression formula? **A:** The number of terms times
+  the sum of the first and last included terms is always even. Exact
+  multiplication and division preserve the final checked result without
+  walking the interval.
 - **Q:** Where do the failure texts come from? **A:** Each helper takes its
   sites, so the message names the method the program called.
 
@@ -49,3 +49,18 @@ start, then end, then inclusiveness, an absent end sorting first.
 ## Referenced by
 
 [[Backend Emit Range]] · [[Backend Frame Program]] · [[Native Range Values]] · [[src/Pudu/Backend/_MOC]]
+
+## Exact endpoint storage
+
+A range owns one exact integer for each present endpoint. Its flags
+preserve absence and inclusiveness. Comparison, rendering, contains,
+and finite extent use the original endpoints. The sum uses the exact
+arithmetic progression formula.
+
+Resolved Grill Log: a stored end and its presence are independent,
+since zero has an empty integer allocation. Compare before converting
+for a narrower consumer. Drop both owned ends with the range.
+
+## Exact held range strides
+
+Resolved Grill Log: Compute the stepped result count as one plus the exact quotient of extent minus one by stride. Allocate only the selected terms.

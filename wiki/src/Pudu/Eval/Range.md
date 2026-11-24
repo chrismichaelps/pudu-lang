@@ -122,3 +122,7 @@ DEPTH 0.60 (MEDIUM). Two ends, one rule, and one place that answers what is miss
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Operator Access]] · [[Eval Loop]] · [[Eval Call]]
+
+## Exact held range strides
+
+Resolved Grill Log: Step advances by the original positive mathematical stride and constructs only the selected terms. Narrowing a positive stride can change the progression or produce a zero divisor.

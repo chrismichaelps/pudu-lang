@@ -17,10 +17,11 @@ arrayHelpers kind element =
   [ helper "drop" (["array"] <> [aggregateNeed "drop" element | isAggregate element])
       ([ "static void " <> name "drop" <> "(pudu_box *box) {"
       , "  if (box == NULL || --box->count != 0) return;"
-      , "  {"
-      , "    pudu_items *items = box->fields[0].items;" ]
-      <> [ "    for (size_t i = 0; i < items->length; ++i) " <> released element (cell "items" "i") | ownedType element ]
-      <> [ "    free(items);", "  }", "  free(box);", "}" ])
+      ]
+      <> (if ownedType element then
+        [ "  pudu_items *items = box->fields[0].items;"
+        , "  for (size_t i = 0; i < items->length; ++i) " <> released element (cell "items" "i") ] else [])
+      <> [ "  pudu_array_release_storage(box);", "}" ])
   , helper "copy" ("array" : retainNeeds)
       [ "/* A fresh array of the same items with room for extra more. */"
       , "static pudu_box *" <> name "copy" <> "(pudu_box *box, size_t extra) {"

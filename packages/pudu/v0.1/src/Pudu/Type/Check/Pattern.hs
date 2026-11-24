@@ -12,6 +12,7 @@ module Pudu.Type.Check.Pattern
 
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -88,7 +89,7 @@ reportUnknownQualifiedConstructor declared patternSpan path =
             (Just "check the variant name against the type declaration")
         Nothing -> do
           ownsMembers <- qualifiesSomething qualifier
-          if ownsMembers
+          if Set.member qualifier (declaredQualifiers declared) || ownsMembers
             then
               True <$ report "E3033" patternSpan (qualifier <> " exports no " <> name)
                 (Just ("check the spelling against " <> qualifier))

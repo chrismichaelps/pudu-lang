@@ -127,3 +127,23 @@ no longer refuse a signature by themselves; their bodies still refuse any
 construct the backend cannot represent. Resolved Grill Log: a task's caller
 sees a function of nothing answering the body's answer, while the lifted body
 keeps its own parameter ABI.
+
+## Settled runtime result carriers (#956)
+
+Resolved Grill Log: a reachable internal function's observed carriers
+choose its native result layout once the lowering pass has settled.
+The signature remains immutable within a pass.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: An internal async signature settles its task carrier from the body that creates it.
+
+## Inferred loan parameter layouts (#956)
+
+Resolved Grill Log: a named parameter's source site makes its
+observed layout available during signature admission, before caller
+arguments and finals are lowered.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: Use the position of a loaned parameter within its native body for layout discovery.

@@ -338,3 +338,41 @@ Carry checked Objective-C dispatch metadata alongside the ordinary foreign cross
 ## Resolved Grill Log for Objective-C delegates
 
 Lowering resolves a delegate constructor call through `lookupDelegate` and emits a `CoreDelegateNew` operation. The call takes the group token as its only runtime argument.
+
+## Concrete checked dynamic payloads (#956)
+
+Resolved Grill Log: link proven widening facts from all checked modules
+before forming native shapes. A fully settled nominal application that
+reaches a dynamic value may contribute a distinct variant. The ordinary
+standalone lowering entry still accepts its existing inputs.
+
+## Variant discovery through the reachable worklist (#956)
+
+Resolved Grill Log: start with concrete proofs, then instantiate the
+proofs whose complete spans belong to visited generic bodies. Repeat
+lowering only when discovery extends the immutable layout table. Signatures,
+dispatch arms, and final layouts all use that same table. Provisional
+refusals are replaced by the settled pass's results.
+
+## Settling internal function result carriers (#956)
+
+Resolved Grill Log: replay the reachable program when a body observes
+a new native return carrier. Seed the next pass's signatures with the
+accumulated observations. Caller slots and actual function returns share
+one final ABI. Exported and loaned signatures remain fixed.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: Replay lowering if a reachable callable template changes. A caller may be lowered before the function that constructs its callable value.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: The worklist settles task closure results and observed failure carrier layouts before frame emission.
+
+## Native mutable loan layouts (#956)
+
+Resolved Grill Log: Observe the ordinary result of a loaned body separately from the tuple carrying its mutable finals.
+
+## Mutable slot layout discovery (#956)
+
+Resolved Grill Log: Replay lowering when a mutable binding demands a new layout. Each replay retains the known demands for later writes.

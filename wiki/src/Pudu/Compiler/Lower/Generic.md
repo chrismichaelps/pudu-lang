@@ -7,6 +7,13 @@ aliases: [Compiler Lower Generic]
 ---
 # Compiler Lower Generic
 
+## Concrete held call arguments
+
+Resolved Grill Log. Specialize the body whenever a represented
+argument differs from its admitted slot. A single concrete held
+layout can be the source of that difference. Keep omitted parameters
+and the hidden supplied count in their declared positions.
+
 ## Purpose and interface
 
 Copies of generic bodies under [[Native Generics]].
@@ -123,3 +130,35 @@ from [[Compiler Lower Body]]: it reads checking's recorded tuple at
 `typeArgumentsKey` first, then forms what the call wrote. Resolved Grill Log:
 the application's written arguments belong with the specialization they feed,
 and keeping them here leaves the body module below the size target.
+
+## Widening proofs in specialized bodies (#956)
+
+Resolved Grill Log: reuse the specialization substitution for checked
+dynamic payloads. Descend into restricted function types so their enclosed
+types settle with the copy's other bindings.
+
+## Runtime call copies (#956)
+
+Resolved Grill Log: a direct call and a method callback can request the
+same exact native input signature. The instance keeps checking's
+substitution and uses the result settled for that copy. Async and loaned
+parameters retain their established signatures.
+
+Resolved Grill Log: a copy's key uses its source specialization and
+complete parameter layout. Retargeting a retained copy can reuse an
+existing body with that layout.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: Internal async functions use exact input copies. Calling the copy creates a deferred task.
+
+## Native mutable loan layouts (#956)
+
+Resolved Grill Log: Specialized loaned parameters use the held place layout. Ordinary arguments can widen independently.
+
+Resolved Grill Log: apply demands to the mutable parameters of a
+native signature copy after its key has been chosen.
+
+## Stored mutable parameter layouts (#956)
+
+Resolved Grill Log: Keep native copy keys independent of layout demands discovered inside the body.

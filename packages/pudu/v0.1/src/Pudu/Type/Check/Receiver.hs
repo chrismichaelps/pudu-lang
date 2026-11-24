@@ -1,5 +1,5 @@
 {-| @Type.Check.Receiver — specializes a method to its bound receiver once -}
-module Pudu.Type.Check.Receiver (bindReceiver) where
+module Pudu.Type.Check.Receiver (bindReceiver, specializeBareSelf) where
 
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker)

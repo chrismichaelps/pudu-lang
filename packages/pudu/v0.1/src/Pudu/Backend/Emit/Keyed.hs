@@ -93,8 +93,21 @@ entryHelpers opening closing kind key value =
       , "  free(nodes);"
       , "  return shown;"
       , "}" ]
-  ] <> wordHelpers <> wordQueries
+  ] <> lookupDefaults <> wordHelpers <> wordQueries
  where
+  lookupDefaults =
+    [ helper "lookup_default" (["tree_find", aggregateNeed "ops" kind] <> needs <> snd (retained value ""))
+        [ "static " <> cType value <> " " <> name "lookup_default" <> "(pudu_box *box, " <> cType key <> " key) {"
+        , "  pudu_cell probe;"
+        , "  probe." <> cellName key <> " = key;"
+        , "  const pudu_tree_node *found = pudu_tree_find(box->fields[0].tree, probe, " <> ops <> ");"
+        , "  if (found == NULL) return " <> missing <> ";"
+        , "  return " <> fst (retained value ("found->value." <> cellName value)) <> ";"
+        , "}" ]
+    | Just (missing, needs) <- [case value of
+        CoreArrayType{} -> Just ("pudu_array_new(0)", ["array"])
+        CoreIntegerType PlatformSigned -> Just ("pudu_make(UINT64_C(0), 0)", ["make"])
+        _ -> Nothing] ]
   wordQueries =
     [ helper operation ["tree_word_predicate", aggregateNeed "ops" kind]
         [ "static int " <> name operation <> "(pudu_box *left, pudu_box *right) {"

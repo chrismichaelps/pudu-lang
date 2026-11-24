@@ -329,3 +329,10 @@ arguments while following a rigid constructor's bounds. Assert actual checker
 products, canonical implementation trait projection, authored syntax and spans;
 retain full existing dispatch, diagnostic, derive and cache gates.
 See [[Bound Receiver Evidence Delivery]].
+
+## Proven dynamic widenings (#956)
+
+Resolved Grill Log: each successful obligation records the full span,
+trait identity and payload type. Publication applies the final checker
+substitution. Retain rigid parameters for a later specialization and
+keep these facts local to this module's analysis.

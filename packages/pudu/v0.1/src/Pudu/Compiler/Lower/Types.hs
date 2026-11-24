@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withShapesFrom, withBindings, withFacts, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget, referenceTarget, loanedInputs
   , dynamicIdentity, isDynamic, unformed, writtenLabel, selectedMember, formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType, treeType ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
@@ -10,9 +10,9 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName)
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, recordCarrierParts, runtimeChoiceAlternatives, runtimeChoiceKey, sumCarrierParts)
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (BigIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind, PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindName, integerKindOf)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
@@ -49,6 +49,10 @@ withShapes :: Map NominalId ([Text], [(Text, Type)]) -> Map NominalId ([Text], [
 withShapes records sums handles callbacks (LowerTypes info schemes _ bindings) =
   LowerTypes info schemes (Shapes records sums handles callbacks) bindings
 
+withShapesFrom :: LowerTypes -> LowerTypes -> LowerTypes
+withShapesFrom (LowerTypes _ _ shapes _) (LowerTypes info schemes _ bindings) =
+  LowerTypes info schemes shapes bindings
+
 withBindings :: Map Text CoreType -> LowerTypes -> LowerTypes
 withBindings bindings (LowerTypes info schemes shapes _) = LowerTypes info schemes shapes bindings
 
@@ -70,6 +74,7 @@ lentTarget other = other
 {-| The positions of a function type's `&mut` inputs. -}
 loanedInputs :: Type -> [Int]
 loanedInputs value = case value of
+  RestrictedType _ inner -> loanedInputs inner
   FunctionTypeRequiring _ inputs _ _ -> [index | (index, ReferenceTypeValue True _) <- zip [0 ..] inputs]
   _ -> []
 
@@ -160,6 +165,8 @@ formedWith shapes seen parameters value = case value of
   DynamicTypeValue identity
     | Map.member (dynamicIdentity identity) (shapeSums shapes) ->
         formedWith shapes seen parameters (NominalType (dynamicIdentity identity) [])
+  NominalType (NominalId Nothing key) arguments
+    | key == runtimeChoiceKey -> CoreSumType key <$> traverse (formedWith shapes seen parameters) arguments
   -- A variable checking left open names a type no value in the program has:
   -- the error of an `Ok(1)` that is never `Err`, the member of `setOf([])`,
   -- the argument of a `setOf` that is only compared. Nothing can observe how
@@ -261,14 +268,27 @@ sumVariants types kind = case layoutOf types kind of
 {-| How a record or sum named in Core is laid out. -}
 layoutOf :: LowerTypes -> CoreType -> Maybe CoreLayout
 layoutOf (LowerTypes _ _ shapes _) kind = case kind of
-  CoreRecordType name arguments -> do
+  _ | Just alternatives <- runtimeChoiceAlternatives kind ->
+    Just (CoreSumLayout [CoreVariant name [("0", held)] False | (name, held) <- alternatives])
+  CoreRecordType name native -> do
     (names, fields) <- named name (shapeRecords shapes)
-    let bound = Map.fromList (zip names arguments)
-    CoreRecordLayout <$> traverse (\(field, fieldType) -> (,) field <$> form bound fieldType) fields
-  CoreSumType name arguments -> do
+    let (arguments, overridden) = recordCarrierParts native
+        bound = Map.fromList (zip names arguments)
+    if length names /= length arguments then Nothing else
+      case overridden of
+        Just slots | length slots == length fields -> Just (CoreRecordLayout (zip (map fst fields) slots))
+        Just _ -> Nothing
+        Nothing -> CoreRecordLayout <$> traverse (\(field, fieldType) -> (,) field <$> form bound fieldType) fields
+  CoreSumType name native -> do
     (names, variants) <- named name (shapeSums shapes)
-    let bound = Map.fromList (zip names arguments)
-    CoreSumLayout <$> traverse (variant bound) variants
+    let (arguments, overridden) = sumCarrierParts native
+        bound = Map.fromList (zip names arguments)
+    if length names /= length arguments then Nothing else do
+      declared <- traverse (variant bound) variants
+      let nativeVariants
+            | isDynamic kind = declared <> concatMap exactIntVariant declared
+            | otherwise = declared
+      CoreSumLayout <$> maybe (Just nativeVariants) (replacePayload nativeVariants) overridden
   _ -> Nothing
  where
   form = formedWith shapes [] 
@@ -276,6 +296,17 @@ layoutOf (LowerTypes _ _ shapes _) kind = case kind of
     members <- traverse (form bound) payload
     let labels = maybe (map (Text.pack . show) [0 .. length members - 1]) id fields
     Just (CoreVariant name (zip labels members) (fields /= Nothing))
+  exactIntVariant entry = case coreVariantFields entry of
+    [(field, CoreIntegerType PlatformSigned)] ->
+      [entry{coreVariantName = coreVariantName entry <> "$exact", coreVariantFields = [(field, CoreIntegerType ExactIntKind)]}]
+    _ -> []
+  replacePayload [] [] = Just []
+  replacePayload (declared : rest) slots =
+    let names = map fst (coreVariantFields declared)
+        (members, remaining) = splitAt (length names) slots
+     in if length members /= length names then Nothing else
+          (declared{coreVariantFields = zip names members} :) <$> replacePayload rest remaining
+  replacePayload [] _ = Nothing
   -- Core names a record or sum by its canonical key, so two modules' types of
   -- one spelling stay apart.
   named key table = case [entry | (identity, entry) <- Map.toList table, nominalKey identity == key] of
@@ -303,6 +334,7 @@ nativeIntegerKind PlatformUnsigned = True
 nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64, 128]
 nativeIntegerKind BigIntKind = True
+nativeIntegerKind ExactIntKind = True
 
 nativeScalarType :: CoreType -> Bool
 nativeScalarType (CoreIntegerType kind) = nativeIntegerKind kind
@@ -342,8 +374,8 @@ nativeValueType other = nativeScalarType other
     made from, builtins by their own name. -}
 unformed :: CoreType -> Type
 unformed kind = case kind of
-  CoreRecordType key arguments -> NominalType (identityOf key) (map unformed arguments)
-  CoreSumType key arguments -> NominalType (identityOf key) (map unformed arguments)
+  CoreRecordType key arguments -> NominalType (identityOf key) (map unformed (fst (recordCarrierParts arguments)))
+  CoreSumType key arguments -> NominalType (identityOf key) (map unformed (fst (sumCarrierParts arguments)))
   CoreFunctionType inputs result -> FunctionTypeValue False (map unformed inputs) (unformed result)
   CoreArrayType member -> NominalType (NominalId Nothing "Array") [unformed member]
   CoreMapType key value -> NominalType (NominalId Nothing "Map") [unformed key, unformed value]
@@ -370,6 +402,6 @@ keyIdentity key = case NonEmpty.nonEmpty (Text.splitOn "." key) of
     arguments it already has. -}
 constructorOf :: CoreType -> Maybe (Text, [CoreType])
 constructorOf kind = case kind of
-  CoreRecordType key prefix -> Just (key, prefix)
-  CoreSumType key prefix -> Just (key, prefix)
+  CoreRecordType key prefix -> Just (key, fst (recordCarrierParts prefix))
+  CoreSumType key prefix -> Just (key, fst (sumCarrierParts prefix))
   _ -> Nothing

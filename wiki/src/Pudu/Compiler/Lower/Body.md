@@ -522,3 +522,129 @@ reaches method and field lowering.
 
 A tuple, record, or sequence binding whose subject transfers control stops
 block lowering at that subject. It introduces no bindings or projections.
+
+## Foreign callable lookup (#956)
+
+After closer names and declared functions, a bare or qualified foreign
+declaration can be read through [[Compiler Lower Foreign]] as a value.
+
+### Resolved Grill Log
+
+The existing qualifier and local lookup rules apply to a callable read.
+
+## Checked aggregate branch joins (#956)
+
+Resolved Grill Log: when branch carriers differ, try the checked result
+carrier for both. A tuple, array or variant can widen dynamic members in
+place. Individual branch results and Never retain their original effects
+and transfers.
+
+## Local bindings with runtime alternatives (#956)
+
+Resolved Grill Log: a checked annotation remains the source contract.
+A local initialized from a runtime selection holds its concrete native
+alternatives. Subsequent reads and writes use that local carrier.
+
+## Explicit runtime return carriers (#956)
+
+Resolved Grill Log: internal synchronous bodies report the carrier their
+explicit returns produced. A replay projects it to the settled native
+signature. Return still preserves scope joins and unreachable operands.
+
+## Compound local carriers (#956)
+
+Resolved Grill Log: an annotation may retain native alternatives nested
+inside its initializer's carrier. The local and reads agree on the layout.
+
+Resolved Grill Log: ordinary assignments use the same projection as
+held-place assignments. Both statement and tail-position forms store
+through the local's established carrier.
+
+## Array callback inputs (#956)
+
+Resolved Grill Log: array lowering can request an expected native
+parameter layout while checking's facts continue to govern source name
+resolution and annotations. Ordinary expression lowering remains the
+entry for receivers and arguments with unchanged layouts.
+
+## Stored callable dispatch (#956)
+
+Resolved Grill Log: Indirect calls and array callbacks share callable adaptation. Written and stored callbacks keep their source name resolution.
+
+Resolved Grill Log: supply the bound traversal specializer to collection
+dispatch along with the source callback lowerer. A saved callback uses the
+retained operands rather than re-lowering their source expressions.
+
+## Runtime layouts in products (#956)
+
+Resolved Grill Log: An if joining different product carriers gives both branches a shared native product layout. Branch effects and transfers still run only on their original paths.
+
+## Runtime layouts in sum payloads (#956)
+
+Resolved Grill Log: Conditionals treat sums with the same declared type as aggregates and join their physical payload layouts.
+
+## Native task result layouts (#956)
+
+Resolved Grill Log: Await selects the held task and its result layout, then propagates a Result failure through the same continuation as try.
+
+## Mutable slot layout discovery (#956)
+
+Resolved Grill Log: Initialize a mutable binding with the settled layout required by its writes. The initializer still runs once at the declaration.
+
+Resolved Grill Log. Concrete held replacements and runtime alternatives
+both contribute when they cannot project to the current slot.
+
+Resolved Grill Log. Pass the written binding kind into both
+destructuring paths. [[Compiler Lower Place]] owns local publication.
+
+## Held runtime conditions
+
+Resolved Grill Log. Pass the written record name into native update
+lowering so a held non-record reports the source diagnostic.
+
+Resolved Grill Log. A checked positional constructor reference
+uses [[Compiler Lower Sum]] for its callable or nullary value form.
+
+Resolved Grill Log. Statement and value conditions share
+[[Compiler Lower Control]]'s held-value validation. If a condition
+transfers, its branches are unreachable.
+
+Resolved Grill Log. If results use [[Compiler Lower Control]]'s
+branch layout join. Project the selected arm after its effects and
+leave the other arm unevaluated.
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.
+
+## Exact dynamic Int payloads
+
+Resolved Grill Log: An annotated binding projects selected payloads into the declared dynamic layout. The stored value retains its exact payload.
+
+## Held collection member selection
+
+Resolved Grill Log: Choose collection builtins from the held receiver family. The checked element or key layout still guides typed arguments when the actual receiver belongs to that same family.
+
+## Held declared method receivers
+
+Resolved Grill Log: Selected declared receivers can resolve builtins, record fields or another declared method from the held layout without replaying the source receiver.
+
+Resolved Grill Log: a declared call's held receiver can carry its
+original place into the selected method. A field read or collection
+builtin consumes only the value.
+
+Resolved Grill Log: builtin-first and declared-first lookup both
+deliver the original receiver place to a selected nominal method.
+
+Resolved Grill Log: [[Compiler Lower Slice]] selects a bracket
+operation after the receiver and key run. Both scalar and range
+checking use that entry.
+
+Resolved Grill Log: tuple-checked reads use the same bracket entry
+and retain the direct slot operation for held tuples.
+
+Resolved Grill Log: sequence and let-else binding declarations
+enter the enclosing block together, and an impossible binding
+stops lowering subsequent statements.
+
+Resolved Grill Log: a held member call passes the written member name to member dispatch. A trait-qualified member names neither a record field nor a builtin collection method, so only declared lookup can answer it.

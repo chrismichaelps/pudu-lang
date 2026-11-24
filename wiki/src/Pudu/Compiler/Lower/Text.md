@@ -76,3 +76,46 @@ is what `readCharMember` finds before any impl; other Char members refuse.
 ## Native byte views (#827)
 
 Export lowerTextPrimitive and textCallable in addition to lowerTextMethod. Consume the six exact checked builtin signatures; hold operands once left-to-right and stop on Never before later arguments. Build ordinary Option/tuple values with guarded byte/scalar reads. Search once into an Int local, branch on nonnegative result, then construct Some or None. Direct calls require the solved result; callable registration supplies its validated result explicitly. See [[Native Text Views]].
+
+## Selected receiver layouts (#956)
+
+Resolved Grill Log: Select the held receiver before emitting a text or character operation. A missing member fails at the callee before argument effects.
+
+## Selected invocation arguments (#956)
+
+Resolved Grill Log: Use the selected argument slots after all arguments run. An incompatible argument takes the string method’s invocation diagnostic.
+
+## Selected text-view operands
+
+Text-view primitives retain each operand before choosing the compatible
+held layout, using the same argument messages from direct and stored
+invocations. A stored method reports wrong arguments at its caller.
+
+Resolved Grill Log: a selected incompatible text alternative reports
+the primitive's type diagnostic after later operand effects. Declared
+nominal methods keep lookup priority over the general renderer.
+
+## Integer limits
+
+A selected integer count feeds the scalar position operations through
+their existing clamping rules. Repeat checks positive counts beyond
+the runtime limit before narrowing and keeps the empty-text case.
+Byte-addressed reads yield None for out-of-range held positions.
+
+Resolved Grill Log: negative counts reach the same refusal as ordinary
+Int counts. A view never treats an out-of-range bound as an exact
+position, even when the clamped position is a valid boundary.
+
+## Held collection member selection
+
+Resolved Grill Log: Select the held receiver before delegating collection and nominal members. A missing member evaluates the receiver and stops before argument expressions.
+
+## Held declared method receivers
+
+Resolved Grill Log: A receiver already selected by declared-method dispatch follows the same member selection and missing-member diagnostic as a selected builtin receiver.
+
+Resolved Grill Log: evaluate the receiver through [[Compiler Lower Place]]
+before selecting its builtin family. Carry its optional place into
+nominal fallback. Builtins use the retained value without writeback.
+
+Resolved Grill Log: builtin lookup uses the unqualified member while the missing-member diagnostic reports the written name.
