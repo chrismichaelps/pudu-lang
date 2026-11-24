@@ -79,3 +79,10 @@ before testing the held base. A held record keeps its owner and
 fields. A written replacement for a missing field runs for its
 effects. A non-record base reports the evaluator's E7001 at the
 update after the field effects, unless an operand already transferred.
+
+## Held member reads
+
+Resolved Grill Log. A member read selects the held layout and reads
+its field, including fields of a named sum variant. A held field
+takes priority over a declared method. Preserve the actual result
+layout and the receiver's missing-member diagnostic.

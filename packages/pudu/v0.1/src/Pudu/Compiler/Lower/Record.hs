@@ -6,11 +6,12 @@ import Data.List (mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.MethodValue (lowerHeldDeclaredMember)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Sum (constructVariant)
-import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, sumVariants, typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, selectedMember, sumVariants, typeForSpan)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, recordWithFields, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, storageCarrier, widen)
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
 import Pudu.Source (Span)
 
@@ -124,17 +125,57 @@ lowerField lower state at receiver member = case lower state receiver of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
   (after, Just (core, _)) -> case select after core of
-    (ready, Just value) -> (ready, Just (value, coreExpressionType value))
+    (ready, Just value) ->
+      let checked = typeForSpan (contextTypes (lowerContext ready)) at
+          carried = maybe value (`preserveRuntimeResult` value) checked
+       in (ready, Just (carried, coreExpressionType carried))
     (ready, Nothing) -> refused ready
  where
   select current core
     | Just selected <- mapRuntimeChoice current at CoreNeverType core select = fmap (fmap fst) selected
-    | CoreRecordType{} <- kind = case recordFields (contextTypes (lowerContext current)) kind >>= lookup member of
-        Just fieldKind -> (current, Just (CoreExpression at fieldKind (CoreField member core)))
-        Nothing -> halt at ("the member '" <> member <> "'") current
-    | otherwise = halt at ("member access on " <> coreTypeName kind) current
+    | Just fieldKind <- recordFields types kind >>= lookup plain =
+        (current, Just (CoreExpression at fieldKind (CoreField plain core)))
+    | CoreSumType owner _ <- kind, Just variants <- sumVariants types kind =
+        let (bound, saved) = bindLocal current "" kind
+            held = reading saved
+            (ready, arms) = mapAccumL (variantMember held owner) bound variants
+            finish choices =
+              let result = joinRuntimeArms at CoreNeverType held choices
+               in CoreExpression at (coreExpressionType result)
+                    (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare saved core)] (Just result)))
+         in (ready, finish <$> sequence arms)
+    | otherwise = fallback current core (missingRuntimeMember at plain core)
    where
     kind = coreExpressionType core
+    types = contextTypes (lowerContext current)
+  plain = snd (selectedMember member)
+  reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
+  fallback current value failure =
+    maybe (current, Just failure) (fmap (fmap fst)) (lowerHeldDeclaredMember lower current at receiver member value)
+  variantMember held owner current variant
+    | isDynamic (coreExpressionType held), [(_, payload)] <- members =
+        let (bound, local) = bindLocal current "" payload
+            (ready, answer) = select bound (reading local)
+         in (ready, CoreArm at (CoreVariantPattern tag [CoreBindPattern local]) Nothing <$> answer)
+    | coreVariantRecord variant
+    , Just fieldKind <- lookup plain members =
+        let (ready, local) = bindLocal current "" fieldKind
+            pattern' = CoreVariantPattern tag
+              [if label == plain then CoreBindPattern local else CoreWildcardPattern | (label, _) <- members]
+         in (ready, Just (CoreArm at pattern' Nothing (reading local)))
+    | not (coreVariantRecord variant), tag == plain =
+        (current, Just (CoreArm at tagged Nothing held))
+    | otherwise =
+        let reported = if coreVariantRecord variant then owner else tag
+            message = CoreExpression at CoreTextType
+              (CoreTextLiteral ("no field or method " <> plain <> " on a " <> reported))
+            failure = CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing message Nothing)
+            (ready, answer) = fallback current held failure
+         in (ready, CoreArm at tagged Nothing <$> answer)
+   where
+    tag = coreVariantName variant
+    members = coreVariantFields variant
+    tagged = CoreVariantPattern tag (map (const CoreWildcardPattern) members)
 
 lowerFields :: LowerExpression -> LowerState -> [Located FieldInit] -> (LowerState, Maybe [(Text, CoreExpression)])
 lowerFields lower state = go state []

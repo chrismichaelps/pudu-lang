@@ -4,7 +4,7 @@
     method on it through the same lowering a written call gets. -}
 module Pudu.Compiler.Lower.MethodValue
   ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue
-  , boundMemberFact, declaredMemberType ) where
+  , boundMemberFact, declaredMemberType, lowerHeldDeclaredMember ) where
 
 import Control.Applicative ((<|>))
 import qualified Data.Set as Set
@@ -67,6 +67,25 @@ boundMemberFact kind signature = case signature of
 intrinsicTextFact :: CoreType -> Type
 intrinsicTextFact CoreBytesType = FunctionTypeValue False [] (NominalType "Option" [stringType])
 intrinsicTextFact _ = FunctionTypeValue False [] stringType
+
+lowerHeldDeclaredMember :: LowerExpression -> LowerState -> Span -> Located Expression -> Text
+  -> CoreExpression -> Maybe Lowered
+lowerHeldDeclaredMember lower state at receiver member value = do
+  let context = lowerContext state
+      actual = coreExpressionType value
+      (provider, plain) = selectedMember member
+      builtin = isNothing provider && maybe False (elem plain . builtinMethodNamesFor) (ownerKeyOf actual)
+      declared = declaredMemberType context actual member >>= boundMemberFact actual
+  (fact, universal) <- case declared of
+    Just found | not builtin -> Just (found, False)
+    _ | plain == "toText" ->
+          Just (intrinsicTextFact actual, actual `notElem` [CoreCharType, CoreBytesType])
+      | otherwise -> Nothing
+  kind <- formedCoreTypeIn (contextTypes context) fact
+  let key = (if universal then textMethodPrefix else "$method:") <> member
+        <> ":" <> Text.pack (show actual) <> ":" <> Text.pack (show kind)
+      (ready, registered) = registerMethodValue lower state at receiver member key (Just actual) kind fact
+  pure (ready, (\exact -> (CoreExpression at exact (CoreClosure key [value]), exact)) <$> registered)
 
 formedInputCount :: Type -> Int
 formedInputCount (FunctionTypeRequiring _ inputs required _) =

@@ -97,6 +97,10 @@ Resolved Grill Log: Copy arrays or keyed values into a wider element layout thro
 
 ## Selected receiver layouts (#956)
 
+Resolved Grill Log. A receiver with no nominal member namespace
+reports its held kind. A nominal receiver reports its method
+namespace.
+
 Resolved Grill Log: Report the held value kind at a failed member read or index. Preserve the evaluator’s distinct names for nominal members and index failures.
 
 ## Exact Int argument layouts

@@ -179,13 +179,12 @@ runtimeBox kind tag value = CoreExpression (coreExpressionSpan value) kind (Core
 missingRuntimeMember :: Span -> Text -> CoreExpression -> CoreExpression
 missingRuntimeMember at member held = case coreExpressionType held of
   CoreSumType{} -> failedWithKind at ("no field or method " <> member <> " on a ") held
-  CoreTupleType{} -> failedWithKind at ("cannot read " <> member <> " from a ") held
-  kind ->
-    let owner = maybe (coreStaticRuntimeKind kind) id (ownerKeyOf kind)
-        message = CoreExpression at CoreTextType (CoreTextLiteral ("no field or method " <> member <> " on a " <> owner))
+  kind | Just owner <- ownerKeyOf kind ->
+    let message = CoreExpression at CoreTextType (CoreTextLiteral ("no field or method " <> member <> " on a " <> owner))
         failure = CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing message Nothing)
         evaluated = CoreStatement (coreExpressionSpan held) (CoreEvaluate held)
      in CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [evaluated] (Just failure)))
+  _ -> failedWithKind at ("cannot read " <> member <> " from a ") held
 
 invalidRuntimeIndex :: LowerState -> Span -> CoreExpression -> [CoreExpression] -> (LowerState, CoreExpression)
 invalidRuntimeIndex state at receiver operands =

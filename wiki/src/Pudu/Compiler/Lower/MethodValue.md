@@ -7,6 +7,10 @@ aliases: [Compiler Lower Method Value]
 ---
 # Compiler Lower Method Value
 
+Resolved Grill Log. When a field-checked read selects a declared
+method, derive its bound signature from the held receiver and use
+ordinary method-value registration.
+
 Export lowerMethodValue. For a member expression on a text, array, map, set,
 range, char or bytes receiver whose fact is a function type, lower the
 receiver once and answer a closure over it. The lifted body, keyed by method,

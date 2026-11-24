@@ -9,7 +9,27 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("aggregate constructors retain concrete held values and written effects", program
+    ("a record-checked read keeps a named variant's held field", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { value: Int }", "type Payload = Named{value: Str} | Empty" ] <>
+        selectedIterable "Checked" "Checked{value: 1}" "Payload" "Named{value: \"held\"}" <>
+        [ "fn main() -> Int {"
+        , "  let value: Int = choose(\"λ\".toBytes()).items().value"
+        , "  print(show(value))"
+        , "  0", "}" ])
+    , "receiver\nitems\n\"held\"\n", "")
+  , ("a record-checked read can retain the held declared method", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { value: Int }"
+        , "type Held = { count: Int }"
+        , "trait Read { fn value(self: &Self) -> Int }"
+        , "impl Read for Held { fn value(self: &Self) -> Int { self.count } }"
+        ] <> selectedIterable "Checked" "Checked{value: 1}" "Held" "Held{count: 4}" <>
+        [ "fn main() -> Int {"
+        , "  print(show(choose(\"λ\".toBytes()).items().value))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<fn value>\n", "")
+  , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"
         , "fn main() -> Int {"
@@ -856,7 +876,13 @@ renderingCallableSuccessPrograms =
 renderingCallableRefusalPrograms :: [(String, Text)]
 renderingCallableRefusalPrograms =
   [
-    ("a record update reports a held non-record after the written fields", program
+    ("a record read reports the missing field against the held record owner", heldFieldProgram
+      [ "type Other = { extra: Int }" ] "Other" "Other{extra: 7}")
+  , ("a named sum read reports the missing field against the sum owner", heldFieldProgram
+      [ "type Other = Named{extra: Int} | Empty" ] "Other" "Named{extra: 7}")
+  , ("a record read on a held tuple reports its receiver kind", heldFieldProgram
+      [] "(Int, Int)" "(3, 4)")
+  , ("a record update reports a held non-record after the written fields", program
       (selectedReceiverTypes <>
         [ "type Wanted = { first: Int, second: Int }" ] <>
         selectedIterable "Wanted" "Wanted{first: 1, second: 2}" "Str" "\"not a record\"" <>
@@ -1241,6 +1267,14 @@ heldConditionProgram :: [Text] -> Text
 heldConditionProgram body = program
   (selectedReceiverTypes <> selectedIterable "Bool" "self.length() > 0" "Str" "\"wrong\"" <>
     ["fn main() -> Int {"] <> body <> ["  0", "}"])
+
+heldFieldProgram :: [Text] -> Text -> Text -> Text
+heldFieldProgram declarations held heldBody = program
+  (selectedReceiverTypes <> ["type Checked = { value: Int }"] <> declarations <>
+    selectedIterable "Checked" "Checked{value: 1}" held heldBody <>
+    [ "fn main() -> Int {"
+    , "  print(show(choose(\"λ\".toBytes()).items().value))"
+    , "  0", "}" ])
 
 selectedByteConversion :: [Text]
 selectedByteConversion =

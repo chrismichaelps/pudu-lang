@@ -622,10 +622,17 @@ evaluating the written fields. [[Backend Rendering Callable
 Programs]] covers field effects, missing fields and a non-record
 base.
 
+## Held member reads
+
+Architect → Backend Engineer. [[Compiler Lower Record]] selects
+fields from a retained record or named payload. [[Compiler Lower
+Method Value]] handles declared method fallback, and [[Compiler
+Lower Dynamic]] supplies the receiver's diagnostic wording.
+
 ## Next action
 
-Preserve held field and missing-member diagnostics in ordinary
-record member reads.
+Derive a retained builtin method value from the held receiver when
+its member was checked as a different field or callable shape.
 
 ## Referenced by
 

@@ -6,6 +6,12 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Held member reads
+
+Resolved Grill Log. Read a held named payload and render a declared
+method selected where a field was checked. Verify missing-member
+diagnostics after receiver effects.
+
 ## Concrete held aggregate construction
 
 Resolved Grill Log. Construct records, updates, arrays, sets and
