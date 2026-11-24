@@ -78,6 +78,7 @@ data CallableSource
   | LiftedCallable !LowerTypes !Text !Text !Span !Function !CoreType ![CoreType] ![CoreLocal]
   | MethodCallable !LowerTypes !Text !Span !(Located Expression) !Text !(Maybe CoreType) !CoreType !Type
   | IntrinsicCallable !Span !Text !CoreType
+  | ConstructorCallable !Text !Text !CoreType
 
 callableTemplateLayout :: CallableTemplate -> (CoreType, [CoreType])
 callableTemplateLayout template =
@@ -85,7 +86,8 @@ callableTemplateLayout template =
     NamedCallable{} -> []
     LiftedCallable _ _ _ _ _ _ _ captures -> map coreLocalType captures
     MethodCallable _ _ _ _ _ bound _ _ -> foldMap pure bound
-    IntrinsicCallable{} -> [])
+    IntrinsicCallable{} -> []
+    ConstructorCallable{} -> [])
 
 {-| An implementation's head: its own parameters and their bounds, the type
     it is for, and the trait's arguments, all in those parameters. A

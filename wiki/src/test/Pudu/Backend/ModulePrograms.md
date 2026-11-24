@@ -7,6 +7,10 @@ aliases: [Backend Module Programs]
 ---
 # Backend Module Programs
 
+Resolved Grill Log. Retain a positional constructor through two import
+spellings, compare it, render its bare tag, order it within a tuple,
+and call it after passing it through a function.
+
 Word-map algebra (#810): register successes and refusals from [[Backend Word Map Programs]] in the ordinary module corpora. Resolved Grill Log: focused
 groups supplement these complete gates rather than replacing existing cases.
 ## Complete carried frozen data (#808)

@@ -12,6 +12,7 @@ import Pudu.Backend.Emit.Cell
   , memberCompare, memberEqual, number )
 import Pudu.Backend.Emit.Support (isBigInteger, isWideInteger)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..))
+import Pudu.Core.Closure (constructorIdentity)
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 
 data Comparison = Equality | Ordering
@@ -82,18 +83,30 @@ compareBody identities layouts comparison left right
         let key = CoreIntegerType PlatformSigned
          in tree [(key,key,"key"),(a,b,"value")]
       (CoreFunctionType{}, CoreFunctionType{})
-        | Equality <- comparison
-        , Just (CoreClosureLayout a) <- Map.lookup left layouts
-        , Just (CoreClosureLayout b) <- Map.lookup right layouts -> closures a b
+        | Just (CoreClosureLayout a) <- Map.lookup left layouts
+        , Just (CoreClosureLayout b) <- Map.lookup right layouts -> case comparison of
+            Equality -> closures a b
+            Ordering -> mconcat
+              [ whenConstructor "a" indexA (whenConstructor "b" indexB (constant (compare keyA keyB)))
+              | (indexA, keyA) <- constructors a, (indexB, keyB) <- constructors b ] <> ranked
+      (CoreFunctionType{}, CoreSumType owner _)
+        | Just (CoreClosureLayout a) <- Map.lookup left layouts
+        , Just (CoreSumLayout b) <- Map.lookup right layouts ->
+            constructorSum "a" "b" id a owner b
+      (CoreSumType owner _, CoreFunctionType{})
+        | Just (CoreSumLayout a) <- Map.lookup left layouts
+        , Just (CoreClosureLayout b) <- Map.lookup right layouts ->
+            constructorSum "b" "a" reverseOrder b owner a
       _ -> case comparison of
         Equality -> code ["return 0;"]
         Ordering -> case numericPayloadOrder left right "a" "b" of
           Just (needs, body) -> (needs, [], ["int order; (void)order;"] <> body)
-          Nothing ->
-            let (rankA, needsA) = payloadRank left "a"
-                (rankB, needsB) = payloadRank right "b"
-             in (needsA <> needsB, [], ["return " <> rankOrder rankA rankB <> ";"])
+          Nothing -> ranked
  where
+  ranked =
+    let (rankA, needsA) = payloadRank left "a"
+        (rankB, needsB) = payloadRank right "b"
+     in (needsA <> needsB, [], ["return " <> rankOrder rankA rankB <> ";"])
   finish a b av bv =
     let (expression, needs, pairs) = member comparison a b av bv
      in (needs, pairs, ["return " <> expression <> ";"])
@@ -103,6 +116,24 @@ compareBody identities layouts comparison left right
   constant order = code ["return " <> case comparison of
       Equality -> (if order == EQ then "1;" else "0;")
       Ordering -> (case order of { LT -> "-1;"; EQ -> "0;"; GT -> "1;" })]
+  constructors entries =
+    [ (index, identity)
+    | (key, info) <- entries, Just index <- [Map.lookup key identities], Just identity <- [constructorIdentity info] ]
+  whenConstructor box index body =
+    code ["if (" <> box <> "->fields[0].scalar == " <> number index <> ") {"]
+      <> indented body <> code ["}"]
+  constructorSum constructorBox sumBox order closures' owner variants =
+    mconcat
+      [ whenConstructor constructorBox index $ switch sumBox variants $ \variant members ->
+          constant (order (compare (False, declared, tag, 0 :: Int)
+            (coreVariantRecord variant, owner, coreVariantName variant, length members)))
+      | (index, (declared, tag)) <- constructors closures' ]
+    <> case comparison of
+      Equality -> invalid
+      Ordering -> ranked
+  reverseOrder LT = GT
+  reverseOrder EQ = EQ
+  reverseOrder GT = LT
   unlabelled = map (("",))
   fields first a b = go first a b
    where

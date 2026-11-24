@@ -25,3 +25,9 @@ back. No execution, inference or C spelling.
 ## Referenced by
 
 [[Pudu Core IR Module]] · [[Compiler Lower Method Value]] · [[Native Aggregate Emission]]
+
+## Retained constructors
+
+Resolved Grill Log. Encode a positional constructor's canonical owner
+and label in its callable site. Copies for different argument layouts
+share that identity. The displayed form remains the bare variant label.

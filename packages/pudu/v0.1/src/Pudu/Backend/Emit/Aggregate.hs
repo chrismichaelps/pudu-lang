@@ -14,6 +14,7 @@ module Pudu.Backend.Emit.Aggregate
   , aggregateHelper, aggregateNeed, aggregateTypes, aggregateSection
   ) where
 
+import Control.Applicative ((<|>))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -31,7 +32,7 @@ import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.Handle (handleHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
-import Pudu.Core.Closure (isTextMethod)
+import Pudu.Core.Closure (constructorIdentity, isTextMethod)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
 import Pudu.IntegerLiteral (IntegerKind (BigIntKind, ExactIntKind))
 
@@ -142,6 +143,7 @@ closureHelpers kind entries =
       <> [ "    case " <> number identity <> ": return pudu_text_literal(" <> cString kindName <> ", " <> number (cStringBytes kindName) <> ");"
          | (identity, info) <- entries
          , let kindName = case closureMethod info of
+                 _ | Just (_, tag) <- constructorIdentity info -> tag
                  _ | Just special <- crossingKind info -> special
                  _ | isTask info -> "task"
                  _ | closureIsBuiltin info -> "builtin"
@@ -152,13 +154,19 @@ closureHelpers kind entries =
   , (aggregateNeed "comparable" kind, ([],
       [ "static int " <> aggregateHelper "comparable" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
-      <> [ "    case " <> number identity <> ": return 1;" | (identity, info) <- entries, Just _ <- [crossingKind info] ]
+      <> [ "    case " <> number identity <> ": return 1;"
+         | (identity, info) <- entries, Just _ <- [fmap snd (constructorIdentity info) <|> crossingKind info] ]
       <> [ "    default: return 0;", "  }", "}" ]))
-  , (aggregateNeed "compare" kind, ([aggregateNeed "rank" kind],
+  , (aggregateNeed "compare" kind, ([aggregateNeed "rank" kind] <> [aggregateNeed "constructor_order" kind | not (null constructors)],
       [ "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {"
       , "  int left = " <> aggregateHelper "rank" kind <> "(a);"
-      , "  int right = " <> aggregateHelper "rank" kind <> "(b);"
-      , "  return (left > right) - (left < right);", "}" ]))
+      , "  int right = " <> aggregateHelper "rank" kind <> "(b);" ]
+      <> (if null constructors then [] else
+         [ "  if (left == 8 && right == 8) {"
+         , "    left = " <> aggregateHelper "constructor_order" kind <> "(a);"
+         , "    right = " <> aggregateHelper "constructor_order" kind <> "(b);"
+         , "  }" ])
+      <> [ "  return (left > right) - (left < right);", "}" ]))
   , (aggregateNeed "rank" kind, ([],
       [ "static int " <> aggregateHelper "rank" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
@@ -178,6 +186,13 @@ closureHelpers kind entries =
          | (identity, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info)) ]
       <> [ "  return 1;", "}" ]))
   ] <>
+  [ (aggregateNeed "constructor_order" kind, ([],
+      [ "static int " <> aggregateHelper "constructor_order" kind <> "(pudu_box *box) {"
+      , "  switch (box->fields[0].scalar) {" ]
+      <> [ "    case " <> number identity <> ": return " <> number order <> ";"
+         | (identity, key) <- constructors, Just order <- [Map.lookup key constructorOrder] ]
+      <> [ "    default: return -1;", "  }", "}" ]))
+  | not (null constructors) ] <>
   [ (aggregateNeed ("closure" <> number identity) kind, (concat [snd (retained member "") | (_, member) <- captures info],
       [ "static pudu_box *" <> aggregateHelper ("closure" <> number identity) kind <> "("
           <> (if null (captures info) then "void" else Text.intercalate ", " [cType member <> " m" <> number position | (position, member) <- captures info]) <> ") {"
@@ -193,11 +208,14 @@ closureHelpers kind entries =
     | "$unregister:" `Text.isPrefixOf` closureSite info = Just "callback unregister method"
     | otherwise = Nothing
   closureText info
+    | Just (_, tag) <- constructorIdentity info = tag
     | "$foreign:" `Text.isPrefixOf` closureSite info = "<foreign " <> closureDisplayName info <> ">"
     | Just crossing <- crossingKind info = "<" <> crossing <> ">"
     | isTask info = closureDisplayName info
     | otherwise = "<" <> label info <> " " <> closureDisplayName info <> ">"
   captures info = zip [0 :: Int ..] (closureCaptures info)
+  constructors = [(identity, key) | (identity, info) <- entries, Just key <- [constructorIdentity info]]
+  constructorOrder = Map.fromAscList (zip (Map.keys (Map.fromList [(key, ()) | (_, key) <- constructors])) [0 :: Int ..])
   label info
     | closureIsBuiltin info = "builtin"
     | isTextMethod info = "method"
@@ -209,6 +227,7 @@ closureHelpers kind entries =
 
 closureRank :: CoreClosureInfo -> Int
 closureRank info
+  | Just _ <- constructorIdentity info = 8
   | isTask info = 11
   | "$foreign:" `Text.isPrefixOf` site = 25
   | "$callback:" `Text.isPrefixOf` site || "$unregister:" `Text.isPrefixOf` site = 33

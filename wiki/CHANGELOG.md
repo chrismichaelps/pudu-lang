@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Retained positional constructors (#956)
+
+- Emit stored positional constructors with variant identity and
+  native call bodies. [[Compiler Lower Sum]] · [[Core Closure Identities]]
+
 ## 2026-11-23 — Concrete held sum payloads (#956)
 
 - Preserve the layout of a concrete held value in a positional or

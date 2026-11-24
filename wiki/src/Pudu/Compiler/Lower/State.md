@@ -218,6 +218,9 @@ to the frame and exclude diverging operands.
 
 ## Sanctioned runtime results for internal calls (#956)
 
+Resolved Grill Log. Retained constructor templates preserve the
+canonical owner, label and checked result for later specialization.
+
 Resolved Grill Log: keep the current pass's observations separate from
 the prior pass's settled carriers. A body can publish explicit result
 carriers while a replay is pending. Entry, lifted bodies and external

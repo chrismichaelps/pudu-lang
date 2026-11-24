@@ -132,6 +132,27 @@ modulePrograms =
         , "}"
         ]
     , "12\n10\nPoint{x: 4, y: 7}\nPoint{x: 2, y: 4}\n<tag>\n" )
+  , ( "retained constructors preserve variant identity and call through values"
+    , [ ("Packets.pudu", Text.unlines
+          ["module Packets", "export type Packet = Start(Int) | Stop(Int)"]) ]
+    , program
+        [ "import Packets as A"
+        , "import Packets as B"
+        , "fn apply(make: fn(Int) -> A.Packet, value: Int) -> A.Packet { make(value) }"
+        , "fn main() -> Int {"
+        , "  let start: fn(Int) -> A.Packet = A.Start"
+        , "  let again: fn(Int) -> B.Packet = B.Start"
+        , "  let stop: fn(Int) -> A.Packet = A.Stop"
+        , "  print(show(start))"
+        , "  print(display(start == again))"
+        , "  print(display(start == stop))"
+        , "  print(display((start, 0) < (stop, 0)))"
+        , "  print(show(apply(start, 7)))"
+        , "  print(show(stop(8)))"
+        , "  0"
+        , "}"
+        ]
+    , "Start\ntrue\nfalse\ntrue\nStart(7)\nStop(8)\n" )
   , ( "an exported sum alias uses the declaring module's constructors"
     , [ ("A.pudu", Text.unlines ["module A", "/// A sum.", "export type T = X | Y(Int)"])
       , ("B.pudu", Text.unlines ["module B", "import A", "/// A type alias.", "export type T = A.T"])

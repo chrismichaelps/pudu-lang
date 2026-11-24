@@ -7,6 +7,13 @@ aliases: [Native Aggregate Emission]
 ---
 # Native Aggregate Emission
 
+## Retained positional constructors
+
+Resolved Grill Log. A retained constructor renders and reports its
+variant label. Its canonical identity governs equality and ordering
+among constructor keys. It is an ordered empty positional sum value
+even when stored in a callable slot. [[Core Closure Identities]]
+
 ## Purpose and interface
 
 Export ownedType, ownedKinds, retained, released, cType, memberRender,

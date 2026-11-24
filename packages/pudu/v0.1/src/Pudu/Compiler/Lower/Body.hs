@@ -43,7 +43,7 @@ import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
 import Pudu.Compiler.Lower.Place (declareLocal, lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
 import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
-import Pudu.Compiler.Lower.Sum (lowerVariant)
+import Pudu.Compiler.Lower.Sum (lowerConstructorValue, lowerVariant)
 import Pudu.Compiler.Lower.Constant (lowerConstant)
 import Pudu.Compiler.Lower.Match (hasSequencePattern, ifLetArms, lowerLetElse, lowerLetSequence, lowerMatch, whileLetLoop)
 import qualified Data.Text as Text
@@ -527,8 +527,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     lowerTraitMethodValue lowerExpression state spanValue provider member
   -- `identity[Int]` as a value: the copy the written type arguments select.
   TypeApplication inner written -> lowerExpression (writtenTypeArguments state spanValue inner written) inner
-  RecordExpression written@(ModuleName ("::constructor::" :| _)) [] ->
-    maybe (halt spanValue "this constructor" state) id (lowerVariant lowerExpression state spanValue (writtenLabel written) [])
+  RecordExpression (ModuleName ("::constructor::" :| [owner, label])) [] ->
+    lowerConstructorValue lowerExpression state spanValue owner label
   RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields
   RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
   BlockExpression block ->

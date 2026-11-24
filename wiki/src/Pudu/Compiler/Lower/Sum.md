@@ -48,3 +48,11 @@ from the checked field just as a runtime alternative can. First apply
 the declared projection where valid. Keep a different concrete native
 layout in the selected variant so nested patterns read the value that
 construction actually received. [[Compiler Lower Match]]
+
+## Retained positional constructors
+
+Resolved Grill Log. Use the settled constructor type to admit the
+owner, label and arity. Generate a capture-free callable that uses
+the same payload construction as a direct call. Rebuild the callable
+from its original sum layout when a stored call supplies other native
+parameter layouts. [[Core Closure Identities]] · [[Compiler Lower Lambda]]

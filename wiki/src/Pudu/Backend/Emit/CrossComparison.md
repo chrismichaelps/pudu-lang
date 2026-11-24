@@ -6,6 +6,12 @@ aliases: [Backend Cross Comparison]
 ---
 # Backend Cross Comparison
 
+## Retained constructor ordering
+
+Resolved Grill Log. Compare canonical constructor identity across
+callable layouts. Compare a constructor against a held sum as an
+empty positional variant, including payload length when the tags agree.
+
 Generate pairs of typed equality and ordering helpers for dynamic payloads
 with different native layouts. Traverse dependent layout pairs once.
 Each side is read through its own cell member. Nominal identities,

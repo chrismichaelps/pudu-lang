@@ -592,6 +592,9 @@ destructuring paths. [[Compiler Lower Place]] owns local publication.
 
 ## Held runtime conditions
 
+Resolved Grill Log. A checked positional constructor reference
+uses [[Compiler Lower Sum]] for its callable or nullary value form.
+
 Resolved Grill Log. Statement and value conditions share
 [[Compiler Lower Control]]'s held-value validation. If a condition
 transfers, its branches are unreachable.

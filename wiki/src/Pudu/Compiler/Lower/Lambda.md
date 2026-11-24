@@ -7,6 +7,9 @@ aliases: [Compiler Lower Lambda]
 ---
 # Compiler Lower Lambda
 
+Resolved Grill Log. A retained constructor specializes through
+[[Compiler Lower Sum]], has no captures, and retains its variant identity.
+
 ## Purpose and interface
 
 Function values under [[Native Closures]].

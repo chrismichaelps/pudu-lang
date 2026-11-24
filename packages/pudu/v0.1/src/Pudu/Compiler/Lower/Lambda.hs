@@ -21,6 +21,7 @@ import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, loanedT
 import Pudu.Compiler.Lower.MethodValue (registerMethodValue)
 import Pudu.Compiler.Lower.Signature (taskResultKey, taskSignatureResult)
 import Pudu.Compiler.Lower.Scalar (namedFailure)
+import Pudu.Compiler.Lower.Sum (registerConstructor)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), CoreSignature (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite)
   , bindLocal, halt, lookupLocal, refused, startFunction )
@@ -337,6 +338,10 @@ specializeTarget lower block supplied state at key template held = case callable
          in (restored, (\kind -> CoreExpression at kind (CoreClosure name captures)) <$> exact)
   IntrinsicCallable written name checked ->
     maybe (state, Nothing) (fmap (fmap fst)) (specializeIntrinsicValue state written name checked supplied)
+  ConstructorCallable owner label declared
+    | CoreFunctionType inputs _ <- callableTemplateType template
+    , length inputs == length supplied ->
+        fmap (fmap fst) (registerConstructor state at owner label declared supplied)
   _ -> (state, Nothing)
 
 {-| A call through a value holds its target before supplied operands. -}

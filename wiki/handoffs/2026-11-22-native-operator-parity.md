@@ -584,10 +584,18 @@ concrete payload layouts in both constructor forms. [[Backend
 Rendering Callable Programs]] exercises nested literal and binding
 patterns against those layouts.
 
+## Retained positional constructors
+
+Architect → Backend Engineer. [[Compiler Lower Sum]] and [[Compiler
+Lower Lambda]] register constructor bodies and replay specialization.
+[[Core Closure Identities]], [[Native Aggregate Emission]] and the
+cross-layout comparator preserve runtime constructor identity.
+[[Backend Module Programs]] covers imported values.
+
 ## Next action
 
-Give retained positional constructors a native callable representation
-that preserves variant identity, display and call behavior.
+Audit held values passed to callable specializations when the retained
+operand has a concrete layout different from the checked parameter.
 
 ## Referenced by
 
