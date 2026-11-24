@@ -301,3 +301,5 @@ Resolved Grill Log: capture open map and reduce members through scalar
 fields in a checked record. Render the open values and invoke returned
 captures through a checked callable with concrete callback and seed types.
 Use a retained map as the callback over nonempty and empty inputs.
+Compare the open map with concrete maps on equal and unequal receivers.
+Compare bound traversals on empty arrays with distinct element layouts.

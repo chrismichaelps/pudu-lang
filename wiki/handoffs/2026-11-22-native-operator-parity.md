@@ -651,8 +651,8 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Audit builtin method equality across open and concrete callable layouts
-and preserve the same bound method identity across specializations.
+Audit map, set, and bucket method comparison when the held receivers have
+different element layouts.
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.
@@ -665,6 +665,8 @@ Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Array Loop]] owns invocation through a traversal.
 Backend Engineer → Test Engineer. [[Backend Rendering Callable Programs]]
 covers open captures, concrete calls, and empty and nonempty nested traversals.
+[[Compiler Lower Method Value]] and [[Native Aggregate Emission]] compare
+traversal values through their retained receiver layouts.
 
 Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 

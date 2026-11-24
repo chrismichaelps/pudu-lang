@@ -116,9 +116,12 @@ Resolved Grill Log: Callable show helpers use builtin versus function rendering 
 
 Show prints `<kind method name>` and the runtime kind is `kind method`, with
 the interpreter's words (text, array, map, set, range, character, byte).
-Equality compares sites, then a method closure's receivers with memberEqual.
-Resolved Grill Log: two values of one method on equal receivers are equal,
-as in the interpreter.
+Equality compares sites, then a method closure's receivers. Use the
+cross-layout helper when a site admits two capture layouts.
+Resolved Grill Log. Each side's closure index determines its capture
+layout. Seed the existing helper graph with the distinct capture pairs
+and retain the direct member comparison for shared layouts.
+[[Compiler Lower Method Value]] · [[Backend Cross Comparison]]
 
 ## Trait method closures (#646)
 

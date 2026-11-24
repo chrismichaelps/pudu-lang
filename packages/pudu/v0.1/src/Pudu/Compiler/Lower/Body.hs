@@ -582,7 +582,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
     selectedMemberCall callee receiver member arguments current held place =
-      lowerSelectedMember lowerExpression (\ready value -> heldMember callee receiver member arguments ready value place)
+      lowerSelectedMember lowerExpression (\ready selected -> heldMember callee receiver member arguments ready selected place)
         current spanValue callee (snd (selectedMember member)) arguments held
     heldMember callee receiver member arguments current held place =
       fieldCall <|> collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
@@ -595,10 +595,10 @@ lowerExpression state (Located spanValue expression) = case expression of
         _ -> kind
       fieldCall = do
         field <- recordFields types kind >>= lookup plain
-        let expression = CoreExpression callee field (CoreField plain held)
+        let reading = CoreExpression callee field (CoreField plain held)
             name = Located callee (MemberExpression receiver (Located callee plain))
             lowerFieldValue ready syntax
-              | locatedSpan syntax == callee = (ready, Just (expression, field))
+              | locatedSpan syntax == callee = (ready, Just (reading, field))
               | otherwise = lowerExpression ready syntax
             context = lowerContext current
             opened = current{lowerContext = context{contextTypes = withFacts [(callee, unformed field)] types}}

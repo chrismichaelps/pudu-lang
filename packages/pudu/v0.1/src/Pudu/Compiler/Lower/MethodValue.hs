@@ -405,7 +405,6 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
                       (_, completed) = closeLoaned ready at (CoreBlock prologue (Just carried))
                       lifted = CoreFunction key (hidden <> parameters) result completed
                       method = if traitValue then Nothing else Just receiverType
-                      identity = fst (Text.breakOn "$runtime" key)
                       info = CoreClosureInfo (foldMap pure bound) plain identity False (isJust bound) method
                       template = CallableTemplate kind (MethodCallable original (contextModule initial) at receiver member bound solved whole)
                       observed = runtimeCarriers (coreExpressionType carried)
@@ -446,7 +445,12 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
     | null loaned = ownResult
     | otherwise = CoreTupleType (ownResult : [input | (index, input) <- zip [0 ..] inputs, index `elem` loaned])
   kind = CoreFunctionType inputs result
-  plain = snd (selectedMember member)
+  (provider, plain) = selectedMember member
+  identity = case (provider, bound) of
+    (Nothing, Just CoreArrayType{}) | traversal -> "$array-method:" <> plain
+    (Nothing, Just CoreRangeType) | traversal -> "$range-method:" <> plain
+    _ -> fst (Text.breakOn "$runtime" key)
+  traversal = plain `elem` ["map", "reduce"]
   traitValue = case locatedValue receiver of
     NameExpression ("::trait-method::" :| [_]) -> True
     _ -> False

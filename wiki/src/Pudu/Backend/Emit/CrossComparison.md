@@ -33,3 +33,7 @@ Rejected: comparing variant-tag ordinals or reading one layout through another.
 
 The graph also compares callable source sites across carriers and reads
 the active callable shape when it is used as an order key.
+
+Resolved Grill Log. A bound traversal site identifies the receiver
+family and member. Both callable layouts supply their own capture
+types to the recursive equality helper. [[Compiler Lower Method Value]]

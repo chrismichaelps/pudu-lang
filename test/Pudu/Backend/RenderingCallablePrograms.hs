@@ -86,6 +86,22 @@ renderingCallableSuccessPrograms =
         , "  fn readMap(self: &Self) -> Int { choose(\"λ\".toBytes()).items().map }"
         , "  fn readReduce(self: &Self) -> Int { choose(\"λ\".toBytes()).items().reduce }"
         , "}"
+        , "trait EmptyView {"
+        , "  fn ints(self: &Self) -> Checked"
+        , "  fn texts(self: &Self) -> Checked"
+        , "}"
+        , "impl EmptyView for Str {"
+        , "  fn ints(self: &Self) -> Checked { Checked{map: 1, reduce: 2} }"
+        , "  fn texts(self: &Self) -> Checked { Checked{map: 1, reduce: 2} }"
+        , "}"
+        , "trait HeldEmptyView {"
+        , "  fn ints(self: &Self) -> Array[Int]"
+        , "  fn texts(self: &Self) -> Array[Str]"
+        , "}"
+        , "impl HeldEmptyView for Option[Str] {"
+        , "  fn ints(self: &Self) -> Array[Int] { [] }"
+        , "  fn texts(self: &Self) -> Array[Str] { [] }"
+        , "}"
         , "fn main() -> Int {"
         , "  let mapping = choose(\"λ\".toBytes()).readMap()"
         , "  let reducing = choose(\"λ\".toBytes()).readReduce()"
@@ -95,8 +111,14 @@ renderingCallableSuccessPrograms =
         , "  let empty: Array[fn(Int) -> Str] = []"
         , "  print(show([render].map(mapping)))"
         , "  print(show(empty.map(mapping)))"
+        , "  let concrete: fn(fn(Int) -> Str) -> Array[Str] = [4, 7].map"
+        , "  let different: fn(fn(Int) -> Str) -> Array[Str] = [7, 4].map"
+        , "  print(display(mapping == concrete))"
+        , "  print(display(mapping == different))"
+        , "  let receiver = choose(\"λ\".toBytes())"
+        , "  print(display(receiver.ints().map == receiver.texts().map))"
         , "  0", "}" ])
-    , "receiver\nreceiver\nitems\nreceiver\nreceiver\nitems\n[\"4\", \"7\"]\n\"seed:47\"\n[[\"4\", \"7\"]]\n[]\n", "")
+    , "receiver\nreceiver\nitems\nreceiver\nreceiver\nitems\n[\"4\", \"7\"]\n\"seed:47\"\n[[\"4\", \"7\"]]\n[]\ntrue\nfalse\nreceiver\ntrue\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"

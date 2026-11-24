@@ -303,6 +303,9 @@ fact. A later indirect invocation, including through a traversal,
 specializes the template from the retained callback or seed while
 keeping the receiver and method identity. [[Compiler Lower Lambda]] ·
 [[Compiler Lower Method Value]] · [[Compiler Lower Array Loop]].
+Open and concrete traversals compare the retained receivers through
+their own capture layouts. [[Native Aggregate Emission]] ·
+[[Backend Cross Comparison]].
 
 ## Declared method argument counts (#956)
 

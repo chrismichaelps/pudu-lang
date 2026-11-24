@@ -249,6 +249,7 @@ jsonKernelParts =
       , "  }"
       , "  return NULL;"
       , "}"
+      ])
   , ("json_decode", ["json_reader", "memory_failure"],
       [ "/* The value filling the whole text apart from whitespace, or no box. */"
       , "static pudu_box *pudu_json_decode(pudu_text source, int null_tag, int boolean_tag, int number_tag, int fractional_tag, int text_tag, int list_tag, int object_tag) {"

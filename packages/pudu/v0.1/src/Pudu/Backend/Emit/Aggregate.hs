@@ -99,6 +99,19 @@ aggregateSection identities layouts tuples needs = (concat prototypes <> concat 
     , leftVariant <- variants, [(_, left)] <- [coreVariantFields leftVariant]
     , rightVariant <- variants, [(_, right)] <- [coreVariantFields rightVariant]
     , left /= right ]
+    <> [(left, right) | kind <- tuples, Just (CoreClosureLayout entries) <- [Map.lookup kind layouts]
+                      , (_, left, _, right) <- differentMethodCaptures entries]
+
+differentMethodCaptures :: [(key, CoreClosureInfo)] -> [(key, CoreType, key, CoreType)]
+differentMethodCaptures entries =
+  [ (a, left, b, right)
+  | members <- Map.elems sites
+  , (left, leftKeys) <- Map.toList members, (right, rightKeys) <- Map.toList members, left /= right
+  , a <- leftKeys, b <- rightKeys ]
+ where
+  sites = Map.fromListWith (Map.unionWith (<>))
+    [(closureSite info, Map.singleton capture [key])
+    | (key, info) <- entries, Just _ <- [closureMethod info], capture : _ <- [closureCaptures info]]
 
 helpers :: Map Text Int -> Layouts -> CoreType -> [(Text, ([Text], [Text]))]
 helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
@@ -172,7 +185,8 @@ closureHelpers kind entries =
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return " <> number (closureRank info) <> ";" | (identity, info) <- entries ]
       <> [ "    default: return 10;", "  }", "}" ]))
-  , (aggregateNeed "equal" kind, (concat [snd (memberEqual receiver "" "") | (_, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info))],
+  , (aggregateNeed "equal" kind, (concatMap snd crossEquality
+      <> concat [snd (memberEqual receiver "" "") | (_, receiver) <- methodReceivers],
       [ "static int " <> aggregateHelper "site" kind <> "(pudu_box *box) {"
       , "  switch (box->fields[0].scalar) {" ]
       <> [ "    case " <> number identity <> ": return " <> number (siteNumber info) <> ";" | (identity, info) <- entries ]
@@ -181,9 +195,10 @@ closureHelpers kind entries =
          , "  if (" <> aggregateHelper "site" kind <> "(a) != " <> aggregateHelper "site" kind <> "(b)) return 0;" ]
       -- A method value also carries its receiver, and equal receivers are
       -- what make two of them equal.
+      <> map fst crossEquality
       <> [ "  if (a->fields[0].scalar == " <> number identity <> ") return "
              <> fst (memberEqual receiver (capture "a" 0 receiver) (capture "b" 0 receiver)) <> ";"
-         | (identity, info) <- entries, Just receiver <- [closureMethod info], not (null (closureCaptures info)) ]
+         | (identity, receiver) <- methodReceivers ]
       <> [ "  return 1;", "}" ]))
   ] <>
   [ (aggregateNeed "constructor_order" kind, ([],
@@ -202,6 +217,13 @@ closureHelpers kind entries =
       <> [ "  return box;", "}" ]))
   | (identity, info) <- entries ]
  where
+  methodReceivers = [(identity, member) | (identity, info) <- entries
+                    , Just _ <- [closureMethod info], member : _ <- [closureCaptures info]]
+  crossEquality =
+    [ ("  if (a->fields[0].scalar == " <> number a <> " && b->fields[0].scalar == " <> number b <> ") return "
+        <> answer <> ";", needs)
+    | (a, left, b, right) <- differentMethodCaptures entries
+    , let (answer, needs) = differentLayoutCall Equality left right (capture "a" 0 left) (capture "b" 0 right) ]
   crossingKind info
     | "$foreign:" `Text.isPrefixOf` closureSite info = Just "foreign function"
     | "$callback:" `Text.isPrefixOf` closureSite info = Just ("callback registration " <> closureDisplayName info)
