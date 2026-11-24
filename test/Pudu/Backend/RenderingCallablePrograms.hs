@@ -9,7 +9,29 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("rendering builtin signatures and identities coexist", program
+    ("iteration keeps the layouts and order of a held heterogeneous tuple", program
+      (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "(Int, Str, Bool)" "(3, \"four\", true)" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).items() { print(show(item)) }"
+        , "  0", "}" ])
+    , "receiver\nitems\n3\n\"four\"\ntrue\n", "")
+  , ("a loop skips incompatible held elements and still reaches later items", program
+      (selectedReceiverTypes <> selectedIterable "Array[(Int, Int)]" "[(7, 8)]"
+        "(Array[Int], (Int, Int), Array[Int], (Int, Int))" "([1, 2], (3, 4), [5, 6], (7, 8))" <>
+        [ "fn main() -> Int {"
+        , "  for (first, last) in choose(\"λ\".toBytes()).items() {"
+        , "    print(display(first + last))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n7\n15\n", "")
+  , ("an entirely impossible held binder skips the body", program
+      (selectedReceiverTypes <> selectedIterable "Array[(Int, Int)]" "[(7, 8)]" "Array[Array[Int]]" "[[1, 2]]" <>
+        [ "fn main() -> Int {"
+        , "  for (first, _) in choose(\"λ\".toBytes()).items() { print(display(first)) }"
+        , "  print(\"done\")"
+        , "  0", "}" ])
+    , "receiver\nitems\ndone\n", "")
+  , ("rendering builtin signatures and identities coexist", program
       [ "fn main() -> Int {"
       , "  let integer: fn(Int) -> Str = display"
       , "  let text: fn(Str) -> Str = display"
@@ -927,6 +949,11 @@ renderingCallableRefusalPrograms =
         , "  let index = choose(\"λ\".toBytes()).indexOf(\"window\")"
         , "  print(show(inspect(&mut values[index])))"
         , "  0", "}" ]))
+  , ("a noniterable held value fails after effects from the source", program
+      (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "Int" "42" <>
+        [ "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).items() { print(display(item)) }"
+        , "  0", "}" ]))
   , ("a shorter held tuple reports bounds after evaluating the receiver", program
       (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int)" "(1, 2)" <>
         [ "fn main() -> Int {"
@@ -989,6 +1016,18 @@ selectedReceiverTypes =
   , "fn choose(value: dynamic View) -> Str {"
   , "  print(\"receiver\")"
   , "  value.toText()"
+  , "}"
+  ]
+
+selectedIterable :: Text -> Text -> Text -> Text -> [Text]
+selectedIterable checked checkedBody held heldBody =
+  [ "trait CheckedIterable { fn items(self: &Self) -> " <> checked <> " }"
+  , "impl CheckedIterable for Str {"
+  , "  fn items(self: &Self) -> " <> checked <> " { print(\"items\")\n " <> checkedBody <> " }"
+  , "}"
+  , "trait HeldIterable { fn items(self: &Self) -> " <> held <> " }"
+  , "impl HeldIterable for Option[Str] {"
+  , "  fn items(self: &Self) -> " <> held <> " { print(\"items\")\n " <> heldBody <> " }"
   , "}"
   ]
 

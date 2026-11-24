@@ -514,10 +514,18 @@ use recorded import qualifiers for missing exports in #993.
 [[Program Graph Spec]] covers static refusals and
 [[Backend Module Programs]] covers the valid declaring-module route.
 
+## Held iterable and binder layouts
+
+Architect → Backend Engineer. [[Compiler Lower For]] owns held source
+dispatch and cursor selection. [[Compiler Lower Match]] shares the
+structural impossibility check. [[Backend Rendering Callable Programs]]
+covers the held sources and binder skips. Local execution is deferred
+until emission coding is complete.
+
 ## Next action
 
-Preserve shapes and runtime diagnostics for iteration binders when
-the held element differs from its checked layout.
+Preserve the held state and result when a declared sequence's advance
+method returns a different native layout.
 
 ## Referenced by
 

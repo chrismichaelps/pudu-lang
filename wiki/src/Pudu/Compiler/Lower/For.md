@@ -104,3 +104,16 @@ consumes only the prefix reached by the loop.
 ## Exact Int layout
 
 Resolved Grill Log: The exact cursor advances at mathematical precision. An out-of-range binder value exposes Int identity.
+
+## Held iterable and binder layouts
+
+Select the loop from the retained iterable value. Use the evaluator's order
+for built-in sources, declared sequence methods, and sum payloads. A value
+outside these sources reports E7001 at the loop after the iterable ran.
+Tuples and sum payloads keep their individual layouts in an array of the
+actual item carriers. Empty payloads evaluate the source and yield unit.
+
+Resolved Grill Log. The lowered value already carries the representation
+that the loop must read. Dispatch before building a cursor. A binder proved
+impossible by [[Compiler Lower Match]] skips its body and leaves the cursor
+advance intact. [[Backend Rendering Callable Programs]]

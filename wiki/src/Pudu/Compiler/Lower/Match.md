@@ -137,3 +137,9 @@ Resolved Grill Log: isolate captures in every alternative and project
 new names to shared slots after that alternative matches. Use the
 same projection for selected runtime tags and written alternatives.
 A guard runs once after the first structural success.
+
+## Statically impossible loop binders
+
+Resolved Grill Log. Export the structural impossibility check to
+[[Compiler Lower For]]. The same check that skips unreachable match arms
+also skips a loop body whose binder cannot match the retained element.

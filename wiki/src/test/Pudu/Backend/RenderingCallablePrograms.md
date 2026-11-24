@@ -6,6 +6,13 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Held iteration sources
+
+Resolved Grill Log. Cover a tuple with different held item layouts,
+a checked tuple binder presented with arrays, and a noniterable scalar.
+Assert iteration order, binder skips, and a diagnostic after the source
+effects. [[Compiler Lower For]]
+
 Export renderingCallableSuccessPrograms (explicit stdout/stderr) and
 renderingCallableRefusalPrograms (runtime failures). Cover simultaneously
 specialized display/show, identity, primitive/aggregate/callable arguments,

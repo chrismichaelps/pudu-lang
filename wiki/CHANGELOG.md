@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held iteration sources (#956)
+
+- Select iteration from the retained source and skip impossible
+  binders. Report noniterable values at the loop after evaluating the
+  source. [[Compiler Lower For]] · [[Compiler Lower Match]]
+
 ## 2026-11-23 — Type-only module qualifiers (#993)
 
 - Report missing constructor exports through modules that publish only

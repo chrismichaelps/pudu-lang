@@ -2,16 +2,17 @@
     `begin` and `advance`, as an ordinary native loop. -}
 module Pudu.Compiler.Lower.For (lowerFor) where
 
+import Data.List (mapAccumL)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailureWith, collectArguments, exactPosition)
 import Pudu.Compiler.Lower.Control (droppedTail, popLoop, pushLoop)
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
-import Pudu.Compiler.Lower.Match (lowerPattern)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType)
+import Pudu.Compiler.Lower.Match (impossiblePattern, lowerPattern)
 import Pudu.Compiler.Lower.Method (callInstance)
 import Pudu.Compiler.Lower.Range (selectRangeEndpoint, selectRangeItems)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
-import Pudu.Compiler.Lower.Types (ownerKeyOf, sumVariants, typeForSpan)
+import Pudu.Compiler.Lower.Types (ownerKeyOf, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block, Expression (..), Located (..), Pattern)
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -23,7 +24,7 @@ type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
 
 {-| The loop's value is unit whatever its body does, as `evaluateFor` answers.
     A range written in the head is walked from its two ends, which run once,
-    start first; anything else must be a type with `begin` and `advance`. -}
+    start first. Other sources are walked according to their held layout. -}
 lowerFor :: LowerExpression -> LowerBlock -> LowerState -> Span -> Maybe (Located Text) -> Located Pattern -> Located Expression -> Located Block -> Lowered
 lowerFor lower block state at label binder iterated body = case locatedValue iterated of
   RangeExpression (Just start) inclusive (Just end) ->
@@ -35,77 +36,70 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
         , all ((== intType) . coreExpressionType) bounds -> walkRange after inclusive low high
         | [low, high] <- bounds -> writtenRange after inclusive low high
         | otherwise -> refused after
-  _ -> case typeForSpan (contextTypes (lowerContext state)) (locatedSpan iterated) of
-    Just CoreArrayType{} -> case lower state iterated of
-      (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-      (after, Just (core, kind@(CoreArrayType itemKind))) -> walkArray after core kind itemKind
-      (after, Just _) -> halt (locatedSpan iterated) "a for loop without an array receiver" after
-      (after, Nothing) -> refused after
-    -- A map walks its entries, a set its members and a Str its characters,
-    -- listed before the body runs.
-    Just CoreMapType{} -> keyed
-    Just CoreSetType{} -> keyed
-    Just CoreTextType -> listed CoreCharType (simply CoreCharType (\core -> CoreTextMethod TextChars core []))
-    -- A range value walks its values; one missing an end cannot be walked.
-    Just CoreRangeType -> case lower state iterated of
-      (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-      (after, Just (core, _)) -> walkStoredRange after core
-      (after, Nothing) -> refused after
-    Just kind@(CoreTupleType members@(first : _))
-      | all (== first) members -> listed first (membersOf kind first members)
-    Just kind
-      | Just owner <- ownerKeyOf kind
-      , Just begin <- Map.lookup (owner, "begin") (contextMethods (lowerContext state))
-      , Just advance <- Map.lookup (owner, "advance") (contextMethods (lowerContext state)) ->
-          case lower state iterated of
-            (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-            (after, Just (core, _)) -> walkSequence after core kind begin advance
-            (after, Nothing) -> refused after
-    -- With no sequence of its own, a sum walks the payload of the variant it
-    -- holds, as the evaluator falls back to doing.
-    Just kind@(CoreSumType _ _)
-      | Just variants <- sumVariants (contextTypes (lowerContext state)) kind
-      , (itemKind : others) <- concatMap (map snd . coreVariantFields) variants
-      , all (== itemKind) others -> listed itemKind (payloadsOf itemKind variants)
-    Just kind -> halt (locatedSpan iterated) ("a for loop over a " <> coreTypeName kind) state
-    Nothing -> halt (locatedSpan iterated) "a for loop over this value" state
- where
-  keyed = case lower state iterated of
-    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, _)) -> selectKeyed after core
+  _ -> case lower state iterated of
     (after, Nothing) -> refused after
-  selectKeyed current core
+    (after, Just (core, _)) -> selectIterable after core
+ where
+  selectIterable current core
     | Just selected <- mapRuntimeChoice current at CoreUnitType core
-        (\after held -> fmap (fmap fst) (selectKeyed after held)) = selected
-    | CoreMapType key value <- coreExpressionType core = walkKeyed current core (CoreTupleType [key, value]) KeyedEntries
-    | CoreSetType member <- coreExpressionType core = walkKeyed current core member KeyedKeys
-    | otherwise = halt (locatedSpan iterated) "a for loop without a keyed receiver" current
+        (\after held -> fmap (fmap fst) (selectIterable after held)) = selected
+    | otherwise = case coreExpressionType core of
+        CoreNeverType -> (current, Just (core, CoreNeverType))
+        kind@(CoreArrayType itemKind) -> walkArray current core kind itemKind
+        CoreMapType key value -> walkKeyed current core (CoreTupleType [key, value]) KeyedEntries
+        CoreSetType member -> walkKeyed current core member KeyedKeys
+        CoreTextType ->
+          let kind = CoreArrayType CoreCharType
+           in walkArray current (expression kind (CoreTextMethod TextChars core [])) kind CoreCharType
+        CoreRangeType -> walkStoredRange current core
+        kind@(CoreTupleType members) -> walkTuple current core kind members
+        kind
+          | Just owner <- ownerKeyOf kind
+          , let methods = contextMethods (lowerContext current)
+          , Just begin <- Map.lookup (owner, "begin") methods
+          , Just advance <- Map.lookup (owner, "advance") methods ->
+              walkSequence current core kind begin advance
+        kind
+          | Just variants <- sumVariants (contextTypes (lowerContext current)) kind ->
+              walkPayload current core variants
+        _ ->
+          let message = binary CoreAdd CoreTextType
+                (expression CoreTextType (CoreTextLiteral "cannot iterate a "))
+                (expression CoreTextType (CoreRuntimeKind core))
+           in (current, Just (iterationFailure message, CoreNeverType))
+  iterationFailure = argumentFailureWith AtInvocation at "E7001"
+    (Just "implement Std.Iter.Sequence for it, which is begin and advance, or convert it to an array first")
   walkKeyed current core member method =
     let kind = CoreArrayType member
      in walkArray current (expression kind (CoreKeyedMethod method core [])) kind member
-  listed itemKind toArray = case lower state iterated of
-    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-    (after, Just (core, _)) ->
-      let (ready, array) = toArray after core
-       in walkArray ready array (CoreArrayType itemKind) itemKind
-    (after, Nothing) -> refused after
-  simply itemKind shape current core = (current, expression (CoreArrayType itemKind) (shape core))
-  -- The tuple runs once into a local; its members are read from there.
-  membersOf kind itemKind members current core =
-    let (withTuple, tupleLocal) = hidden current kind
-        arrayKind = CoreArrayType itemKind
-        held = [expression member (CoreTupleIndex position (reading tupleLocal)) | (position, member) <- zip [0 ..] members]
-     in (withTuple, expression arrayKind (CoreBlockValue (CoreBlock [statement (CoreDeclare tupleLocal core)] (Just (expression arrayKind (CoreArray held))))))
-  -- One arm per variant, each answering its payload as an array.
-  payloadsOf itemKind variants current core =
-    let arrayKind = CoreArrayType itemKind
-        arm (now, done) variant =
-          let fields = coreVariantFields variant
-              (next, locals) = foldl (\(here, bound) _ -> let (after', local) = hidden here itemKind in (after', bound <> [local])) (now, []) fields
-              answer = expression arrayKind (CoreArray (map reading locals))
-           in (next, done <> [CoreArm at (CoreVariantPattern (coreVariantName variant) (map CoreBindPattern locals)) Nothing answer])
-        (final, arms) = foldl arm (current, []) variants
-     in (final, expression arrayKind (CoreMatch core arms))
+  walkTuple current core kind members = case members of
+    [] -> emptyIterable current core
+    first : _ ->
+      let itemKind = runtimeResultType first (foldMap runtimeCarriers members)
+          (withTuple, tupleLocal) = hidden current kind
+          held = [expression member (CoreTupleIndex position (reading tupleLocal)) | (position, member) <- zip [0 ..] members]
+          (ready, items) = itemArray withTuple itemKind held
+          array = expression (coreExpressionType items) (CoreBlockValue
+            (CoreBlock [statement (CoreDeclare tupleLocal core)] (Just items)))
+       in walkArray ready array (coreExpressionType array) itemKind
+  walkPayload current core variants = case concatMap (map snd . coreVariantFields) variants of
+    [] -> emptyIterable current core
+    kinds@(first : _) ->
+      let itemKind = runtimeResultType first (foldMap runtimeCarriers kinds)
+          arrayKind = CoreArrayType itemKind
+          arm now variant =
+            let (bound, locals) = mapAccumL (\here (_, kind) -> hidden here kind) now (coreVariantFields variant)
+                (afterItems, answer) = itemArray bound itemKind (map reading locals)
+                pattern' = CoreVariantPattern (coreVariantName variant) (map CoreBindPattern locals)
+             in (afterItems, CoreArm at pattern' Nothing answer)
+          (ready, arms) = mapAccumL arm current variants
+       in walkArray ready (expression arrayKind (CoreMatch core arms)) arrayKind itemKind
+  itemArray current itemKind held =
+    let types = contextTypes (lowerContext current)
+        (ready, items) = mapAccumL (\prior -> projectRuntimeValue types prior itemKind) current held
+     in (ready, expression (CoreArrayType itemKind) (CoreArray items))
+  emptyIterable current core =
+    (current, Just (expression CoreUnitType (CoreBlockValue (CoreBlock [statement (CoreEvaluate core)] Nothing)), CoreUnitType))
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate core) | core <- cores] Nothing))
   expression kind shape = CoreExpression at kind shape
@@ -122,6 +116,8 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
   -- match skips the body. The body's value is dropped.
   element current item = case lowerPattern lower (opened current) (coreLocalType item) Map.empty binder of
     (afterPattern, Nothing) -> (closed afterPattern, Nothing)
+    (afterPattern, Just (pattern', _))
+      | impossiblePattern pattern' -> (closed afterPattern, Just (statement (CoreEvaluate unit)))
     (afterPattern, Just (pattern', _)) ->
       let (afterBody, coreBody, bodyType) = block afterPattern (droppedTail body)
           dropped = expression (if bodyType == CoreNeverType then CoreNeverType else CoreUnitType)
@@ -196,9 +192,7 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
           (binary CoreLess CoreBoolType (reading next) (reading high)))
         oneExact = expression exactKind (CoreIntegerLiteral BigIntKind 1)
         payload = if itemKind == intType then snd (exactPosition at (reading next)) else expression itemKind (CoreIntegerConvert ExactIntKind (reading next))
-        unbounded = argumentFailureWith AtInvocation at "E7001"
-          (Just "implement Std.Iter.Sequence for it, which is begin and advance, or convert it to an array first")
-          (expression CoreTextType (CoreTextLiteral "cannot iterate a range"))
+        unbounded = iterationFailure (expression CoreTextType (CoreTextLiteral "cannot iterate a range"))
         prefix =
           [ statement (CoreIf (expression CoreBoolType (CoreNot (field CoreBoolType RangeIsBoundedOf)))
               (CoreBlock [statement (CoreEvaluate unbounded)] Nothing) Nothing)
