@@ -392,7 +392,7 @@ publishDynamicFinals at state declarations subject lent checked arms
                in if coreExpressionType carried == heldType found
                     then (next, Just [storeHeld types (heldSpan found) found carried])
                     else case storeThroughRangeKey next found finalValue of
-                      Just (stored, statement) -> (stored, Just [statement])
+                      Just (written, statement) -> (written, Just [statement])
                       Nothing -> (observeHeldLayout next found (coreExpressionType carried), Nothing)
           (final, stores) = mapAccumL publish bound (zip [1 ..] (zip lent finals))
           value = CoreExpression at result (CoreTupleIndex 0 read')

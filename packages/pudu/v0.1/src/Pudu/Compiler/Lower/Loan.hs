@@ -276,7 +276,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
            in if coreExpressionType projected == heldType found
                 then (after, Just (storeHeld (types after) (heldSpan found) found projected))
                 else case storeThroughRangeKey after found source of
-                  Just (stored, statement) -> (stored, Just statement)
+                  Just (written, statement) -> (written, Just statement)
                   Nothing -> (observeHeldLayout after found (coreExpressionType projected), Nothing)
         (final, stores) = mapAccumL publish bound finals
         result
