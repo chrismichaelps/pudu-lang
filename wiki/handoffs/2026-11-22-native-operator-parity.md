@@ -592,10 +592,17 @@ Lower Lambda]] register constructor bodies and replay specialization.
 cross-layout comparator preserve runtime constructor identity.
 [[Backend Module Programs]] covers imported values.
 
+## Concrete held call arguments
+
+Architect → Backend Engineer. [[Compiler Lower Generic]], [[Compiler
+Lower Lambda]] and [[Compiler Lower Loan]] specialize concrete laid-out
+operands. [[Backend Rendering Callable Programs]] exercises direct,
+indirect and lent arguments.
+
 ## Next action
 
-Audit held values passed to callable specializations when the retained
-operand has a concrete layout different from the checked parameter.
+Track concrete held replacements that widen writable local,
+record-field, or indexed layouts.
 
 ## Referenced by
 

@@ -6,6 +6,12 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Concrete held call arguments
+
+Resolved Grill Log. Iterate text through a Bool-checked binder and
+call a named function, stored function, captured lambda, positional
+constructor and loaned callable with the held character.
+
 ## Concrete held sum payloads
 
 Resolved Grill Log. Iterate a held text source through a Bool-checked

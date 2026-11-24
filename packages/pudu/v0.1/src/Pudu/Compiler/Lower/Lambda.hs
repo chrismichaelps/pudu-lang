@@ -14,7 +14,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Arguments (methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (couldReturnLoanFinals, suppliedArguments, withCallableArity)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
+import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, loanedType, lowerLoanedOperands, valueSignature, withLoanedParameters)
@@ -257,7 +257,7 @@ specializeCallable lower block supplied state target
   | Just selected <- mapRuntimeChoice state at kind target specializeHeld = selected
   | CoreFunctionType expected _ <- kind
   , any (uncurry (/=)) (zip expected supplied)
-  , any hasRuntimeChoice supplied =
+  , all nativeValueType supplied =
       let demanded = state{lowerContext = context{contextNeedsCallableReplay = True}}
           (bound, held) = bindLocal demanded "" kind
           reading = readLocal at held
@@ -390,7 +390,7 @@ lowerValueCall lower block state at callee arguments
         operands = if takesCount then suppliedArguments at inputs projected else projected
      in if map coreExpressionType operands == inputs
           then called ready target result operands
-          else if adaptable && any (hasRuntimeChoice . coreExpressionType) cores
+          else if adaptable && all (nativeValueType . coreExpressionType) cores
             then adapt ready target projected
             else halt at "a call through a function value with incompatible argument layouts" ready
   adapt current target cores =

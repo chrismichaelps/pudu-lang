@@ -7,6 +7,13 @@ aliases: [Compiler Lower Generic]
 ---
 # Compiler Lower Generic
 
+## Concrete held call arguments
+
+Resolved Grill Log. Specialize the body whenever a represented
+argument differs from its admitted slot. A single concrete held
+layout can be the source of that difference. Keep omitted parameters
+and the hidden supplied count in their declared positions.
+
 ## Purpose and interface
 
 Copies of generic bodies under [[Native Generics]].

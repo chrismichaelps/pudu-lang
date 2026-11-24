@@ -17,7 +17,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (callArityFailure, suppliedArguments, withLoanedCallableArity)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, widen)
 import Pudu.Compiler.Lower.Generic (runtimeCallSignature)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
 import Pudu.Compiler.Lower.State (CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite), bindLocal, halt, refused)
@@ -208,7 +208,7 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
     | Just selected <- mapRuntimeChoice current at CoreNeverType target
         (\ready value -> fmap (fmap fst) (indirect specialize ready held value)) = fmap (fmap preserve) selected
     | CoreFunctionType inputs _ <- coreExpressionType target
-    , any hasRuntimeChoice layouts
+    , all nativeValueType layouts
     , any (not . fits) (zip inputs held) =
         case specialize layouts current target of
           (ready, Just (value, _)) -> invoke ready held value

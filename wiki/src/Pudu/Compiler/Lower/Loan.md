@@ -7,6 +7,10 @@ aliases: [Compiler Lower Loan]
 ---
 # Compiler Lower Loan
 
+Resolved Grill Log. Loaned calls select their body from the retained
+argument layouts. An incompatible concrete layout takes the same
+specialization path as a runtime alternative.
+
 ## Purpose and interface
 
 Export lowerLoanedBody, loanedReturn, loanedValue and lowerLoanedCall.

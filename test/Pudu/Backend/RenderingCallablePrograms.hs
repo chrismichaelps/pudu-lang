@@ -9,7 +9,29 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("nested positional and named patterns read concrete held fields", program
+    ("concrete held arguments enter named, stored and loaned bodies", program
+      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
+        [ "fn describe(value: Bool) -> Str { show(value) }"
+        , "fn peek(slot: &mut Bool) -> Str { show(*slot) }"
+        , "fn main() -> Int {"
+        , "  let named: fn(Bool) -> Str = describe"
+        , "  let prefix = \"captured \""
+        , "  let captured = |value: Bool| prefix + show(value)"
+        , "  let construct: fn(Bool) -> Option[Bool] = Some"
+        , "  let storedLoan: fn(&mut Bool) -> Str = peek"
+        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "    print(describe(item))"
+        , "    print(named(item))"
+        , "    print(captured(item))"
+        , "    print(show(construct(item)))"
+        , "    var copy = item"
+        , "    print(peek(&mut copy))"
+        , "    print(storedLoan(&mut copy))"
+        , "    print(show(copy))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n'x'\n'x'\ncaptured 'x'\nSome('x')\n'x'\n'x'\n'x'\n", "")
+  , ("nested positional and named patterns read concrete held fields", program
       (selectedReceiverTypes <>
         [ "type Packet = Pos((Bool, Int)) | Named{pair: (Bool, Int)}" ] <>
         selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>

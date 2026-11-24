@@ -11,11 +11,11 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Default (takesSuppliedCount)
 import Pudu.Compiler.Lower.Signature (ensureSignature, taskSignatureResult)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, runtimeCarriers, runtimeResultType, settledMutableLayout, writtenType)
+import Pudu.Compiler.Lower.Dynamic (runtimeCarriers, runtimeResultType, settledMutableLayout, writtenType)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite)
   , halt, inModule, isModuleQualifier, lookupLocal, resolveFunction, withTypeBindings )
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, typeBindings, typeFactAt, unformed)
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings, typeFactAt, unformed)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Core (CoreLocal (..), CoreParameter (..), CoreType (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -31,8 +31,10 @@ runtimeCallSignature (owner, function) current target signature given = do
   let context = lowerContext current
       expected = map (coreLocalType . coreParameterLocal) (signatureParameters signature)
       pairs = zip expected given
-  if any (uncurry differs) pairs
-    && all (\(wanted, actual) -> wanted == actual || hasRuntimeChoice actual) pairs
+      maximumSupplied = length expected - fromEnum (takesSuppliedCount signature)
+  if length given <= maximumSupplied
+    && any (uncurry (/=)) pairs
+    && all (\(wanted, actual) -> wanted == actual || nativeValueType actual) pairs
     then do
       instance' <- case Map.lookup target (contextInstances context) of
         Just existing -> Just existing
@@ -66,8 +68,6 @@ runtimeCallSignature (owner, function) current target signature given = do
             , contextSignatures = Map.insert name (Just exact) (contextSignatures context) }}
       Just (registered, name, exact)
     else Nothing
- where
-  differs wanted actual = wanted /= actual && hasRuntimeChoice actual
 
 {-| Admit a call's callee and answer the key the call names: the function
     itself when it is monomorphic, otherwise its copy for the types checking

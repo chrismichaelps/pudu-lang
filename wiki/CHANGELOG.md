@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Concrete held call arguments (#956)
+
+- Specialize named and retained callables for a concrete held
+  argument layout. [[Compiler Lower Generic]] · [[Compiler Lower Lambda]]
+
 ## 2026-11-23 — Retained positional constructors (#956)
 
 - Emit stored positional constructors with variant identity and

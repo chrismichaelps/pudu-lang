@@ -10,6 +10,10 @@ aliases: [Compiler Lower Lambda]
 Resolved Grill Log. A retained constructor specializes through
 [[Compiler Lower Sum]], has no captures, and retains its variant identity.
 
+Resolved Grill Log. Indirect calls specialize when a retained native
+argument cannot project to the checked slot, including concrete
+layouts. Select the stored body by identity and retain its captures.
+
 ## Purpose and interface
 
 Function values under [[Native Closures]].
