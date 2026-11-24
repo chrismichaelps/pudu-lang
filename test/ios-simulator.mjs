@@ -428,7 +428,9 @@ int main(int argc, char **argv) {
       labels: [
         "Gestures: press began, pan changed 12 -7, pinch changed 1500, rotation changed 785, swipe right",
         "Size: compact regular",
-        "Phases: active inactive active",
+        // The launch's own activation depends on the simulator bringing the
+        // app to the front; the resign and return the self-test posts must follow it.
+        /^Phases: (active )?inactive active$/u,
         "Picked: Delete",
         "Chose: Start",
         "Row 1",
