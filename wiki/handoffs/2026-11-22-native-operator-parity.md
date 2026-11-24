@@ -541,10 +541,17 @@ Architect → Backend Engineer. [[Compiler Lower Match]] checks declared
 owners on held record and sum values. [[Backend Rendering Callable
 Programs]] distinguishes same-spelling declarations across modules.
 
+## Structural patterns on held payloads
+
+Architect → Backend Engineer. [[Compiler Lower Match]] shares capture
+layout joining for written alternatives and named payload matches.
+[[Backend Rendering Callable Programs]] covers iteration, guards and
+sequence binding diagnostics.
+
 ## Next action
 
-Lower anonymous record patterns over held named sum payloads, including
-bindings whose fields require different layouts across variants.
+Preserve mutable destructured bindings and their runtime carriers in
+native tuple, record and sequence patterns.
 
 ## Referenced by
 

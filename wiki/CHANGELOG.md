@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Structural patterns on held payloads (#956)
+
+- Match anonymous record fields on named sum payloads and preserve
+  the layouts of successful captures. [[Compiler Lower Match]]
+
 ## 2026-11-23 — Canonical pattern owners (#956)
 
 - Require the checked declaration identity for constructors and named

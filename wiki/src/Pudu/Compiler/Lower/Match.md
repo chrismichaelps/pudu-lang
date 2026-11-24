@@ -151,3 +151,16 @@ canonical owners. Check that owner before inspecting same-label variants
 or same-named records. A named sum payload path applies only to a named
 variant. Preserve the evaluator's short-name matching for paths without
 a resolved owner. [[Backend Rendering Callable Programs]]
+
+## Structural patterns on held payloads
+
+An anonymous record pattern tests the fields of a held record or a
+named sum payload. Each candidate variant supplies its actual field
+layout. A positional variant or a missing field cannot match. For
+structural patterns on dynamic values, select the payload before
+testing its shape. A bare binding retains the complete dynamic value.
+
+Resolved Grill Log. Join captures only from successful structural
+alternatives. Use the same private captures and publication as written
+alternatives, so guard order, fallback scopes, and loop skips agree
+with the evaluator. [[Backend Rendering Callable Programs]]

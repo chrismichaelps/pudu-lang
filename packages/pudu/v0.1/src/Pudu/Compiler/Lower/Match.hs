@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, pathText, projectRuntimeValue, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, projectRuntimeValue, storageCarrier, widen)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
@@ -179,14 +179,6 @@ whileLetLoop at label pattern' subject body =
 lowerPattern :: LowerExpression -> LowerState -> CoreType -> Map Text CoreLocal -> Located Pattern
   -> (LowerState, Maybe (CorePattern, Map Text CoreLocal))
 lowerPattern lower state kind bound (Located at shape) = case shape of
-  _ | isDynamic kind
-    , Just owner <- nominalPatternOwner shape
-    , variants@(_ : _) <-
-        [ (coreVariantName variant, payload)
-        | variant <- maybe [] id (sumVariants types kind)
-        , [(_, payload)] <- [coreVariantFields variant]
-        , ownerKeyOf payload == Just owner ] ->
-        narrowed variants
   WildcardPattern -> done state CoreWildcardPattern bound
   BindingPattern (Located _ name) -> case Map.lookup name bound of
     Just local
@@ -195,11 +187,11 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     Nothing ->
       let (after, local) = bindLocal state name kind
        in done after (CoreBindPattern local) (Map.insert name local bound)
-  -- Integers compare by value whatever their kind (sameValue), so the literal
-  -- is built at the subject's kind; one the kind cannot hold never matches,
-  -- and an empty alternative is a pattern that never does.
   _ | Just variants <- runtimeChoiceAlternatives kind ->
         narrowed variants
+    | isDynamic kind ->
+        narrowed [(coreVariantName variant, payload) | variant <- variantsOfKind, [(_, payload)] <- [coreVariantFields variant]]
+  -- Integer patterns compare at the held width without narrowing the literal.
   LiteralPattern literal
     | CoreIntegerType integerKind <- kind, Just number <- integerOf literal ->
         if integerKindFits integerKind number
@@ -239,16 +231,21 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
               sequenceOf (CoreVariantPattern (coreVariantName variant)) state bound (zip (map snd (coreVariantFields variant)) members)
         _ -> done state never bound
   RecordPattern path fields _ -> case (path, recordFields types kind) of
-    (Nothing, Just declared) -> recordMembers CoreRecordPattern declared fields
+    (Nothing, Just declared) -> recordMembers state CoreRecordPattern declared fields
+    (Nothing, Nothing) -> lowerPatternChoices state at bound
+      [ \current -> recordMembers current (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
+      | variant <- variantsOfKind
+      , coreVariantRecord variant
+      ]
     (Just written, Just declared)
-      | CoreRecordType name _ <- kind, matchesRecord written name -> recordMembers CoreRecordPattern declared fields
+      | CoreRecordType name _ <- kind, matchesRecord written name -> recordMembers state CoreRecordPattern declared fields
     (Just written, Nothing)
       | matchesNamedVariant written
       , Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
-          recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
+          recordMembers state (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
     _ -> done state never bound
   AlternativePattern alternatives ->
-    lowerPatternChoices lower state at bound [(choice, kind, id) | choice <- alternatives]
+    lowerPatternChoices state at bound [\current -> lowerPattern lower current kind bound choice | choice <- alternatives]
   ArrayPattern front rest back -> case kind of
     CoreArrayType element -> case sequenceOf CoreTuplePattern state bound [(element, member) | member <- front] of
       (afterFront, Just (CoreTuplePattern fronts, withFront)) ->
@@ -275,7 +272,8 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     ResolvedInteger _ number -> Just number
     IntegerValue text -> parsedIntegerValue <$> parseIntegerLiteral text
     _ -> Nothing
-  variantOf name = sumVariants types kind >>= find ((== name) . coreVariantName)
+  variantsOfKind = maybe [] id (sumVariants types kind)
+  variantOf name = find ((== name) . coreVariantName) variantsOfKind
   matchesOwner = maybe True (\owner -> ownerKeyOf kind == Just owner)
   matchesRecord written owner = case written of
     ModuleName ("::sum::" :| _) -> False
@@ -285,8 +283,11 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     ModuleName ("::sum::" :| [owner, _]) -> matchesOwner (Just owner)
     ModuleName ("::sum::" :| _) -> False
     _ -> canonicalPatternName written == Nothing
-  narrowed variants = lowerPatternChoices lower state at bound
-    [(Located at shape, payload, \inner -> CoreVariantPattern tag [inner]) | (tag, payload) <- variants]
+  narrowed variants = lowerPatternChoices state at bound
+    [ \current -> fmap (fmap (\(inner, names) -> (CoreVariantPattern tag [inner], names)))
+        (lowerPattern lower current payload bound (Located at shape))
+    | (tag, payload) <- variants
+    ]
   lowerSequence current names pairs = case sequenceOf CoreTuplePattern current names pairs of
     (after, Just (CoreTuplePattern members, names')) -> (after, Just (members, names'))
     (after, _) -> (after, Nothing)
@@ -299,18 +300,19 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
       (next, Nothing) -> (next, Nothing)
   -- Declared order, a wildcard for every field the pattern leaves out; `{x}`
   -- is `{x: x}`.
-  recordMembers build declared fields =
+  recordMembers current build declared fields =
     let written = [(locatedValue name, (nameSpan, inner)) | Located _ (FieldPattern name@(Located nameSpan _) inner) <- fields]
         member (name, fieldKind) = case lookup name written of
           Nothing -> (fieldKind, Located at WildcardPattern)
           Just (nameSpan, inner) -> (fieldKind, maybe (Located nameSpan (BindingPattern (Located nameSpan name))) id inner)
      in if all ((`elem` map fst declared) . fst) written
-          then sequenceOf build state bound (map member declared)
-          else done state never bound
-lowerPatternChoices :: LowerExpression -> LowerState -> Span -> Map Text CoreLocal
-  -> [(Located Pattern, CoreType, CorePattern -> CorePattern)]
+          then sequenceOf build current bound (map member declared)
+          else done current never bound
+
+lowerPatternChoices :: LowerState -> Span -> Map Text CoreLocal
+  -> [LowerState -> (LowerState, Maybe (CorePattern, Map Text CoreLocal))]
   -> (LowerState, Maybe (CorePattern, Map Text CoreLocal))
-lowerPatternChoices lower state at bound cases = case foldl' collect (state, Just []) cases of
+lowerPatternChoices state at bound cases = case foldl' collect (state, Just []) cases of
   (after, Nothing) -> refused after
   (after, Just []) -> (after, Just (CoreAlternativePattern [], bound))
   (after, Just [(pattern', bindings)]) ->
@@ -334,13 +336,13 @@ lowerPatternChoices lower state at bound cases = case foldl' collect (state, Jus
   expose names (frame : rest) = (names <> frame) : rest
   expose names [] = [names]
   collect prior@(_, Nothing) _ = prior
-  collect (current, Just done) (choice, kind, wrap) =
+  collect (current, Just done) lowerChoice =
     let opened = current{lowerScopes = [] : lowerScopes current}
-        (after, matched) = lowerPattern lower opened kind bound choice
+        (after, matched) = lowerChoice opened
         closed = after{lowerScopes = lowerScopes current}
         add (pattern', bindings)
           | impossiblePattern pattern' = done
-          | otherwise = (wrap pattern', Map.difference bindings bound) : done
+          | otherwise = (pattern', Map.difference bindings bound) : done
      in (closed, add <$> matched)
   projectArm types locals current (pattern', bindings) =
     let copy prior (name, local) = case Map.lookup name bindings of
@@ -365,13 +367,6 @@ impossiblePattern shape = case shape of
   CoreVariantPattern _ fields -> any impossiblePattern fields
   CoreArrayPattern front _ back -> any impossiblePattern (front <> back)
   _ -> False
-
-nominalPatternOwner :: Pattern -> Maybe Text
-nominalPatternOwner shape = case shape of
-  ConstructorPattern written _ -> constructorOwner written
-  RecordPattern (Just (ModuleName ("::sum::" :| [owner, _]))) _ _ -> Just owner
-  RecordPattern (Just written) _ _ -> Just (pathText written)
-  _ -> Nothing
 
 canonicalPatternName :: ModuleName -> Maybe Text
 canonicalPatternName (ModuleName (symbol :| []))

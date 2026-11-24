@@ -31,6 +31,23 @@ renderingCallableSuccessPrograms =
         , "  print(\"done\")"
         , "  0", "}" ])
     , "receiver\nitems\ndone\n", "")
+  , ("anonymous record patterns read only matching named payloads", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { value: Int }"
+        , "type Packet = Number{value: Int} | Word{value: Str} | Other{extra: Int} | Bare(Int)"
+        ] <> selectedIterable "Array[Checked]" "[Checked{value: 1}]" "Array[Packet]"
+          "[Number{value: 2}, Other{extra: 9}, Bare(7), Word{value: \"four\"}]" <>
+        [ "fn main() -> Int {"
+        , "  let items = choose(\"λ\".toBytes()).items()"
+        , "  for {value} in items { print(show(value)) }"
+        , "  for item in items {"
+        , "    match item {"
+        , "      case {value} if { print(\"guard \" + show(value))\n true } => print(\"matched\")"
+        , "      case _ => print(\"skipped\")"
+        , "    }"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\n2\n\"four\"\nguard 2\nmatched\nskipped\nskipped\nguard \"four\"\nmatched\n", "")
   , ("rendering builtin signatures and identities coexist", program
       [ "fn main() -> Int {"
       , "  let integer: fn(Int) -> Str = display"
@@ -953,6 +970,15 @@ renderingCallableRefusalPrograms =
       (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "Int" "42" <>
         [ "fn main() -> Int {"
         , "  for item in choose(\"λ\".toBytes()).items() { print(display(item)) }"
+        , "  0", "}" ]))
+  , ("a sequence pattern reports the held named variant when its field is absent", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { values: Array[Int] }"
+        , "type Packet = Items{values: Array[Int]} | Other{extra: Int}"
+        ] <> selectedIterable "Checked" "Checked{values: [1]}" "Packet" "Other{extra: 7}" <>
+        [ "fn main() -> Int {"
+        , "  let {values: [first, ..]} = choose(\"λ\".toBytes()).items()"
+        , "  print(show(first))"
         , "  0", "}" ]))
   , ("a shorter held tuple reports bounds after evaluating the receiver", program
       (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int)" "(1, 2)" <>
