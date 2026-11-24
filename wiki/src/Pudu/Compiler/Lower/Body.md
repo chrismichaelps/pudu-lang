@@ -616,3 +616,7 @@ checking use that entry.
 
 Resolved Grill Log: tuple-checked reads use the same bracket entry
 and retain the direct slot operation for held tuples.
+
+Resolved Grill Log: sequence and let-else binding declarations
+enter the enclosing block together, and an impossible binding
+stops lowering subsequent statements.

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Escaping refutable bindings (#956)
+
+- Project bindings from successful held alternatives into enclosing
+  slots. Keep the fallback in the original scope. [[Compiler Lower Match]]
+
 ## 2026-11-23 — Held shapes in refutable patterns (#956)
 
 - Select each held match subject before testing arms and guards.

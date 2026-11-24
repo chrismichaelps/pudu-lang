@@ -123,3 +123,10 @@ Resolved Grill Log: select the held shape before lowering match arms.
 Structurally impossible arms skip their guards and bodies. Sequence
 binding failure names the held subject, and let-else uses its fallback
 when the selected pattern is impossible.
+
+## Escaping refutable bindings
+
+Resolved Grill Log: each held subject layout and written alternative
+gets private pattern locals. A successful arm projects those values
+to shared enclosing slots after the complete pattern matches.
+Failure sees only the original scope.

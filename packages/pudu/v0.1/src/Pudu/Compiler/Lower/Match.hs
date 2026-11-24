@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, pathText, projectRuntimeValue, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, pathText, projectRuntimeValue, storageCarrier, widen)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
@@ -97,62 +97,98 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
           | otherwise -> halt (locatedSpan test) ("a guard of type " <> coreTypeName guardKind) next
         (next, Nothing) -> refused next
 
-{-| The fallback sees the outer scope; only success publishes the pattern's
-    locals into the enclosing block. Frame matching initializes those locals
-    before its unit arm joins the following statement. -}
+{-| Only a successful arm publishes locals into the enclosing block. -}
 lowerLetElse :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression -> Located Block
-  -> (LowerState, Maybe CoreStatement)
+  -> (LowerState, Maybe [CoreStatement])
 lowerLetElse lower state at pattern' subject fallback = case lowerMatchSubject lower state subject of
   (after, Nothing) -> refused after
-  (after, Just (core, CoreNeverType)) -> evaluated after core
-  (after, Just (core, kind))
+  (after, Just (core, CoreNeverType)) -> (after, Just [CoreStatement at (CoreEvaluate core)])
+  (after, Just (core, _))
     | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
     | otherwise -> case lower after (Located (locatedSpan fallback) (BlockExpression fallback)) of
-        (afterFallback, Nothing) -> refused afterFallback
-        (afterFallback, Just (otherwise', CoreNeverType)) ->
-          case lowerPattern lower afterFallback kind Map.empty pattern' of
-            (afterPattern, Nothing) -> refused afterPattern
-            (afterPattern, Just (matched, _))
-              | impossiblePattern matched ->
-                  let statements = [CoreStatement at (CoreEvaluate core)]
-                   in evaluated afterPattern (CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock statements (Just otherwise'))))
-            (afterPattern, Just (matched, _)) ->
-              let unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
-                  arms = [CoreArm (locatedSpan pattern') matched Nothing unit,
-                          CoreArm (locatedSpan fallback) CoreWildcardPattern Nothing otherwise']
-               in evaluated afterPattern (CoreExpression at CoreUnitType (CoreMatch core arms))
-        (afterFallback, Just _) -> halt (locatedSpan fallback) "a let else fallback that does not diverge" afterFallback
- where
-  evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
+        (ready, Just (otherwise', CoreNeverType)) ->
+          lowerEscaping lower ready at pattern' core (const otherwise')
+        (ready, Just _) -> halt (locatedSpan fallback) "a let else fallback that does not diverge" ready
+        (ready, Nothing) -> refused ready
 
-{-| `let [a, ..rest] = subject`, at any depth of the pattern: the one test a
-    destructuring binding can fail is a sequence's length, and it stops the
-    program at the pattern, naming what the subject is. -}
 lowerLetSequence :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression
-  -> (LowerState, Maybe CoreStatement)
-lowerLetSequence lower state at pattern' subject = case lower state subject of
+  -> (LowerState, Maybe [CoreStatement])
+lowerLetSequence lower state at pattern' subject = case lowerMatchSubject lower state subject of
   (after, Nothing) -> refused after
-  (after, Just (core, CoreNeverType)) -> evaluated after core
-  (after, Just (core, kind))
+  (after, Just (core, CoreNeverType)) -> (after, Just [CoreStatement at (CoreEvaluate core)])
+  (after, Just (core, _))
     | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
-    | otherwise -> case lowerPattern lower after kind Map.empty pattern' of
-        (afterPattern, Nothing) -> refused afterPattern
-        (afterPattern, Just (matched, _)) ->
-          let here = CoreExpression (locatedSpan pattern')
-              (ready, failedSubject) = bindLocal afterPattern "" kind
-              text = here CoreTextType
-              append left right = text (CoreBinary CoreAdd left right)
-              named = text (CoreRuntimeKind (here kind (CoreReadLocal failedSubject)))
-              message = append (text (CoreTextLiteral "this pattern does not match the "))
-                (append named (text (CoreTextLiteral " it was given")))
-              stop = here CoreNeverType (CoreFailText "E7013" (Just "check the number of elements the pattern names against the value") message Nothing)
-              unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
-              arms = [CoreArm (locatedSpan pattern') matched Nothing unit | not (impossiblePattern matched)]
-                <> [CoreArm at (CoreBindPattern failedSubject) Nothing stop]
-              result = if impossiblePattern matched then CoreNeverType else CoreUnitType
-           in evaluated ready (CoreExpression at result (CoreMatch core arms))
+    | otherwise -> lowerEscaping lower after at pattern' core failure
  where
-  evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
+  failure value =
+    let here = CoreExpression (locatedSpan pattern')
+        text = here CoreTextType
+        append left right = text (CoreBinary CoreAdd left right)
+        named = text (CoreRuntimeKind value)
+        message = append (text (CoreTextLiteral "this pattern does not match the "))
+          (append named (text (CoreTextLiteral " it was given")))
+     in here CoreNeverType (CoreFailText "E7013" (Just "check the number of elements the pattern names against the value") message Nothing)
+
+lowerEscaping :: LowerExpression -> LowerState -> Span -> Located Pattern -> CoreExpression
+  -> (CoreExpression -> CoreExpression) -> (LowerState, Maybe [CoreStatement])
+lowerEscaping lower state at written subject failure =
+  case foldl' collect (state, Just []) cases of
+    (after, Nothing) -> refused after
+    (after, Just collected) ->
+      let successes = reverse collected
+          layouts = Map.unionsWith (<>) [Map.map (pure . coreLocalType) bindings | (_, bindings) <- successes]
+          types = contextTypes (lowerContext after)
+          allocate current (name, kinds) =
+            let kind = case kinds of
+                  first : rest -> storageCarrier types first (first : rest)
+                  [] -> CoreUnitType
+                (allocated, local) = bindLocal current name kind
+             in (allocated, (name, local))
+          (opened, locals) = mapAccumL allocate after (Map.toAscList layouts)
+          declarations = [CoreStatement at (CoreDeclare local (CoreExpression at (coreLocalType local) CoreAbsent)) | (_, local) <- locals]
+          (bound, failedSubject) = bindLocal opened "" subjectKind
+          (ready, arms) = mapAccumL (publish types locals) bound successes
+          fallback = CoreArm at (CoreBindPattern failedSubject) Nothing (failure (reading failedSubject))
+          result = if null arms then CoreNeverType else CoreUnitType
+       in case sequence arms of
+            Just valid ->
+              let matched = CoreExpression at result (CoreMatch subject (valid <> [fallback]))
+               in (ready, Just (declarations <> [CoreStatement at (CoreEvaluate matched)]))
+            Nothing -> halt at "incompatible layouts in escaping pattern bindings" ready
+ where
+  subjectKind = coreExpressionType subject
+  reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
+  alternatives (Located _ (AlternativePattern choices)) = concatMap alternatives choices
+  alternatives pattern' = [pattern']
+  targets choice
+    | Just variants <- runtimeChoiceAlternatives subjectKind =
+        [(payload, \inner -> CoreVariantPattern tag [inner]) | (tag, payload) <- variants]
+    | isDynamic subjectKind, Just owner <- nominalPatternOwner (locatedValue choice) =
+        [(payload, \inner -> CoreVariantPattern (coreVariantName variant) [inner])
+        | variant <- maybe [] id (sumVariants (contextTypes (lowerContext state)) subjectKind)
+        , [(_, payload)] <- [coreVariantFields variant], ownerKeyOf payload == Just owner]
+    | otherwise = [(subjectKind, id)]
+  cases = [(choice, kind, wrap) | choice <- alternatives written, (kind, wrap) <- targets choice]
+  collect prior@(_, Nothing) _ = prior
+  collect (current, Just done) (choice, kind, wrap) =
+    let opened = current{lowerScopes = [] : lowerScopes current}
+        (after, matched) = lowerPattern lower opened kind Map.empty choice
+        closed = after{lowerScopes = lowerScopes current}
+        add (pattern', bindings)
+          | impossiblePattern pattern' = done
+          | otherwise = (wrap pattern', bindings) : done
+     in (closed, add <$> matched)
+  publish types locals current (pattern', bindings) =
+    let copy prior (name, local) = case Map.lookup name bindings of
+          Nothing -> (prior, Nothing)
+          Just source ->
+            let (projected, value) = projectRuntimeValue types prior (coreLocalType local) (reading source)
+             in if coreExpressionType value == coreLocalType local
+                  then (projected, Just (CoreStatement at (CoreAssign local value)))
+                  else (projected, Nothing)
+        (ready, stores) = mapAccumL copy current locals
+        body statements = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock statements Nothing))
+     in (ready, (CoreArm at pattern' Nothing . body) <$> sequence stores)
 
 {-| Whether a pattern tests a sequence's length anywhere inside it. -}
 hasSequencePattern :: Located Pattern -> Bool

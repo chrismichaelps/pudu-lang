@@ -368,6 +368,13 @@ falls through without evaluating its guard. Sequence bindings retain
 the original pattern span and report the held subject's runtime kind.
 [[Compiler Lower Match]] · [[Backend Rendering Callable Programs]]
 
+## Escaping refutable bindings (#956)
+
+Sequence and let-else bindings use private locals for each held
+layout and written alternative. Successful arms publish the chosen
+values to the enclosing block. [[Compiler Lower Match]] ·
+[[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

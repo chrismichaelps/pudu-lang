@@ -200,3 +200,9 @@ kind after evaluation and before later statements run.
 Resolved Grill Log: exercise a sequence arm and guard on its matching
 layout, fall through on a different layout, and preserve a sequence
 binding diagnostic when its subject has the wrong shape.
+
+## Escaping refutable bindings
+
+Resolved Grill Log: use a binding after two successful held layouts
+and exercise a failing alternative that runs the fallback without
+publishing a value.

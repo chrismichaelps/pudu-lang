@@ -125,16 +125,17 @@ foldStatements state = go state []
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
       LetPatternStatement _ pattern _ subject | hasSequencePattern pattern ->
         case lowerLetSequence lowerExpression current statementSpan pattern subject of
-          (after, Just lowered) -> binding after collected [lowered] rest
+          (after, Just statements) -> binding after collected statements rest
           (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       LetPatternStatement _ pattern annotation subject
         -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
             (after, Just statements) -> binding after collected statements rest
             (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
+      LetElseStatement pattern' subject fallback ->
+        case lowerLetElse lowerExpression current statementSpan pattern' subject fallback of
+          (after, Just statements) -> binding after collected statements rest
+          (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       _ -> case lowerStatement current one of
-        (after, Just lowered)
-          | LetElseStatement{} <- statement, blockType [lowered] Nothing == CoreNeverType ->
-              (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
         (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
 
@@ -293,7 +294,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
     (after, Nothing) -> refused after
   BreakStatement label operand -> joiningTransfer (lowerTransfer lowerExpression statementSpan label (Just operand) state)
   ContinueStatement label -> joiningTransfer (lowerTransfer lowerExpression statementSpan label Nothing state)
-  LetElseStatement pattern' subject fallback -> lowerLetElse lowerExpression state statementSpan pattern' subject fallback
+  LetElseStatement{} -> halt statementSpan "refutable pattern bindings" state
   LetPatternStatement{} -> halt statementSpan "pattern bindings" state
   InvalidStatement -> halt statementSpan "this statement" state
  where

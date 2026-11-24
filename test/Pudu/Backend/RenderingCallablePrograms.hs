@@ -560,6 +560,31 @@ renderingCallableSuccessPrograms =
         , "  print(show(read(\"λ\".toBytes())))"
         , "  0", "}" ])
     , "receiver\nguard\n7\nreceiver\n0\n", "")
+  , ("let else publishes values across distinct held element layouts", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\", \"tail\"]" <>
+        [ "fn read(value: dynamic View) -> Int {"
+        , "  let [first, ..rest] = choose(value).items() else { return 9 }"
+        , "  print(show(first))"
+        , "  print(show(rest))"
+        , "  0"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n7\n[8]\n0\nreceiver\n\"held\"\n[\"tail\"]\n0\n", "")
+  , ("let else falls back before publishing failed bindings", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[]" <>
+        [ "fn read(value: dynamic View) -> Int {"
+        , "  let first = 9"
+        , "  let [first, ..] = choose(value).items() else { return first }"
+        , "  first"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n7\nreceiver\n9\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -997,6 +1022,14 @@ selectedSequenceSubject =
   , "impl CheckedParts for Str { fn parts(self: &Self) -> Array[Int] { [7, 8] } }"
   , "trait HeldParts { fn parts(self: &Self) -> (Int, Int) }"
   , "impl HeldParts for Option[Str] { fn parts(self: &Self) -> (Int, Int) { (7, 8) } }"
+  ]
+
+selectedEscapingSubject :: Text -> [Text]
+selectedEscapingSubject held =
+  [ "trait CheckedItems { fn items(self: &Self) -> Array[Int] }"
+  , "impl CheckedItems for Str { fn items(self: &Self) -> Array[Int] { [7, 8] } }"
+  , "trait HeldItems { fn items(self: &Self) -> Array[Str] }"
+  , "impl HeldItems for Option[Str] { fn items(self: &Self) -> Array[Str] { " <> held <> " } }"
   ]
 
 selectedIntegerTrait :: [Text]

@@ -493,10 +493,17 @@ subjects and skips structurally impossible arms, with runtime kind
 diagnostics for sequence bindings. [[Backend Rendering Callable
 Programs]] covers guard ordering and a sequence subject mismatch.
 
+## Escaping refutable bindings
+
+Architect → Backend Engineer. [[Compiler Lower Match]] projects
+the slots of successful held alternatives into enclosing bindings.
+[[Backend Rendering Callable Programs]] exercises a held first
+element, a rest binding, and the fallback's outer scope.
+
 ## Next action
 
-Project refutable binding slots across successful alternatives with
-different held layouts when the bindings escape to the enclosing block.
+Project nested pattern alternatives with heterogeneous native
+bindings before guards, bodies, or enclosing statements read them.
 
 ## Referenced by
 
