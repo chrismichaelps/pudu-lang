@@ -307,3 +307,6 @@ Compare bound traversals on empty arrays with distinct element layouts.
 Resolved Grill Log. Compare bound map, set, and bucket methods in a shared
 callable slot. Empty receivers compare across element layouts. A different
 family, member, or receiver entry makes the comparison unequal.
+
+Resolved Grill Log. A retained map with a concrete static signature must
+return the array of results actually carried by its callback.

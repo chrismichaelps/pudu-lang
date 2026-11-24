@@ -395,7 +395,7 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
        in case lowered of
             Just (written, _)
               | length (contextRefusals context) == before
-              , let body = if flexible && not (null receiverFacts)
+              , let body = if flexible && (traversal || not (null receiverFacts))
                       then preserveRuntimeResult ownResult written else written
                     bodyKind = coreExpressionType body
               , flexible && hasRuntimeChoice bodyKind || bodyKind `elem` [ownResult, CoreNeverType] ->
@@ -446,6 +446,8 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
     | otherwise = CoreTupleType (ownResult : [input | (index, input) <- zip [0 ..] inputs, index `elem` loaned])
   kind = CoreFunctionType inputs result
   (provider, plain) = selectedMember member
+  traversal = isNothing provider && plain `elem` ["map", "reduce"]
+    && maybe False (\receiverKind -> builtinMember receiverKind plain) bound
   identity = case (provider, bound) of
     (Nothing, Just receiverKind)
       | builtinMember receiverKind plain, Just owner <- ownerKeyOf receiverKind ->

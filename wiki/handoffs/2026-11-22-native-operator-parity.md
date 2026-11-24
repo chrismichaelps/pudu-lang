@@ -651,8 +651,8 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Trace whether a callback returning a held layout can specialize a stored
-traversal when its checked callback result is already concrete.
+Trace specialization when a concretely typed bound traversal is itself
+passed as a callback and receives a different callback input layout.
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.
@@ -667,6 +667,8 @@ Backend Engineer → Test Engineer. [[Backend Rendering Callable Programs]]
 covers open captures, concrete calls, and empty and nonempty nested traversals.
 [[Compiler Lower Method Value]] and [[Native Aggregate Emission]] compare
 builtin method values through their retained receiver layouts.
+[[Compiler Lower Method Value]] also records changed traversal results
+when the receiver matches its checked layout.
 
 Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 

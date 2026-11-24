@@ -306,6 +306,8 @@ keeping the receiver and method identity. [[Compiler Lower Lambda]] ·
 Bound builtin methods compare the family, member, and retained receiver
 through each side's capture layout. [[Native Aggregate Emission]] ·
 [[Backend Cross Comparison]].
+Traversal wrappers record the held result layout of a selected callback
+even when their receiver layout matches the checked receiver.
 
 ## Declared method argument counts (#956)
 

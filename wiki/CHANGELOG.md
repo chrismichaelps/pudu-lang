@@ -16,6 +16,8 @@ tags: [changelog]
 - Compare bound builtin methods by family, member, and receiver value
   across capture layouts. [[Compiler Lower Method Value]] ·
   [[Native Aggregate Emission]]
+- Preserve a retained traversal callback's actual result layout.
+  [[Compiler Lower Method Value]]
 
 ## 2026-11-24 — Native emission performance
 

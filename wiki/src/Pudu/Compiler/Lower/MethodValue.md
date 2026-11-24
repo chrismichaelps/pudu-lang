@@ -162,6 +162,11 @@ invocation key. A declared or explicitly qualified member keeps the
 declaration's identity. Equality reads individual capture layouts.
 [[Native Aggregate Emission]] · [[Backend Cross Comparison]]
 
+Resolved Grill Log. A traversal callback can produce a held result that
+differs from its checked result. Register the actual native result on the
+ordinary callable replay path, including when the receiver itself has the
+checked layout. [[Compiler Lower Lambda]]
+
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]
 
 Resolved Grill Log: reuse [[Type Check Receiver]] for constructor-wide

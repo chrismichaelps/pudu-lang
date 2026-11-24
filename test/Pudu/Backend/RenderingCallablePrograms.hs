@@ -134,6 +134,14 @@ renderingCallableSuccessPrograms =
       , "  print(show((numbers.size == words.size, numbers.size == intMap.size)))"
       , "  0", "}" ]
     , "(true, true, true)\n(false, false)\n(false, false)\n", "")
+  , ("a retained map preserves results from the held callback", program
+      (selectedReceiverTypes <> selectedIterable "Int" "1" "Str" "\"held\"" <>
+        [ "fn main() -> Int {"
+        , "  let mapping: fn(fn(Int) -> Int) -> Array[Int] = [4, 7].map"
+        , "  let select: fn(Int) -> Int = |n| { print(display(n))\n choose(\"λ\".toBytes()).items() }"
+        , "  print(show(mapping(select)))"
+        , "  0", "}" ])
+    , "4\nreceiver\nitems\n7\nreceiver\nitems\n[\"held\", \"held\"]\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"
