@@ -534,6 +534,18 @@ renderingCallableSuccessPrograms =
         , "  print(show(held[1]))"
         , "  0", "}" ])
     , "receiver\nindexed\n'λ'\n", "")
+  , ("tuple destructuring joins successful held binding layouts", program
+      (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int, Bool)" "(7, 8, false)" <>
+        [ "fn read(value: dynamic View) -> () {"
+        , "  let (_, item, _) = choose(value).indexed()"
+        , "  print(show(item))"
+        , "  ()"
+        , "}"
+        , "fn main() -> Int {"
+        , "  read(\"plain\")"
+        , "  read(\"λ\".toBytes())"
+        , "  0", "}" ])
+    , "receiver\nindexed\n\"tuple\"\nreceiver\nindexed\n8\n", "")
   , ("a selected declared call can reach a held collection builtin", program
       (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
         [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
@@ -854,6 +866,24 @@ renderingCallableRefusalPrograms =
       (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int)" "(1, 2)" <>
         [ "fn main() -> Int {"
         , "  print(show(choose(\"λ\".toBytes()).indexed()[2]))"
+        , "  0", "}" ]))
+  , ("tuple destructuring reports the held array at the whole pattern", program
+      (selectedReceiverTypes <> selectedIndexedReceiver "Array[Int]" "[1, 2, 3]" <>
+        [ "fn main() -> Int {"
+        , "  let (first, _, _) = choose(\"λ\".toBytes()).indexed()"
+        , "  print(show(first))"
+        , "  0", "}" ]))
+  , ("a missing field on the held record reports its runtime kind", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { value: Int }"
+        , "type Held = { other: Str }"
+        , "trait CheckedShape { fn shaped(self: &Self) -> Checked }"
+        , "impl CheckedShape for Str { fn shaped(self: &Self) -> Checked { Checked{value: 1} } }"
+        , "trait HeldShape { fn shaped(self: &Self) -> Held }"
+        , "impl HeldShape for Option[Str] { fn shaped(self: &Self) -> Held { Held{other: \"held\"} } }"
+        , "fn main() -> Int {"
+        , "  let {value} = choose(\"λ\".toBytes()).shaped()"
+        , "  print(show(value))"
         , "  0", "}" ]))
   , ("a stored stopping builtin receives the held runtime argument", program
       [ "trait View { fn size(self: &Self) -> Int }"

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held destructuring subjects (#956)
+
+- Match tuple and record bindings against the retained subject.
+  Publish binding layouts after success and report E7013 at the
+  original pattern. [[Compiler Lower Tuple]]
+
 ## 2026-11-23 — Runtime receivers in tuple-checked reads (#956)
 
 - Dispatch tuple-checked indexing on the held receiver. Keep

@@ -52,3 +52,10 @@ Resolved Grill Log: [[Compiler Lower Slice]] owns indexing, including
 the literal slot fast path for tuples. A tuple-checked receiver can
 hold a different indexable value. A shorter held tuple uses the
 runtime bounds diagnostic.
+
+## Selected destructuring subjects
+
+Resolved Grill Log: evaluate the subject once, test each held shape,
+and publish bindings only after the entire pattern succeeds. Join
+different successful layouts by binding position. Report E7013 at
+the whole pattern using the original subject's runtime kind.

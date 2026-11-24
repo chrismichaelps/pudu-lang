@@ -188,3 +188,9 @@ be assigned back through a slice key.
 Resolved Grill Log: compare a stable tuple, a selected array, and
 selected text at a written literal position. A shorter held tuple
 reports its own bounds failure after receiver effects.
+
+## Selected destructuring subjects
+
+Resolved Grill Log: cover successful bindings across held tuple and
+record layouts. Shape failures report the whole pattern and subject
+kind after evaluation and before later statements run.

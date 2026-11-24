@@ -353,6 +353,14 @@ Tuple literals use direct slot reads at known positions. A held
 array, text value, or shorter tuple takes its own access and
 bounds path. [[Compiler Lower Slice]] · [[Backend Rendering Callable Programs]]
 
+## Held destructuring subjects (#956)
+
+Tuple and record bindings test the held shape and publish locals
+only after the whole pattern matches. Differing successful layouts
+join by binding position. Failure names the original subject's
+runtime kind at the written pattern. [[Compiler Lower Tuple]] ·
+[[Backend Rendering Callable Programs]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

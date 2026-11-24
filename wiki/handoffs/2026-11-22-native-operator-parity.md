@@ -479,10 +479,17 @@ bracket dispatch and the literal slot fast path. [[Backend Rendering
 Callable Programs]] covers stable slots and held arrays, text, and
 shorter tuples.
 
+## Held destructuring subjects
+
+Architect → Backend Engineer. [[Compiler Lower Tuple]] tests the
+retained subject and projects outputs into the enclosing bindings.
+[[Backend Rendering Callable Programs]] covers a successful layout
+join, a tuple shape mismatch, and a missing field on a held record.
+
 ## Next action
 
-Preserve the runtime pattern failure when irrefutable tuple or
-record binding sees a differently shaped held value.
+Select the held subject for refutable and sequence patterns so an
+incompatible layout reaches the following arm or binding diagnostic.
 
 ## Referenced by
 
