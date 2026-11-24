@@ -467,7 +467,10 @@ execute cc root sourceText failAt transform = do
 
 instrument :: Int -> [Text]
 instrument attempt =
-  [ "#include <stdlib.h>", "#include <stdio.h>"
+  -- The runtime's host parts need the POSIX clocks, which glibc declares only
+  -- when the feature macros precede the first system header.
+  [ "#if defined(__linux__)", "#define _DEFAULT_SOURCE 1", "#define _POSIX_C_SOURCE 200809L", "#endif"
+  , "#include <stdlib.h>", "#include <stdio.h>"
   , "static size_t test_live = 0, test_attempt = 0, test_malloc_calls = 0, test_malloc_limit = 0, test_malloc_failure = 0;"
   , "static void *test_malloc(size_t bytes) {"
   , "  if (++test_malloc_calls == test_malloc_failure) return NULL;"
