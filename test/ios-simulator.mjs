@@ -615,7 +615,7 @@ ${body}
   run(resolve(compiler), ["build", source, "--native", "--target", "ios-simulator-arm64", "--app", "-o", app], appBuildTimeout);
   run(xcrun, ["simctl", "install", device, app], simulatorTimeout);
   try {
-    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", device, bundle],
+    const launched = spawnSync(xcrun, ["simctl", "launch", "--console-pty", "--terminate-running-process", device, bundle],
       { encoding: "utf8", timeout: simulatorTimeout });
     if (launched.error) throw launched.error;
     const output = launched.stdout + launched.stderr;
@@ -634,7 +634,9 @@ function launch(device, bundle, prefix, status, environment = {}) {
   for (let attempt = 1; attempt <= launchAttempts; attempt += 1) {
     say(`LAUNCH iOS ${bundle} attempt ${attempt}`);
     try {
-      const output = run(xcrun, ["simctl", "launch", "--console-pty", device, bundle], simulatorTimeout,
+      // A retry ends whatever an earlier attempt left running, whose output
+      // would otherwise reach this attempt's console as well.
+      const output = run(xcrun, ["simctl", "launch", "--console-pty", "--terminate-running-process", device, bundle], simulatorTimeout,
         { ...process.env, ...environment });
       const lines = output.split(/\r?\n/u).filter((line) => line.startsWith(prefix));
       if (lines.some((line) => line.startsWith(status))) return lines;

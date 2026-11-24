@@ -19,6 +19,8 @@ The workflow path filters include `test/ios-app-builds.mjs`, `test/ios-foreign-a
 
 Build steps restore two caches before `cabal update`. The first holds the cabal store (`~/.local/state/cabal/store` and `~/.cabal/store`), keyed on the hashes of `*.cabal` and `cabal.project*`. The second holds `dist-newstyle`, keyed `ios-dist-<os>-<ref>-<sha>`, restoring from the same ref and then from `refs/heads/dev`. Recompilation is decided by source hashes, so only changed modules compile again.
 
+The run step sets `PUDU_IOS_BUILD_JOBS=2` and `PUDU_CC_TIMEOUT=600`. A hosted runner has few cores, two builds at a time keep the simulator responsive, and the C compiler gets time to finish.
+
 ## Resolved Grill Log
 
 - Keep the workflow path-filtered and cancel superseded runs of the same ref.

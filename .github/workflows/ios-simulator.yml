@@ -84,4 +84,8 @@ jobs:
       - name: Run native foreign calls in an iOS app
         env:
           PUDU_IOS_SHARD: ${{ matrix.shard }}/3
+          # A hosted runner has few cores; two builds at a time keep the
+          # simulator responsive, and the C compiler gets room to finish.
+          PUDU_IOS_BUILD_JOBS: '2'
+          PUDU_CC_TIMEOUT: '600'
         run: node test/ios-simulator.mjs "$(cabal list-bin exe:pudu --ghc-options=-Werror)" --require-simulator

@@ -56,6 +56,8 @@ Use `--require-simulator` to make an unavailable simulator a failure.
   so no step waits on input and a timed-out step cannot hold the suite.
 - Each launch attempt prints a `LAUNCH iOS <bundle> attempt <n>` line before it starts, so a
   slow step shows as progress in the log.
+- Every `simctl launch` passes `--terminate-running-process`, so a retried launch ends whatever an
+  earlier attempt left running and its console carries only the new process's output.
 - An expected label may be a regular expression, for labels whose text depends
   on the machine (About's version, model, locale, zone and link); the count and
   order of labels must still match exactly.
