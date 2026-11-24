@@ -571,7 +571,7 @@ entry for receivers and arguments with unchanged layouts.
 
 Resolved Grill Log: Indirect calls and array callbacks share callable adaptation. Written and stored callbacks keep their source name resolution.
 
-Resolved Grill Log: supply the open traversal specializer to collection
+Resolved Grill Log: supply the bound traversal specializer to collection
 dispatch along with the source callback lowerer. A saved callback uses the
 retained operands rather than re-lowering their source expressions.
 
@@ -646,3 +646,5 @@ and retain the direct slot operation for held tuples.
 Resolved Grill Log: sequence and let-else binding declarations
 enter the enclosing block together, and an impossible binding
 stops lowering subsequent statements.
+
+Resolved Grill Log: a held member call passes the written member name to member dispatch. A trait-qualified member names neither a record field nor a builtin collection method, so only declared lookup can answer it.

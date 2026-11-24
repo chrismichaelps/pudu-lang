@@ -83,3 +83,5 @@ Resolved Grill Log. A named local and a destructured capture use the
 same declaration rule. Mutable sites join the initializer and later
 write layouts before allocating the slot. The captured initializer
 runs once.
+
+Resolved Grill Log: a store through a held key that may be a range always fails, so a value read through such a key never widens the element slot. Writeback through such a place narrows the returned value to the slot layout; a range key fails at the store before the value is read, and any other held layout reports the same assignment failure.

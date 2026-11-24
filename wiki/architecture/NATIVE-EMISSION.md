@@ -308,6 +308,8 @@ through each side's capture layout. [[Native Aggregate Emission]] ·
 [[Backend Cross Comparison]].
 Traversal wrappers record the held result layout of a selected callback
 even when their receiver layout matches the checked receiver.
+A bound traversal used as a callback can specialize its concrete or open
+signature to the input layout carried by the outer loop.
 
 ## Declared method argument counts (#956)
 

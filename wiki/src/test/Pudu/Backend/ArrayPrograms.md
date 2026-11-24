@@ -43,3 +43,5 @@ its operand output.
 
 compare the full streams and status to catch misplaced
 method-value blame and accidental evaluation loss.
+
+Resolved Grill Log. sortBy with an annotated tuple comparison asks the comparison at every merge step.

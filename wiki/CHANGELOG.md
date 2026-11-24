@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-24 — Native dispatch and lowering parity
+
+- Keep checked trait members with their trait on held receivers.
+  [[Compiler Lower Method]] · [[Compiler Lower Body]] · [[Compiler Lower Text]]
+- Lower each sortBy comparison site with its own locals.
+  [[Compiler Lower Sort]] · [[Compiler Lower Array Loop]]
+- Declare range method operands once around both materializers.
+  [[Compiler Lower Range]]
+- Widen a reduction accumulator to a later callback result.
+  [[Compiler Lower Array Loop]]
+- Adapt ordinary stored callbacks to held traversal items.
+  [[Compiler Lower Lambda]]
+- Stop range-keyed loan writeback from widening slots.
+  [[Compiler Lower Place]] · [[Compiler Lower Loan]]
+- Restrict held-receiver test programs to forms evaluation accepts.
+  [[Backend Rendering Callable Programs]]
+
 ## 2026-11-24 — Held builtin member values (#956)
 
 - Bind a builtin method to the selected receiver and apply its own callable
@@ -18,6 +35,8 @@ tags: [changelog]
   [[Native Aggregate Emission]]
 - Preserve a retained traversal callback's actual result layout.
   [[Compiler Lower Method Value]]
+- Specialize a concretely typed bound traversal used as a callback.
+  [[Compiler Lower Lambda]] · [[Compiler Lower Array Loop]]
 
 ## 2026-11-24 — Native emission performance
 

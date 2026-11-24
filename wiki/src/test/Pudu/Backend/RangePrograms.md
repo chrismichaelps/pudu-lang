@@ -35,3 +35,5 @@ reporting its runtime kind.
 
 check native stderr against the interpreter's exact
 location and help as well as preserving the output preceding each failure.
+
+Resolved Grill Log. A stored and a written range step each hold the receiver and stride once.

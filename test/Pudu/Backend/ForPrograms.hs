@@ -87,7 +87,7 @@ forSuccessPrograms =
       sequenceView "Int" "1" "Str" "\"next\"" <>
       stateSequence "self.start" "if show(state) == \"2\" { Some((select(\"λ\".toBytes()).step(), 0)) } else { None }" <>
       [ "fn main() -> Int {"
-      , "  for 9 in Steps{start: 2} { print(\"unreached\") }"
+      , "  for 9 in (Steps{start: 2}) { print(\"unreached\") }"
       , "  print(\"done\")"
       , "  0", "}" ]
     , "begin\n2\n\"next\"\ndone\n")
@@ -111,12 +111,12 @@ forRefusalPrograms =
       sequenceView "Option[(Int, Int)]" "Some((1, 2))" "Option[Int]" "Some(3)" <>
       stateSequence "self.start" "select(\"λ\".toBytes()).step()" <>
       [ "fn main() -> Int {"
-      , "  for item in Steps{start: 2} { print(display(item)) }"
+      , "  for item in (Steps{start: 2}) { print(display(item)) }"
       , "  0", "}" ])
   , ("a transfer from begin reaches the caller before any step", program $
       stateSequence "panic(\"stopped\")" "Some((0, 1))" <>
       [ "fn main() -> Int {"
-      , "  for item in Steps{start: 2} { print(display(item)) }"
+      , "  for item in (Steps{start: 2}) { print(display(item)) }"
       , "  0", "}" ])
   ]
 

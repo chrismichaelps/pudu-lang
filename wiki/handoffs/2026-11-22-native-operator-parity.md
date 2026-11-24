@@ -651,8 +651,7 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Trace specialization when a concretely typed bound traversal is itself
-passed as a callback and receives a different callback input layout.
+Run the full native conformance properties on the parity branch and resolve any remaining interpreter differences before marking the pull request ready.
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.
@@ -669,6 +668,12 @@ covers open captures, concrete calls, and empty and nonempty nested traversals.
 builtin method values through their retained receiver layouts.
 [[Compiler Lower Method Value]] also records changed traversal results
 when the receiver matches its checked layout.
+Architect → Backend Engineer. [[Compiler Lower Lambda]] admits concrete
+bound traversals into callback specialization. Backend Engineer → Test
+Engineer. [[Backend Rendering Callable Programs]] covers direct and
+nested invocation of the same bound traversal with a held callable input.
+
+Architect → Backend Engineer. [[Compiler Lower Method]] keeps checked trait members with their trait on held receivers; [[Compiler Lower Sort]], [[Compiler Lower Range]], [[Compiler Lower Place]] and [[Compiler Lower Loan]] close duplicate-local and replay-divergence faults. Backend Engineer → Test Engineer. [[Backend Rendering Callable Programs]] now contains only programs evaluation accepts.
 
 Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 

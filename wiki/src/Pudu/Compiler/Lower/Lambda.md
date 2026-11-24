@@ -127,8 +127,10 @@ Resolved Grill Log: A selected method copy reads the original receiver capture. 
 Resolved Grill Log: a selected open traversal derives its instantiated fact
 and result carrier from the supplied callback or seed when building a copy.
 The copy keeps the captured receiver and original method identity.
-The traversal entry selects only open method templates for this adaptation.
-Other callback signatures retain the ordinary mismatch diagnostic.
+The collection entry can select any bound builtin traversal template.
+A concrete template uses the supplied callable layout and records the
+result discovered by lowering its body. Other callbacks retain the
+ordinary mismatch diagnostic.
 
 ## Native task result layouts (#956)
 
@@ -157,3 +159,5 @@ Pass the already evaluated callee into [[Compiler Lower Loan]]
 before lowering arguments. A matching tuple is only a reason to
 preserve places. The selected callable profile still decides which
 positions, if any, return finals.
+
+Resolved Grill Log: collection callback specialization prefers bound builtin traversals and otherwise adapts any matching stored callable to the held item layout, as indirect calls do.

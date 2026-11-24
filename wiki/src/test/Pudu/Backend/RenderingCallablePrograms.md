@@ -310,3 +310,7 @@ family, member, or receiver entry makes the comparison unequal.
 
 Resolved Grill Log. A retained map with a concrete static signature must
 return the array of results actually carried by its callback.
+Invoke that concrete map as a second traversal's callback with the
+same held callable input layout.
+
+Resolved Grill Log. Held receivers reach a declared implementation only through a builtin Str member, which carries no trait provider. Cases select the held trait implementation that way; a trait-qualified call on a held collection is a refusal regression. Programs whose checked receiver needs a record, tuple, range, unit, or callable result have no valid form and are not part of the suite.

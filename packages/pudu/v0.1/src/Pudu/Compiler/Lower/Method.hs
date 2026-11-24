@@ -21,7 +21,7 @@ import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSigna
 import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, pathText, preserveRuntimeResult, projectRuntimeValue, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
 import Pudu.Compiler.Lower.MethodValue (boundMemberFact, declaredMemberType, lowerDynamicTextCall)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld, withMemberReceiver)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld, storeThroughRangeKey, withMemberReceiver)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, loanedInputs, lookupScheme, ownerKeyOf, recordFields, selectedMember, sumVariants, typeBindings, typeFactAt, typeForSpan, nativeValueType)
 import Pudu.Core
 import Pudu.Eval.Operator.Access (arrayMethods, mapMethods, setMethods, stringMethods)
@@ -220,8 +220,12 @@ declaredMethodKey context kind written
   | member /= "toText", builtinFirst member kind = Nothing
   | otherwise = do
       owner <- ownerKeyOf kind
-      let qualified = provider >>= \trait -> Map.lookup (trait, owner, member) (contextTraitMethods context)
-      qualified <|> Map.lookup (owner, member) (contextMethods context)
+      case provider of
+        -- A checked trait member stays with that trait: a receiver whose
+        -- type lacks the implementation has no such member.
+        Just trait -> Map.lookup (trait, owner, member) (contextTraitMethods context)
+          <|> Map.lookup (displayName trait, owner, member) (contextTraitMethods context)
+        Nothing -> Map.lookup (owner, member) (contextMethods context)
  where
   (provider, member) = selectedMember written
 
@@ -387,7 +391,9 @@ publishDynamicFinals at state declarations subject lent checked arms
                   (next, carried) = projectRuntimeValue types current (heldType found) finalValue
                in if coreExpressionType carried == heldType found
                     then (next, Just [storeHeld types (heldSpan found) found carried])
-                    else (observeHeldLayout next found (coreExpressionType carried), Nothing)
+                    else case storeThroughRangeKey next found finalValue of
+                      Just (stored, statement) -> (stored, Just [statement])
+                      Nothing -> (observeHeldLayout next found (coreExpressionType carried), Nothing)
           (final, stores) = mapAccumL publish bound (zip [1 ..] (zip lent finals))
           value = CoreExpression at result (CoreTupleIndex 0 read')
        in case sequence stores of

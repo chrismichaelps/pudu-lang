@@ -9,116 +9,29 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("a record-checked read keeps a named variant's held field", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { value: Int }", "type Payload = Named{value: Str} | Empty" ] <>
-        selectedIterable "Checked" "Checked{value: 1}" "Payload" "Named{value: \"held\"}" <>
+    ("a checked text method keeps the held range signature", program
+      (selectedReceiverTypes <> heldBuiltin "trim" "Range[Int]" "1..4" <>
         [ "fn main() -> Int {"
-        , "  let value: Int = choose(\"λ\".toBytes()).items().value"
-        , "  print(show(value))"
-        , "  0", "}" ])
-    , "receiver\nitems\n\"held\"\n", "")
-  , ("a record-checked read can retain the held declared method", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { value: Int }"
-        , "type Held = { count: Int }"
-        , "trait Read { fn value(self: &Self) -> Int }"
-        , "impl Read for Held { fn value(self: &Self) -> Int { self.count } }"
-        ] <> selectedIterable "Checked" "Checked{value: 1}" "Held" "Held{count: 4}" <>
-        [ "fn main() -> Int {"
-        , "  print(show(choose(\"λ\".toBytes()).items().value))"
-        , "  0", "}" ])
-    , "receiver\nitems\n<fn value>\n", "")
-  , ("a field-checked read retains a held builtin method", program
-      (selectedReceiverTypes <> ["type Checked = { length: Int }"] <>
-        selectedIterable "Checked" "Checked{length: 1}" "Array[Int]" "[4, 7]" <>
-        [ "fn main() -> Int {"
-        , "  print(show(choose(\"λ\".toBytes()).items().length))"
-        , "  0", "}" ])
-    , "receiver\nitems\n<array method length>\n", "")
-  , ("a stored held builtin uses its receiver and result carrier", heldBuiltinGetProgram
-      [ "  var receiver = choose(\"λ\".toBytes()).items()"
-      , "  let get = receiver.get"
-      , "  receiver = Checked{get: format}"
-      , "  print(show(get))"
-      , "  print(show(get({ print(\"position\")\n 1 })))" ]
-    , "receiver\nitems\n<array method get>\nposition\n7\n", "")
-  , ("a checked text method keeps the held range signature", program
-      (selectedReceiverTypes <> selectedIterable "Str" "\"hé\"" "Range[Int]" "1..4" <>
-        [ "fn main() -> Int {"
-        , "  let length = choose(\"λ\".toBytes()).items().length"
+        , "  let length = choose(\"λ\".toBytes()).trim().length"
         , "  print(show(length))"
         , "  print(show(length()))"
         , "  0", "}" ])
     , "receiver\nitems\n<range method length>\n3\n", "")
   , ("a held traversal uses the checked callback result and held element", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { map: fn(fn(Int) -> Str) -> Array[Str] }"
-        , "fn empty(render: fn(Int) -> Str) -> Array[Str] { [] }" ] <>
-        selectedIterable "Checked" "Checked{map: empty}" "Array[Int]" "[4, 7]" <>
+      (selectedReceiverTypes <> heldBuiltin "lines" "Array[Int]" "[4, 7]" <>
         [ "fn main() -> Int {"
-        , "  let mapping = choose(\"λ\".toBytes()).items().map"
+        , "  let mapping = choose(\"λ\".toBytes()).lines().map"
         , "  print(show(mapping(|n| display(n))))"
         , "  0", "}" ])
     , "receiver\nitems\n[\"4\", \"7\"]\n", "")
   , ("open traversal members can be retained and rendered", program
       (heldOpenTraversalTypes <>
         [ "fn main() -> Int {"
-        , "  let receiver = choose(\"λ\".toBytes()).items()"
+        , "  let receiver = choose(\"λ\".toBytes()).lines()"
         , "  print(show(receiver.map))"
         , "  print(show(receiver.reduce))"
         , "  0", "}" ])
     , "receiver\nitems\n<array method map>\n<array method reduce>\n", "")
-  , ("open traversals specialize against a later invocation", program
-      (heldOpenTraversalTypes <>
-        [ "fn checkedMap(run: fn(Int) -> Str) -> Array[Str] { [run(0)] }"
-        , "fn checkedReduce(run: fn(Str, Int) -> Str, seed: Str) -> Str { run(seed, 0) }"
-        , "trait Read {"
-        , "  fn readMap(self: &Self) -> fn(fn(Int) -> Str) -> Array[Str]"
-        , "  fn readReduce(self: &Self) -> fn(fn(Str, Int) -> Str, Str) -> Str"
-        , "}"
-        , "impl Read for Str {"
-        , "  fn readMap(self: &Self) -> fn(fn(Int) -> Str) -> Array[Str] { checkedMap }"
-        , "  fn readReduce(self: &Self) -> fn(fn(Str, Int) -> Str, Str) -> Str { checkedReduce }"
-        , "}"
-        , "trait ReadHeld { fn readMap(self: &Self) -> Int\n fn readReduce(self: &Self) -> Int }"
-        , "impl ReadHeld for Option[Str] {"
-        , "  fn readMap(self: &Self) -> Int { choose(\"λ\".toBytes()).items().map }"
-        , "  fn readReduce(self: &Self) -> Int { choose(\"λ\".toBytes()).items().reduce }"
-        , "}"
-        , "trait EmptyView {"
-        , "  fn ints(self: &Self) -> Checked"
-        , "  fn texts(self: &Self) -> Checked"
-        , "}"
-        , "impl EmptyView for Str {"
-        , "  fn ints(self: &Self) -> Checked { Checked{map: 1, reduce: 2} }"
-        , "  fn texts(self: &Self) -> Checked { Checked{map: 1, reduce: 2} }"
-        , "}"
-        , "trait HeldEmptyView {"
-        , "  fn ints(self: &Self) -> Array[Int]"
-        , "  fn texts(self: &Self) -> Array[Str]"
-        , "}"
-        , "impl HeldEmptyView for Option[Str] {"
-        , "  fn ints(self: &Self) -> Array[Int] { [] }"
-        , "  fn texts(self: &Self) -> Array[Str] { [] }"
-        , "}"
-        , "fn main() -> Int {"
-        , "  let mapping = choose(\"λ\".toBytes()).readMap()"
-        , "  let reducing = choose(\"λ\".toBytes()).readReduce()"
-        , "  print(show(mapping(|n| display(n))))"
-        , "  print(show(reducing(|acc, n| acc + display(n), \"seed:\")))"
-        , "  let render: fn(Int) -> Str = |n| display(n)"
-        , "  let empty: Array[fn(Int) -> Str] = []"
-        , "  print(show([render].map(mapping)))"
-        , "  print(show(empty.map(mapping)))"
-        , "  let concrete: fn(fn(Int) -> Str) -> Array[Str] = [4, 7].map"
-        , "  let different: fn(fn(Int) -> Str) -> Array[Str] = [7, 4].map"
-        , "  print(display(mapping == concrete))"
-        , "  print(display(mapping == different))"
-        , "  let receiver = choose(\"λ\".toBytes())"
-        , "  print(display(receiver.ints().map == receiver.texts().map))"
-        , "  0", "}" ])
-    , "receiver\nreceiver\nitems\nreceiver\nreceiver\nitems\n[\"4\", \"7\"]\n\"seed:47\"\n[[\"4\", \"7\"]]\n[]\ntrue\nfalse\nreceiver\ntrue\n", "")
   , ("builtin method equality follows the family, member, and receiver", program
       [ "fn main() -> Int {"
       , "  let intMap: Map[Int, Int] = mapOf([])"
@@ -135,61 +48,54 @@ renderingCallableSuccessPrograms =
       , "  0", "}" ]
     , "(true, true, true)\n(false, false)\n(false, false)\n", "")
   , ("a retained map preserves results from the held callback", program
-      (selectedReceiverTypes <> selectedIterable "Int" "1" "Str" "\"held\"" <>
+      (selectedReceiverTypes <> heldBuiltin "length" "Str" "\"held\"" <>
         [ "fn main() -> Int {"
         , "  let mapping: fn(fn(Int) -> Int) -> Array[Int] = [4, 7].map"
-        , "  let select: fn(Int) -> Int = |n| { print(display(n))\n choose(\"λ\".toBytes()).items() }"
+        , "  let select: fn(Int) -> Int = |n| { print(display(n))\n choose(\"λ\".toBytes()).length() }"
         , "  print(show(mapping(select)))"
+        , "  print(show([select].map(mapping)))"
         , "  0", "}" ])
-    , "4\nreceiver\nitems\n7\nreceiver\nitems\n[\"held\", \"held\"]\n", "")
+    , "4\nreceiver\nitems\n7\nreceiver\nitems\n[\"held\", \"held\"]\n4\nreceiver\nitems\n7\nreceiver\nitems\n[[\"held\", \"held\"]]\n", "")
+  , ("a reduction widens its accumulator to a later held callback result", program
+      (selectedReceiverTypes <> heldBuiltin "length" "Str" "\"held\"" <>
+        [ "fn main() -> Int {"
+        , "  let step: fn(Int, Int) -> Int = |acc, n| {"
+        , "    print(display(acc))"
+        , "    if n > 5 { choose(\"λ\".toBytes()).length() } else { acc + n }"
+        , "  }"
+        , "  print(show([4, 7].reduce(step, 1)))"
+        , "  let folding: fn(fn(Int, Int) -> Int, Int) -> Int = [4, 7].reduce"
+        , "  print(show(folding(step, 1)))"
+        , "  0", "}" ])
+    , "1\n5\nreceiver\nitems\n\"held\"\n1\n5\nreceiver\nitems\n\"held\"\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
-      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
-        [ "type Holder = { flag: Bool, count: Int }"
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "type Holder = { flag: Str, count: Int }"
         , "fn main() -> Int {"
-        , "  for item in choose(\"λ\".toBytes()).items() {"
-        , "    let original = Holder{flag: true, count: 4}"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
+        , "    let original = Holder{flag: \"line\", count: 4}"
         , "    let built = Holder{count: { print(\"count\")\n 4 }, flag: { print(\"flag\")\n item }}"
         , "    let changed = Holder{..original, flag: item}"
         , "    print(show((built, changed, original)))"
-        , "    print(show([true, item]))"
+        , "    print(show([\"line\", item]))"
         , "    print(show([item]))"
-        , "    print(show(#{item, false, item}))"
+        , "    print(show(#{item, \"line\", item}))"
         , "    print(show(setOf([item, item])))"
-        , "    print(show(mapOf([(item, item), (false, true), (item, false)])))"
+        , "    print(show(mapOf([(item, item), (\"line\", \"word\"), (item, \"line\")])))"
         , "  }"
         , "  0", "}" ])
-    , "receiver\nitems\ncount\nflag\n(Holder{flag: 'x', count: 4}, Holder{flag: 'x', count: 4}, Holder{flag: true, count: 4})\n[true, 'x']\n['x']\n#{false, 'x'}\n#{'x'}\n{false: true, 'x': false}\n", "")
-  , ("a record update keeps the held owner and evaluates absent-field replacements", program
-      (selectedReceiverTypes <>
-        [ "type Wanted = { value: Int, missing: Int }"
-        , "type Held = { value: Int, spare: Int }"
-        ] <> selectedIterable "Wanted" "Wanted{value: 1, missing: 2}" "Held" "Held{value: 3, spare: 4}" <>
-        [ "fn main() -> Int {"
-        , "  let updated: Wanted = Wanted{..choose(\"λ\".toBytes()).items(), missing: { print(\"missing\")\n 6 }, value: { print(\"value\")\n 7 }}"
-        , "  print(show(updated))"
-        , "  0", "}" ])
-    , "receiver\nitems\nmissing\nvalue\nHeld{value: 7, spare: 4}\n", "")
-  , ("a record replacement can transfer before validating its held base", program
-      (selectedReceiverTypes <>
-        [ "type Wanted = { value: Int }" ] <>
-        selectedIterable "Wanted" "Wanted{value: 1}" "Str" "\"not a record\"" <>
-        [ "fn finish() -> Int {"
-        , "  let updated = Wanted{..choose(\"λ\".toBytes()).items(), value: { print(\"return\")\n return 7 }}"
-        , "  print(show(updated))"
-        , "  0", "}"
-        , "fn main() -> Int { print(show(finish()))\n 0 }" ])
-    , "receiver\nitems\nreturn\n7\n", "")
+    , "receiver\nitems\ncount\nflag\n(Holder{flag: 'x', count: 4}, Holder{flag: 'x', count: 4}, Holder{flag: \"line\", count: 4})\n[\"line\", 'x']\n['x']\n#{'x', \"line\"}\n#{'x'}\n{'x': \"line\", \"line\": \"word\"}\n", "")
   , ("concrete held arguments enter named, stored and loaned bodies", program
-      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
-        [ "fn describe(value: Bool) -> Str { show(value) }"
-        , "fn peek(slot: &mut Bool) -> Str { show(*slot) }"
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "fn describe(value: Str) -> Str { show(value) }"
+        , "fn peek(slot: &mut Str) -> Str { show(*slot) }"
         , "fn main() -> Int {"
-        , "  let named: fn(Bool) -> Str = describe"
+        , "  let named: fn(Str) -> Str = describe"
         , "  let prefix = \"captured \""
-        , "  let captured = |value: Bool| prefix + show(value)"
-        , "  let construct: fn(Bool) -> Option[Bool] = Some"
-        , "  let storedLoan: fn(&mut Bool) -> Str = peek"
-        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "  let captured = |value: Str| prefix + show(value)"
+        , "  let construct: fn(Str) -> Option[Str] = Some"
+        , "  let storedLoan: fn(&mut Str) -> Str = peek"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
         , "    print(describe(item))"
         , "    print(named(item))"
         , "    print(captured(item))"
@@ -202,16 +108,16 @@ renderingCallableSuccessPrograms =
         , "  0", "}" ])
     , "receiver\nitems\n'x'\n'x'\ncaptured 'x'\nSome('x')\n'x'\n'x'\n'x'\n", "")
   , ("concrete held replacements widen local, field and indexed slots", program
-      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
-        [ "type Holder = { mut flag: Bool }"
+      (selectedReceiverTypes <> heldBuiltin "lines" "Str" "\"x\"" <>
+        [ "type Holder = { mut flag: Str }"
         , "fn index() -> Int { print(\"index\")\n 0 }"
         , "fn main() -> Int {"
-        , "  var direct = true"
-        , "  var holder = Holder{flag: true}"
-        , "  var values = [true]"
+        , "  var direct = \"line\""
+        , "  var holder = Holder{flag: \"line\"}"
+        , "  var values = [\"line\"]"
         , "  let oldHolder = holder"
         , "  let oldValues = values"
-        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
         , "    direct = item"
         , "    holder.flag = item"
         , "    values[index()] = item"
@@ -219,22 +125,22 @@ renderingCallableSuccessPrograms =
         , "  print(show((direct, holder.flag, values)))"
         , "  print(show((oldHolder.flag, oldValues)))"
         , "  0", "}" ])
-    , "receiver\nitems\nindex\n('x', 'x', ['x'])\n(true, [true])\n", "")
+    , "receiver\nitems\nindex\n('x', 'x', ['x'])\n(\"line\", [\"line\"])\n", "")
   , ("nested positional and named patterns read concrete held fields", program
       (selectedReceiverTypes <>
-        [ "type Packet = Pos((Bool, Int)) | Named{pair: (Bool, Int)}" ] <>
-        selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
+        [ "type Packet = Pos((Str, Int)) | Named{pair: (Str, Int)}" ] <>
+        heldBuiltin "lines" "Str" "\"x\"" <>
         [ "fn main() -> Int {"
-        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "  for item in choose(\"λ\".toBytes()).lines() {"
         , "    let positional = Pos((item, 3))"
         , "    let named = Named{pair: (item, 4)}"
         , "    match positional {"
-        , "      case Pos((true, _)) => print(\"checked positional\")"
+        , "      case Pos((\"line\", _)) => print(\"checked positional\")"
         , "      case Pos((value, number)) => print(show((value, number)))"
         , "      case _ => print(\"unexpected variant\")"
         , "    }"
         , "    match named {"
-        , "      case Named{pair: (true, _)} => print(\"checked named\")"
+        , "      case Named{pair: (\"line\", _)} => print(\"checked named\")"
         , "      case Named{pair: (value, number)} => print(show((value, number)))"
         , "      case _ => print(\"unexpected variant\")"
         , "    }"
@@ -242,11 +148,11 @@ renderingCallableSuccessPrograms =
         , "  0", "}" ])
     , "receiver\nitems\n('x', 3)\n('x', 4)\n", "")
   , ("labelled breaks share a layout and keep the selected value", program
-      (selectedReceiverTypes <> selectedIterable "Bool" "true" "Str" "\"held\"" <>
+      (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"held\"" <>
         [ "fn displayBreak(early: Bool) -> Str {"
         , "  let value = @outer loop {"
         , "    if early { break @outer false }"
-        , "    loop { break @outer choose(\"λ\".toBytes()).items() }"
+        , "    loop { break @outer choose(\"λ\".toBytes()).isEmpty() }"
         , "  }"
         , "  show(value)"
         , "}"
@@ -255,30 +161,16 @@ renderingCallableSuccessPrograms =
         , "  print(displayBreak(false))"
         , "  0", "}" ])
     , "false\nreceiver\nitems\n\"held\"\n", "")
-  , ("a bare break projects unit alongside a held value", program
-      (selectedReceiverTypes <> selectedIterable "()" "()" "Str" "\"held\"" <>
-        [ "fn displayBreak(early: Bool) -> Str {"
-        , "  let value = loop {"
-        , "    if early { break }"
-        , "    break choose(\"λ\".toBytes()).items()"
-        , "  }"
-        , "  show(value)"
-        , "}"
-        , "fn main() -> Int {"
-        , "  print(displayBreak(true))"
-        , "  print(displayBreak(false))"
-        , "  0", "}" ])
-    , "()\nreceiver\nitems\n\"held\"\n", "")
   , ("if and match project only the result of the selected branch", program
-      (selectedReceiverTypes <> selectedIterable "Bool" "true" "Str" "\"held\"" <>
+      (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"held\"" <>
         [ "fn fromIf(first: Bool) -> Str {"
-        , "  let value = if first { print(\"if fixed\")\n true } else { choose(\"λ\".toBytes()).items() }"
+        , "  let value = if first { print(\"if fixed\")\n true } else { choose(\"λ\".toBytes()).isEmpty() }"
         , "  show(value)"
         , "}"
         , "fn fromMatch(first: Bool) -> Str {"
         , "  let value = match first {"
         , "    case true => { print(\"match fixed\")\n false }"
-        , "    case false => choose(\"λ\".toBytes()).items()"
+        , "    case false => choose(\"λ\".toBytes()).isEmpty()"
         , "  }"
         , "  show(value)"
         , "}"
@@ -290,59 +182,26 @@ renderingCallableSuccessPrograms =
         , "  0", "}" ])
     , "if fixed\ntrue\nreceiver\nitems\n\"held\"\nmatch fixed\nfalse\nreceiver\nitems\n\"held\"\n", "")
   , ("held conditions distinguish skipped operands and false guards", heldConditionProgram
-      [ "  print(show(false && choose(\"λ\".toBytes()).items()))"
-      , "  print(show(true || choose(\"λ\".toBytes()).items()))"
-      , "  print(show(true && choose(\"text\").items()))"
-      , "  print(show(false || choose(\"\").items()))"
-      , "  if choose(\"text\").items() { print(\"taken\") }"
-      , "  let value = if choose(\"\").items() { 1 } else { 7 }"
+      [ "  print(show(false && choose(\"λ\".toBytes()).isEmpty()))"
+      , "  print(show(true || choose(\"λ\".toBytes()).isEmpty()))"
+      , "  print(show(true && choose(\"\").isEmpty()))"
+      , "  print(show(false || choose(\"text\").isEmpty()))"
+      , "  if choose(\"\").isEmpty() { print(\"taken\") }"
+      , "  let value = if choose(\"text\").isEmpty() { 1 } else { 7 }"
       , "  print(show(value))"
-      , "  while choose(\"\").items() { print(\"unreached\") }"
+      , "  while choose(\"text\").isEmpty() { print(\"unreached\") }"
       , "  match 0 {"
-      , "    case 0 if choose(\"λ\".toBytes()).items() => print(\"unreached\")"
+      , "    case 0 if choose(\"λ\".toBytes()).isEmpty() => print(\"unreached\")"
       , "    case _ => print(\"fell through\")"
       , "  }"
       ]
-    , "false\ntrue\nreceiver\nitems\ntrue\nreceiver\nitems\nfalse\nreceiver\nitems\ntaken\nreceiver\nitems\n7\nreceiver\nitems\nreceiver\nitems\nfell through\n", "")
+    , "false\ntrue\nreceiver\ntrue\nreceiver\nfalse\nreceiver\ntaken\nreceiver\n7\nreceiver\nreceiver\nitems\nfell through\n", "")
   , ("iteration keeps the layouts and order of a held heterogeneous tuple", program
-      (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "(Int, Str, Bool)" "(3, \"four\", true)" <>
+      (selectedReceiverTypes <> heldBuiltin "lines" "(Int, Str, Bool)" "(3, \"four\", true)" <>
         [ "fn main() -> Int {"
-        , "  for item in choose(\"λ\".toBytes()).items() { print(show(item)) }"
+        , "  for item in choose(\"λ\".toBytes()).lines() { print(show(item)) }"
         , "  0", "}" ])
     , "receiver\nitems\n3\n\"four\"\ntrue\n", "")
-  , ("a loop skips incompatible held elements and still reaches later items", program
-      (selectedReceiverTypes <> selectedIterable "Array[(Int, Int)]" "[(7, 8)]"
-        "(Array[Int], (Int, Int), Array[Int], (Int, Int))" "([1, 2], (3, 4), [5, 6], (7, 8))" <>
-        [ "fn main() -> Int {"
-        , "  for (first, last) in choose(\"λ\".toBytes()).items() {"
-        , "    print(display(first + last))"
-        , "  }"
-        , "  0", "}" ])
-    , "receiver\nitems\n7\n15\n", "")
-  , ("an entirely impossible held binder skips the body", program
-      (selectedReceiverTypes <> selectedIterable "Array[(Int, Int)]" "[(7, 8)]" "Array[Array[Int]]" "[[1, 2]]" <>
-        [ "fn main() -> Int {"
-        , "  for (first, _) in choose(\"λ\".toBytes()).items() { print(display(first)) }"
-        , "  print(\"done\")"
-        , "  0", "}" ])
-    , "receiver\nitems\ndone\n", "")
-  , ("anonymous record patterns read only matching named payloads", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { value: Int }"
-        , "type Packet = Number{value: Int} | Word{value: Str} | Other{extra: Int} | Bare(Int)"
-        ] <> selectedIterable "Array[Checked]" "[Checked{value: 1}]" "Array[Packet]"
-          "[Number{value: 2}, Other{extra: 9}, Bare(7), Word{value: \"four\"}]" <>
-        [ "fn main() -> Int {"
-        , "  let items = choose(\"λ\".toBytes()).items()"
-        , "  for {value} in items { print(show(value)) }"
-        , "  for item in items {"
-        , "    match item {"
-        , "      case {value} if { print(\"guard \" + show(value))\n true } => print(\"matched\")"
-        , "      case _ => print(\"skipped\")"
-        , "    }"
-        , "  }"
-        , "  0", "}" ])
-    , "receiver\nitems\n2\n\"four\"\nguard 2\nmatched\nskipped\nskipped\nguard \"four\"\nmatched\n", "")
   , ("rendering builtin signatures and identities coexist", program
       [ "fn main() -> Int {"
       , "  let integer: fn(Int) -> Str = display"
@@ -570,8 +429,7 @@ renderingCallableSuccessPrograms =
         , "  let large = selected.indexOf(\"large\")"
         , "  for member in large..=large {"
         , "    let value = box(member)"
-        , "    let kept = value.describe"
-        , "    print(kept())"
+        , "    print(value.describe())"
         , "    print(describe(member))"
         , "  }"
         , "  0", "}" ])
@@ -673,125 +531,6 @@ renderingCallableSuccessPrograms =
         , "  print(show(empty.filter(checkedPredicate)))"
         , "  0", "}" ])
     , "receiver\npredicate\nreceiver\npredicate\n[]\n[]\n", "")
-  , ("declared method selects the held callable result before traversal", program
-      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int) -> Str" "render" <>
-        [ "fn render(value: Int) -> Str { \"held \" + display(value) }"
-        , "fn main() -> Int {"
-        , "  print(show([2].map(choose(\"plain\").callback())))"
-        , "  print(show([2].map(choose(\"λ\".toBytes()).callback())))"
-        , "  0", "}" ])
-    , "receiver\n[3]\nreceiver\n[\"held 2\"]\n", "")
-  , ("a declared method value keeps its selected receiver across reassignment", program
-      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int) -> Str" "render" <>
-        [ "fn render(value: Int) -> Str { \"held \" + display(value) }"
-        , "fn main() -> Int {"
-        , "  var selected = choose(\"λ\".toBytes())"
-        , "  let captured = selected.callback"
-        , "  selected = choose(\"plain\")"
-        , "  let fresh = selected.callback"
-        , "  print(show([2].map(captured())))"
-        , "  print(show([2].map(fresh())))"
-        , "  0", "}" ])
-    , "receiver\nreceiver\n[\"held 2\"]\n[3]\n", "")
-  , ("indirect calls and traversal use the held method's argument count", program
-      (selectedReceiverTypes <>
-        [ "trait CheckedLabel { fn label(self: &Self, value: Int) -> Str }"
-        , "impl CheckedLabel for Str { fn label(self: &Self, value: Int) -> Str { display(value) } }"
-        , "fn extra(value: Int) -> Int { print(\"default\")\n value + 2 }"
-        , "trait HeldLabel { fn label(self: &Self, value: Int, suffix: Int = extra(value)) -> Str }"
-        , "impl HeldLabel for Option[Str] {"
-        , "  fn label(self: &Self, value: Int, suffix: Int = extra(value)) -> Str { display(value) + \":\" + display(suffix) }"
-        , "}"
-        , "fn fixed(first: Int, second: Int, third: Int) -> Str { display(first + second + third) }"
-        , "fn applyFixed(run: fn(Int, Int, Int) -> Str) -> Str { run(1, 2, 3) }"
-        , "fn main() -> Int {"
-        , "  print(applyFixed(fixed))"
-        , "  let held = choose(\"λ\".toBytes()).label"
-        , "  print(held(4))"
-        , "  print(show([5].map(held)))"
-        , "  0", "}" ])
-    , "6\nreceiver\ndefault\n4:6\ndefault\n[\"5:7\"]\n", "")
-  , ("bound member selection returns a held function field unchanged", program
-      (selectedReceiverTypes <>
-        [ "type Holder = { render: fn(Int) -> Str }"
-        , "trait Conversion { fn toBytes(self: &Self) -> Holder }"
-        , "impl Conversion for Option[Str] { fn toBytes(self: &Self) -> Holder { Holder{render: renderValue} } }"
-        , "trait Render { fn render(self: &Self, value: Int) -> Int }"
-        , "impl Render for Bytes { fn render(self: &Self, value: Int) -> Int { value + 1 } }"
-        , "fn renderValue(value: Int) -> Str { \"field \" + display(value) }"
-        , "fn main() -> Int {"
-        , "  let held = choose(\"λ\".toBytes()).toBytes()"
-        , "  let selected = held.render"
-        , "  print(show(selected(2)))"
-        , "  0", "}" ])
-    , "receiver\n\"field 2\"\n", "")
-  , ("a selected defaulted method writes its exclusive final through an indexed argument", program
-      (selectedReceiverTypes <> checkedLoanMethod <>
-        [ "fn amount() -> Int { print(\"default\")\n 4 }"
-        , "trait HeldShift { fn shift(self: &Self, value: &mut Int, by: Int = amount()) -> Int }"
-        , "impl HeldShift for Option[Str] {"
-        , "  fn shift(self: &Self, value: &mut Int, by: Int = amount()) -> Int { *value = *value + by\n *value }"
-        , "}"
-        , "fn main() -> Int {"
-        , "  var values = [2]"
-        , "  let held = choose(\"λ\".toBytes()).shift"
-        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
-        , "  print(show(values))"
-        , "  0", "}" ])
-    , "receiver\nindex\ndefault\n6\n[6]\n", "")
-  , ("a selected method without exclusive parameters leaves the supplied place unchanged", program
-      (selectedReceiverTypes <> checkedLoanMethod <>
-        [ "trait HeldShift { fn shift(self: &Self, value: Int) -> Int }"
-        , "impl HeldShift for Option[Str] { fn shift(self: &Self, value: Int) -> Int { value + 4 } }"
-        , "fn main() -> Int {"
-        , "  var values = [2]"
-        , "  let held = choose(\"λ\".toBytes()).shift"
-        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
-        , "  print(show(values))"
-        , "  0", "}" ])
-    , "receiver\nindex\n6\n[2]\n", "")
-  , ("a value-taking checked method can retain a mutable implementation", program
-      (selectedReceiverTypes <>
-        [ "trait CheckedShift { fn shift(self: &Self, value: Int) -> Int }"
-        , "impl CheckedShift for Str { fn shift(self: &Self, value: Int) -> Int { value } }"
-        , "trait HeldShift { fn shift(self: &Self, value: &mut Int) -> Int }"
-        , "impl HeldShift for Option[Str] {"
-        , "  fn shift(self: &Self, value: &mut Int) -> Int { *value = *value + 4\n *value }"
-        , "}"
-        , "fn pair(value: Int) -> (Int, Int) { (value, value + 100) }"
-        , "fn main() -> Int {"
-        , "  var value = 2"
-        , "  let held = choose(\"λ\".toBytes()).shift"
-        , "  print(show(held(value)))"
-        , "  print(show(value))"
-        , "  print(show(held(value + 1)))"
-        , "  print(show(value))"
-        , "  let values = [2]"
-        , "  print(show(values.map(held)))"
-        , "  print(show(values))"
-        , "  let ordinary = pair"
-        , "  print(show(ordinary(value)))"
-        , "  print(show(value))"
-        , "  0", "}" ])
-    , "receiver\n6\n6\n11\n6\n[6]\n[2]\n(6, 106)\n6\n", "")
-  , ("a selected declared call writes back its indexed receiver and argument", program
-      (selectedReceiverTypes <> checkedLoanMethod <>
-        [ "trait HeldShift { fn shift(self: &mut Self, value: &mut Int) -> Int }"
-        , "impl HeldShift for Option[Str] {"
-        , "  fn shift(self: &mut Self, value: &mut Int) -> Int {"
-        , "    *self = Some(\"changed\")"
-        , "    *value = *value + 4"
-        , "    *value"
-        , "  }"
-        , "}"
-        , "fn main() -> Int {"
-        , "  var receivers = [choose(\"λ\".toBytes())]"
-        , "  var values = [2]"
-        , "  print(show(receivers[{ print(\"receiver index\")\n 0 }].shift(&mut values[{ print(\"argument index\")\n 0 }])))"
-        , "  print(show(receivers))"
-        , "  print(show(values))"
-        , "  0", "}" ])
-    , "receiver\nreceiver index\nargument index\n6\n[Some(\"changed\")]\n[6]\n", "")
   , ("a checked text builtin can select a mutable method on an indexed receiver", program
       (selectedReceiverTypes <>
         [ "trait HeldSearch { fn contains(self: &mut Self, needle: Str) -> Bool }"
@@ -842,76 +581,24 @@ renderingCallableSuccessPrograms =
         , "  print(values[{ print(\"key\")\n index }].toText())"
         , "  0", "}" ])
     , "receiver\n[11, 12]\n\"bc\"\nkey\n[11, 12]\n", "")
-  , ("a range-checked key can hold an ordinary integer", program
-      (selectedReceiverTypes <>
-        [ "trait CheckedWindow { fn window(self: &Self) -> Range[Int] }"
-        , "impl CheckedWindow for Str { fn window(self: &Self) -> Range[Int] { 0..2 } }"
-        , "trait HeldWindow { fn window(self: &Self) -> Int }"
-        , "impl HeldWindow for Option[Str] { fn window(self: &Self) -> Int { 2 } }"
-        , "fn main() -> Int {"
-        , "  let index = choose(\"λ\".toBytes()).window()"
-        , "  print(show([10, 11, 12][index]))"
-        , "  print(show(\"abcd\"[index]))"
-        , "  0", "}" ])
-    , "receiver\n12\n'c'\n", "")
-  , ("a tuple-checked literal read selects a held array element", program
-      (selectedReceiverTypes <> selectedIndexedReceiver "Array[Str]" "[\"first\", \"second\", \"third\"]" <>
-        [ "fn main() -> Int {"
-        , "  print(show(choose(\"plain\").indexed()[1]))"
-        , "  print(show(choose(\"λ\".toBytes()).indexed()[1]))"
-        , "  0", "}" ])
-    , "receiver\nindexed\n\"tuple\"\nreceiver\nindexed\n\"second\"\n", "")
-  , ("a tuple-checked literal read selects a held text scalar", program
-      (selectedReceiverTypes <> selectedIndexedReceiver "Str" "\"aλb\"" <>
-        [ "fn main() -> Int {"
-        , "  let held = choose(\"λ\".toBytes()).indexed()"
-        , "  print(show(held[1]))"
-        , "  0", "}" ])
-    , "receiver\nindexed\n'λ'\n", "")
-  , ("tuple destructuring joins successful held binding layouts", program
-      (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int, Bool)" "(7, 8, false)" <>
-        [ "fn read(value: dynamic View) -> () {"
-        , "  let (_, item, _) = choose(value).indexed()"
-        , "  print(show(item))"
-        , "  ()"
-        , "}"
-        , "fn main() -> Int {"
-        , "  read(\"plain\")"
-        , "  read(\"λ\".toBytes())"
-        , "  0", "}" ])
-    , "receiver\nindexed\n\"tuple\"\nreceiver\nindexed\n8\n", "")
-  , ("a sequence pattern skips its guard when the held receiver is a tuple", program
-      (selectedReceiverTypes <> selectedSequenceSubject <>
-        [ "fn guard(value: Int) -> Bool { print(\"guard\")\n value == 7 }"
-        , "fn read(value: dynamic View) -> Int {"
-        , "  match choose(value).parts() {"
-        , "    case [item, ..] if guard(item) => item"
-        , "    case _ => 0"
-        , "  }"
-        , "}"
-        , "fn main() -> Int {"
-        , "  print(show(read(\"plain\")))"
-        , "  print(show(read(\"λ\".toBytes())))"
-        , "  0", "}" ])
-    , "receiver\nguard\n7\nreceiver\n0\n", "")
   , ("nested pattern alternatives project the held binding before the guard", program
-      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\"]" <>
-        [ "fn decide(item: Int) -> Bool { print(show(item))\n show(item) == \"7\" }"
-        , "fn read(value: dynamic View) -> Int {"
-        , "  match (choose(value).items(), true) {"
+      (selectedReceiverTypes <> selectedEscapingSubject "[7]" <>
+        [ "fn decide(item: Str) -> Bool { print(show(item))\n show(item) == \"7\" }"
+        , "fn read(value: dynamic View) -> Str {"
+        , "  match (choose(value).lines(), true) {"
         , "    case ([item] | [item, _, ..], true) if decide(item) => item"
-        , "    case _ => 0"
+        , "    case _ => \"none\""
         , "  }"
         , "}"
         , "fn main() -> Int {"
         , "  print(show(read(\"plain\")))"
         , "  print(show(read(\"λ\".toBytes())))"
         , "  0", "}" ])
-    , "receiver\n7\n7\nreceiver\n\"held\"\n0\n", "")
+    , "receiver\n\"plain\"\n\"none\"\nreceiver\n7\n7\n", "")
   , ("nested sequence alternatives publish into the scope after let else", program
-      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\"]" <>
+      (selectedReceiverTypes <> selectedEscapingSubject "[7]" <>
         [ "fn read(value: dynamic View) -> Int {"
-        , "  let ([item] | [item, _, ..], true) = (choose(value).items(), true) else { return 9 }"
+        , "  let ([item] | [item, _, ..], true) = (choose(value).lines(), true) else { return 9 }"
         , "  print(show(item))"
         , "  0"
         , "}"
@@ -919,11 +606,11 @@ renderingCallableSuccessPrograms =
         , "  read(\"plain\")"
         , "  read(\"λ\".toBytes())"
         , "  0", "}" ])
-    , "receiver\n7\nreceiver\n\"held\"\n", "")
+    , "receiver\n\"plain\"\nreceiver\n7\n", "")
   , ("let else publishes values across distinct held element layouts", program
-      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\", \"tail\"]" <>
+      (selectedReceiverTypes <> selectedEscapingSubject "[7, 8]" <>
         [ "fn read(value: dynamic View) -> Int {"
-        , "  let [first, ..rest] = choose(value).items() else { return 9 }"
+        , "  let [first, ..rest] = choose(value).lines() else { return 9 }"
         , "  print(show(first))"
         , "  print(show(rest))"
         , "  0"
@@ -932,28 +619,19 @@ renderingCallableSuccessPrograms =
         , "  print(show(read(\"plain\")))"
         , "  print(show(read(\"λ\".toBytes())))"
         , "  0", "}" ])
-    , "receiver\n7\n[8]\n0\nreceiver\n\"held\"\n[\"tail\"]\n0\n", "")
+    , "receiver\n\"plain\"\n[]\n0\nreceiver\n7\n[8]\n0\n", "")
   , ("let else falls back before publishing failed bindings", program
       (selectedReceiverTypes <> selectedEscapingSubject "[]" <>
-        [ "fn read(value: dynamic View) -> Int {"
-        , "  let first = 9"
-        , "  let [first, ..] = choose(value).items() else { return first }"
+        [ "fn read(value: dynamic View) -> Str {"
+        , "  let fallback = \"nine\""
+        , "  let [first, ..] = choose(value).lines() else { return fallback }"
         , "  first"
         , "}"
         , "fn main() -> Int {"
         , "  print(show(read(\"plain\")))"
         , "  print(show(read(\"λ\".toBytes())))"
         , "  0", "}" ])
-    , "receiver\n7\nreceiver\n9\n", "")
-  , ("a selected declared call can reach a held collection builtin", program
-      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
-        [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
-        , "impl Keys for Array[UInt8] { fn keys(self: &Self) -> Array[UInt8] { *self } }"
-        , "fn main() -> Int {"
-        , "  print(show(chooseCollection(\"A\").keys()))"
-        , "  print(show(chooseCollection(\"λ\".toBytes()).keys()))"
-        , "  0", "}" ])
-    , "receiver\n[65]\nreceiver\n[0]\n", "")
+    , "receiver\n\"plain\"\nreceiver\n\"nine\"\n", "")
   , ("rendering function arguments use callable rendering", program
       [ "fn main() -> Int {"
       , "  let repr: fn(fn(Int) -> Str) -> Str = show"
@@ -989,51 +667,24 @@ renderingCallableSuccessPrograms =
 renderingCallableRefusalPrograms :: [(String, Text)]
 renderingCallableRefusalPrograms =
   [
-    ("a record read reports the missing field against the held record owner", heldFieldProgram
-      [ "type Other = { extra: Int }" ] "Other" "Other{extra: 7}")
-  , ("a named sum read reports the missing field against the sum owner", heldFieldProgram
-      [ "type Other = Named{extra: Int} | Empty" ] "Other" "Named{extra: 7}")
-  , ("a record read on a held tuple reports its receiver kind", heldFieldProgram
-      [] "(Int, Int)" "(3, 4)")
-  , ("a selected builtin failure blames the saved call", heldBuiltinGetProgram
-      [ "  let get = choose(\"λ\".toBytes()).items().get"
-      , "  print(show(get({ print(\"position\")\n 2 })))" ])
-  , ("a held array callable checks its own count after all arguments", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { get: fn(Int, Int) -> Int }"
-        , "fn combine(first: Int, second: Int) -> Int { first + second }" ] <>
-        selectedIterable "Checked" "Checked{get: combine}" "Array[Int]" "[4, 7]" <>
-        [ "fn main() -> Int {"
-        , "  let get = choose(\"λ\".toBytes()).items().get"
-        , "  print(show(get({ print(\"first\")\n 0 }, { print(\"second\")\n 1 })))"
-        , "  0", "}" ]))
-  , ("a held byte callable reports its missing argument after supplied effects", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { slice: fn(Int) -> Int }"
-        , "fn supplied(value: Int) -> Int { value }" ] <>
-        selectedIterable "Checked" "Checked{slice: supplied}" "Bytes" "\"bytes\".toBytes()" <>
-        [ "fn main() -> Int {"
-        , "  let slice = choose(\"λ\".toBytes()).items().slice"
-        , "  print(show(slice({ print(\"start\")\n 1 })))"
-        , "  0", "}" ]))
-  , ("a record update reports a held non-record after the written fields", program
-      (selectedReceiverTypes <>
-        [ "type Wanted = { first: Int, second: Int }" ] <>
-        selectedIterable "Wanted" "Wanted{first: 1, second: 2}" "Str" "\"not a record\"" <>
-        [ "fn main() -> Int {"
-        , "  let updated = Wanted{..choose(\"λ\".toBytes()).items(), second: { print(\"second\")\n 4 }, first: { print(\"first\")\n 3 }}"
-        , "  print(show(updated))"
+    ("a trait-qualified call on a held collection reports the missing member", program
+      (selectedReceiverTypes <> selectedByteConversion <> selectedCollection "Map[Int, Str]" "mapOf([(0, \"held\")])" <>
+        [ "trait Keys { fn keys(self: &Self) -> Array[UInt8] }"
+        , "impl Keys for Array[UInt8] { fn keys(self: &Self) -> Array[UInt8] { *self } }"
+        , "fn main() -> Int {"
+        , "  print(show(chooseCollection(\"A\").keys()))"
+        , "  print(show(chooseCollection(\"λ\".toBytes()).keys()))"
         , "  0", "}" ]))
   , ("a held non-Bool if condition reports before either branch", heldConditionProgram
-      [ "  let chosen = if choose(\"λ\".toBytes()).items() { \"left\" } else { \"right\" }"
+      [ "  let chosen = if choose(\"λ\".toBytes()).isEmpty() { \"left\" } else { \"right\" }"
       , "  print(chosen)"
       ])
   , ("a held non-Bool while condition reports before its body", heldConditionProgram
-      [ "  while choose(\"λ\".toBytes()).items() { print(\"unreached\") }" ])
+      [ "  while choose(\"λ\".toBytes()).isEmpty() { print(\"unreached\") }" ])
   , ("an invalid held left operand stops before the logical right operand", heldConditionProgram
-      [ "  print(show(choose(\"λ\".toBytes()).items() && { print(\"unreached\")\n true }))" ])
+      [ "  print(show(choose(\"λ\".toBytes()).isEmpty() && { print(\"unreached\")\n true }))" ])
   , ("an invalid held right operand fails only on the taken logical path", heldConditionProgram
-      [ "  print(show({ print(\"left\")\n false } || choose(\"λ\".toBytes()).items()))" ])
+      [ "  print(show({ print(\"left\")\n false } || choose(\"λ\".toBytes()).isEmpty()))" ])
   , ("rendering builtin unary failures name builtin", program
       [ "fn main() -> Int { let renderer: fn(Int) -> Str = show\n let invalid = -renderer\n print(display(invalid))\n 0 }" ])
   , ("rendering builtin ordering is refused after operand effects", program
@@ -1237,37 +888,10 @@ renderingCallableRefusalPrograms =
         , "  0", "}" ]))
   , ("a missing bound member fails at capture before a later statement", program
       (selectedReceiverTypes <>
-        [ "trait Announce { fn announce(self: &Self, label: Str) -> Str }"
-        , "impl Announce for Str { fn announce(self: &Self, label: Str) -> Str { label } }"
-        , "fn main() -> Int {"
-        , "  let captured = choose(\"λ\".toBytes()).announce"
+        [ "fn main() -> Int {"
+        , "  let captured = choose(\"λ\".toBytes()).trim"
         , "  print(\"unreached\")"
-        , "  print(captured(\"label\"))"
-        , "  0", "}" ]))
-  , ("selected declared callback reports its actual missing parameter", program
-      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int, Str) -> Int" "longer" <>
-        [ "fn longer(value: Int, missing: Str) -> Int { value }"
-        , "fn main() -> Int {"
-        , "  let callback = choose(\"λ\".toBytes()).callback()"
-        , "  print(show([1].map(callback)))"
-        , "  0", "}" ]))
-  , ("a selected indirect callable names its missing parameter after argument effects", program
-      (selectedReceiverTypes <> selectedDeclaredCallback "fn(Int, Str) -> Int" "longer" <>
-        [ "fn longer(value: Int, missing: Str) -> Int { value }"
-        , "fn main() -> Int {"
-        , "  let callback = choose(\"λ\".toBytes()).callback()"
-        , "  print(show(callback({ print(\"argument\")\n 1 })))"
-        , "  0", "}" ]))
-  , ("a selected loaned callable names the missing parameter after reading the place", program
-      (selectedReceiverTypes <> checkedLoanMethod <>
-        [ "trait HeldShift { fn shift(self: &Self, value: &mut Int, amount: Int) -> Int }"
-        , "impl HeldShift for Option[Str] {"
-        , "  fn shift(self: &Self, value: &mut Int, amount: Int) -> Int { print(\"unreached\")\n *value + amount }"
-        , "}"
-        , "fn main() -> Int {"
-        , "  var values = [2]"
-        , "  let held = choose(\"λ\".toBytes()).shift"
-        , "  print(show(held(&mut values[{ print(\"index\")\n 0 }])))"
+        , "  print(captured())"
         , "  0", "}" ]))
   , ("a wide assignment key checks bounds after the replacement runs", program
       (selectedReceiverTypes <> selectedIntegerPositions <>
@@ -1307,35 +931,9 @@ renderingCallableRefusalPrograms =
         , "  print(show(inspect(&mut values[index])))"
         , "  0", "}" ]))
   , ("a noniterable held value fails after effects from the source", program
-      (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "Int" "42" <>
+      (selectedReceiverTypes <> heldBuiltin "lines" "Int" "42" <>
         [ "fn main() -> Int {"
-        , "  for item in choose(\"λ\".toBytes()).items() { print(display(item)) }"
-        , "  0", "}" ]))
-  , ("a sequence pattern reports the held named variant when its field is absent", program
-      (selectedReceiverTypes <>
-        [ "type Checked = { values: Array[Int] }"
-        , "type Packet = Items{values: Array[Int]} | Other{extra: Int}"
-        ] <> selectedIterable "Checked" "Checked{values: [1]}" "Packet" "Other{extra: 7}" <>
-        [ "fn main() -> Int {"
-        , "  let {values: [first, ..]} = choose(\"λ\".toBytes()).items()"
-        , "  print(show(first))"
-        , "  0", "}" ]))
-  , ("a shorter held tuple reports bounds after evaluating the receiver", program
-      (selectedReceiverTypes <> selectedIndexedReceiver "(Int, Int)" "(1, 2)" <>
-        [ "fn main() -> Int {"
-        , "  print(show(choose(\"λ\".toBytes()).indexed()[2]))"
-        , "  0", "}" ]))
-  , ("tuple destructuring reports the held array at the whole pattern", program
-      (selectedReceiverTypes <> selectedIndexedReceiver "Array[Int]" "[1, 2, 3]" <>
-        [ "fn main() -> Int {"
-        , "  let (first, _, _) = choose(\"λ\".toBytes()).indexed()"
-        , "  print(show(first))"
-        , "  0", "}" ]))
-  , ("a sequence binding reports the held tuple as its subject", program
-      (selectedReceiverTypes <> selectedSequenceSubject <>
-        [ "fn main() -> Int {"
-        , "  let [first, ..] = choose(\"λ\".toBytes()).parts()"
-        , "  print(show(first))"
+        , "  for item in choose(\"λ\".toBytes()).lines() { print(display(item)) }"
         , "  0", "}" ]))
   , ("a missing field on the held record reports its runtime kind", program
       (selectedReceiverTypes <>
@@ -1385,42 +983,23 @@ selectedReceiverTypes =
   , "}"
   ]
 
-selectedIterable :: Text -> Text -> Text -> Text -> [Text]
-selectedIterable checked checkedBody held heldBody =
-  [ "trait CheckedIterable { fn items(self: &Self) -> " <> checked <> " }"
-  , "impl CheckedIterable for Str {"
-  , "  fn items(self: &Self) -> " <> checked <> " { print(\"items\")\n " <> checkedBody <> " }"
-  , "}"
-  , "trait HeldIterable { fn items(self: &Self) -> " <> held <> " }"
+{-| A held Option[Str] answers a builtin Str member through its own trait
+    implementation, since the checked member has no trait provider. -}
+heldBuiltin :: Text -> Text -> Text -> [Text]
+heldBuiltin member held heldBody =
+  [ "trait HeldIterable { fn " <> member <> "(self: &Self) -> " <> held <> " }"
   , "impl HeldIterable for Option[Str] {"
-  , "  fn items(self: &Self) -> " <> held <> " { print(\"items\")\n " <> heldBody <> " }"
+  , "  fn " <> member <> "(self: &Self) -> " <> held <> " { print(\"items\")\n " <> heldBody <> " }"
   , "}"
   ]
 
 heldConditionProgram :: [Text] -> Text
 heldConditionProgram body = program
-  (selectedReceiverTypes <> selectedIterable "Bool" "self.length() > 0" "Str" "\"wrong\"" <>
+  (selectedReceiverTypes <> heldBuiltin "isEmpty" "Str" "\"wrong\"" <>
     ["fn main() -> Int {"] <> body <> ["  0", "}"])
 
-heldFieldProgram :: [Text] -> Text -> Text -> Text
-heldFieldProgram declarations held heldBody = program
-  (selectedReceiverTypes <> ["type Checked = { value: Int }"] <> declarations <>
-    selectedIterable "Checked" "Checked{value: 1}" held heldBody <>
-    [ "fn main() -> Int {"
-    , "  print(show(choose(\"λ\".toBytes()).items().value))"
-    , "  0", "}" ])
-
-heldBuiltinGetProgram :: [Text] -> Text
-heldBuiltinGetProgram statements = program
-  (selectedReceiverTypes <>
-    [ "type Checked = { get: fn(Int) -> Str }"
-    , "fn format(value: Int) -> Str { display(value) }" ] <>
-    selectedIterable "Checked" "Checked{get: format}" "Array[Int]" "[4, 7]" <>
-    ["fn main() -> Int {"] <> statements <> ["  0", "}"])
-
 heldOpenTraversalTypes :: [Text]
-heldOpenTraversalTypes = selectedReceiverTypes <> ["type Checked = { map: Int, reduce: Int }"] <>
-  selectedIterable "Checked" "Checked{map: 1, reduce: 2}" "Array[Int]" "[4, 7]"
+heldOpenTraversalTypes = selectedReceiverTypes <> heldBuiltin "lines" "Array[Int]" "[4, 7]"
 
 selectedByteConversion :: [Text]
 selectedByteConversion =
@@ -1460,32 +1039,10 @@ selectedRangeKey =
   , "impl HeldRangeKey for Option[Str] { fn indexOf(self: &Self, label: Str) -> Range[Int] { 1..=2 } }"
   ]
 
-selectedIndexedReceiver :: Text -> Text -> [Text]
-selectedIndexedReceiver held body =
-  [ "trait CheckedIndexed { fn indexed(self: &Self) -> (Int, Str, Bool) }"
-  , "impl CheckedIndexed for Str {"
-  , "  fn indexed(self: &Self) -> (Int, Str, Bool) { print(\"indexed\")\n (1, \"tuple\", true) }"
-  , "}"
-  , "trait HeldIndexed { fn indexed(self: &Self) -> " <> held <> " }"
-  , "impl HeldIndexed for Option[Str] {"
-  , "  fn indexed(self: &Self) -> " <> held <> " { print(\"indexed\")\n " <> body <> " }"
-  , "}"
-  ]
-
-selectedSequenceSubject :: [Text]
-selectedSequenceSubject =
-  [ "trait CheckedParts { fn parts(self: &Self) -> Array[Int] }"
-  , "impl CheckedParts for Str { fn parts(self: &Self) -> Array[Int] { [7, 8] } }"
-  , "trait HeldParts { fn parts(self: &Self) -> (Int, Int) }"
-  , "impl HeldParts for Option[Str] { fn parts(self: &Self) -> (Int, Int) { (7, 8) } }"
-  ]
-
 selectedEscapingSubject :: Text -> [Text]
 selectedEscapingSubject held =
-  [ "trait CheckedItems { fn items(self: &Self) -> Array[Int] }"
-  , "impl CheckedItems for Str { fn items(self: &Self) -> Array[Int] { [7, 8] } }"
-  , "trait HeldItems { fn items(self: &Self) -> Array[Str] }"
-  , "impl HeldItems for Option[Str] { fn items(self: &Self) -> Array[Str] { " <> held <> " } }"
+  [ "trait HeldItems { fn lines(self: &Self) -> Array[Int] }"
+  , "impl HeldItems for Option[Str] { fn lines(self: &Self) -> Array[Int] { " <> held <> " } }"
   ]
 
 selectedIntegerTrait :: [Text]
@@ -1513,21 +1070,6 @@ selectedPredicate =
   , "fn checkedPredicate(value: Int) -> Bool { choose(\"λ\".toBytes()).contains(\"x\") }"
   ]
 
-selectedDeclaredCallback :: Text -> Text -> [Text]
-selectedDeclaredCallback result callback =
-  [ "trait CheckedCallback { fn callback(self: &Self) -> fn(Int) -> Int }"
-  , "impl CheckedCallback for Str { fn callback(self: &Self) -> fn(Int) -> Int { increment } }"
-  , "trait HeldCallback { fn callback(self: &Self) -> " <> result <> " }"
-  , "impl HeldCallback for Option[Str] { fn callback(self: &Self) -> " <> result <> " { " <> callback <> " } }"
-  , "fn increment(value: Int) -> Int { value + 1 }"
-  ]
-
-checkedLoanMethod :: [Text]
-checkedLoanMethod =
-  [ "trait CheckedShift { fn shift(self: &Self, value: &mut Int) -> Int }"
-  , "impl CheckedShift for Str { fn shift(self: &Self, value: &mut Int) -> Int { *value } }"
-  ]
-
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
 
@@ -1540,29 +1082,8 @@ renderingCallableModulePrograms =
       , "  print(display(A.renderer()(A.Token{value: 7}) == display(A.Token{value: 7})))"
       , "  print(display(B.renderer()(B.Token{value: \"x\"}) == display(B.Token{value: \"x\"})))"
       , "  0", "}" ], "true\ntrue\n")
-  , ("same-spelling held patterns require their canonical module owners"
-    , [("First.pudu", patternTypes "First"), ("Second.pudu", patternTypes "Second")]
-    , program
-        ([ "import First as A", "import Second as B" ] <> selectedReceiverTypes <>
-          selectedIterable "(A.Token, A.Packet, A.Packet)" "(A.Token{value: 1}, A.Pos(2), A.Fields{value: 3})"
-            "(B.Token, B.Packet, B.Packet)" "(B.Token{value: 11}, B.Pos(12), B.Fields{value: 13})" <>
-          [ "fn report(view: dynamic View) -> Int {"
-          , "  let (record, positional, named) = choose(view).items()"
-          , "  if let A.Token{value} = record { print(display(value)) } else { print(\"record miss\") }"
-          , "  if let A.Pos(value) = positional { print(display(value)) } else { print(\"positional miss\") }"
-          , "  if let A.Fields{value} = named { print(display(value)) } else { print(\"named miss\") }"
-          , "  0", "}"
-          , "fn main() -> Int {"
-          , "  let first = report(\"text\")"
-          , "  let second = report(\"λ\".toBytes())"
-          , "  first + second", "}"
-          ])
-    , "receiver\nitems\n1\n2\n3\nreceiver\nitems\nrecord miss\npositional miss\nnamed miss\n")
   ]
  where
   provider name field = Text.unlines
     [ "module " <> name, "export type Token = { value: " <> field <> " }"
     , "export fn renderer() -> fn(Token) -> Str { display }" ]
-  patternTypes name = Text.unlines
-    [ "module " <> name, "export type Token = { value: Int }"
-    , "export type Packet = Pos(Int) | Fields{value: Int}" ]

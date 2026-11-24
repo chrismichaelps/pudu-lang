@@ -86,7 +86,7 @@ testTraversalDefault = conjoin <$> traverse check
             array = CoreArrayType intType
             values = CoreExpression at array (CoreArray [integer at 5])
             operands = callback : [integer at 0 | member == "reduce"]
-            (_, result) = arrayMethodWith state at member (Just (operands, values)) array intType id
+            (_, result) = arrayMethodWith (\_ _ _ -> Nothing) state at member (Just (operands, values)) array intType id
             helper = CoreFunction key parameters intType (CoreBlock [] (Just (integer at 12)))
             info = CoreClosureInfo [] "callback" "fn Main.callback" False False Nothing
             wantedKind
@@ -279,6 +279,7 @@ closedTargets source = conjoin (map check (frameModuleFunctions source))
           targets terminator = case terminator of
             FrameJump _ target -> [target]
             FrameBranch _ _ yes no -> [yes, no]
+            FrameSwitchVariant _ _ arms fallback -> fallback : map snd arms
             FrameCall _ _ _ _ resume -> [resume]
             FrameCallValue _ _ _ _ resume -> [resume]
             FrameReturn _ _ -> []

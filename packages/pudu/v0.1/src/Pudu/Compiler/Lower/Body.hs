@@ -38,7 +38,7 @@ import Pudu.Compiler.Lower.Foreign
 import Pudu.Compiler.Lower.Primitive (lowerPrimitiveCall)
 import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
-import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable, specializeOpenTraversal)
+import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable, specializeTraversalCallback)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
 import Pudu.Compiler.Lower.Place (declareLocal, lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
@@ -464,7 +464,7 @@ lowerExpression state (Located spanValue expression) = case expression of
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
     | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
-        clean spanValue callee receiver (snd (selectedMember member)) arguments
+        clean spanValue callee receiver member arguments
   CallExpression (Located callee (MemberExpression (Located owner (TypeApplication (Located _ (NameExpression path)) written)) (Located _ member))) arguments
     | Just kind <- writtenCoreType clean (Located owner (NamedType (ModuleName path) written))
     , Just lowered <- lowerOwnedMethod lowerExpression clean spanValue callee kind member arguments -> lowered
@@ -478,7 +478,7 @@ lowerExpression state (Located spanValue expression) = case expression of
         clean spanValue callee receiver member arguments -> lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
     | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
-        clean spanValue callee receiver (snd (selectedMember member)) arguments
+        clean spanValue callee receiver member arguments
   CallExpression callee'@(Located _ (NameExpression ("::trait-method::" :| [_, _]))) arguments ->
     lowerValueCall lowerExpression lowerBlock state spanValue callee' arguments
   CallExpression callee'@(Located callee (NameExpression (first :| rest@(_ : _)))) arguments
@@ -583,11 +583,13 @@ lowerExpression state (Located spanValue expression) = case expression of
     qualifier _ = False
     selectedMemberCall callee receiver member arguments current held place =
       lowerSelectedMember lowerExpression (\ready selected -> heldMember callee receiver member arguments ready selected place)
-        current spanValue callee (snd (selectedMember member)) arguments held
+        current spanValue callee member arguments held
     heldMember callee receiver member arguments current held place =
-      fieldCall <|> collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
+      unqualified fieldCall <|> unqualified collection <|> lowerHeldMethod lowerExpression spanValue member arguments current held place
      where
-      plain = snd (selectedMember member)
+      -- A checked trait member names neither a field nor a builtin method.
+      (provider, plain) = selectedMember member
+      unqualified found = maybe found (const Nothing) provider
       kind = coreExpressionType held
       types = contextTypes (lowerContext current)
       checked owner = case typeForSpan types (locatedSpan receiver) of
@@ -606,7 +608,7 @@ lowerExpression state (Located spanValue expression) = case expression of
          in Just (after{lowerContext = (lowerContext after){contextTypes = types}}, result)
       collection = do
         owner <- ownerKeyOf kind
-        let specialize = specializeOpenTraversal lowerExpression lowerBlock
+        let specialize = specializeTraversalCallback lowerExpression lowerBlock
         if plain == "toText" || plain `notElem` builtinMethodNamesFor owner then Nothing else
           case kind of
             CoreArrayType element ->

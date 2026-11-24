@@ -310,3 +310,5 @@ renderer and write back its final.
 
 Resolved Grill Log: a prepared place read can allocate native locals
 for held slice bounds before dispatching a dynamic member.
+
+Resolved Grill Log: a checked trait member stays with its trait. Declared method lookup on a held receiver whose type lacks that trait's implementation finds no member, and the call reports the missing member with the written, trait-qualified name, as evaluation does.

@@ -109,12 +109,16 @@ lowerRangeMethod lower lowerCallback specialize state at receiver member argumen
    where
     invoke current (target : rest)
       | result == numbers =
-          let (held, locals) = mapAccumL (\ready operand -> bindLocal ready "" (coreExpressionType operand)) current rest
+          let (receiving, receiver') = bindLocal current "" (coreExpressionType target)
+              (held, locals) = mapAccumL (\ready operand -> bindLocal ready "" (coreExpressionType operand)) receiving rest
               readLocal local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
-              declarations = zipWith (\local operand -> CoreStatement at (CoreDeclare local operand)) locals rest
-           in selectRangeItems at held target $ \ready value arrayKind ->
-                let applied = CoreExpression at arrayKind (CoreRangeMethod name value (map (asExact at . readLocal) locals))
-                 in (ready, Just (CoreExpression at arrayKind (CoreBlockValue (CoreBlock declarations (Just applied))), arrayKind))
+              declarations = CoreStatement at (CoreDeclare receiver' target)
+                : zipWith (\local operand -> CoreStatement at (CoreDeclare local operand)) locals rest
+              -- The item selection lowers both materializers; the operands are declared once around them.
+              declared (ready, lowered) = (ready, fmap (\(core, kind) ->
+                (CoreExpression at kind (CoreBlockValue (CoreBlock declarations (Just core))), kind)) lowered)
+           in declared $ selectRangeItems at held (readLocal receiver') $ \ready value arrayKind ->
+                (ready, Just (CoreExpression at arrayKind (CoreRangeMethod name value (map (asExact at . readLocal) locals)), arrayKind))
       | otherwise = (current, Just (CoreExpression at result (CoreRangeMethod name target (map (asExact at) rest)), result))
     invoke current _ = refused current
   -- start and end: Some of the end when the range has it, None otherwise.

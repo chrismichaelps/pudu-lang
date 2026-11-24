@@ -3,7 +3,7 @@
     parameter is its own closure. -}
 module Pudu.Compiler.Lower.Lambda
   ( lowerLambda, lowerLambdaWithInputs, lowerTask, lowerFunctionValue, lowerFunctionValueWithInputs
-  , lowerValueCall, specializeCallable, specializeOpenTraversal
+  , lowerValueCall, specializeCallable, specializeTraversalCallback
   ) where
 
 import Data.List (mapAccumL)
@@ -19,14 +19,14 @@ import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, preserveR
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), closeLoaned, loanedType, lowerLoanedOperands, valueSignature, withLoanedParameters)
-import Pudu.Compiler.Lower.MethodValue (openTraversal, registerMethodValue, specializeTraversalMethod)
+import Pudu.Compiler.Lower.MethodValue (isBuiltinTraversal, registerMethodValue, specializeTraversalMethod)
 import Pudu.Compiler.Lower.Signature (taskResultKey, taskSignatureResult)
 import Pudu.Compiler.Lower.Scalar (namedFailure)
 import Pudu.Compiler.Lower.Sum (registerConstructor)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), CoreSignature (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite)
   , bindLocal, halt, lookupLocal, refused, startFunction )
-import Pudu.Compiler.Lower.Types (loanedInputs, nativeValueType, selectedMember, sumVariants, typeFactAt, typeForSpan, withShapesFrom)
+import Pudu.Compiler.Lower.Types (loanedInputs, nativeValueType, sumVariants, typeFactAt, typeForSpan, withShapesFrom)
 import Pudu.Core
 import Pudu.Eval.Capture (reachableNames)
 import Pudu.Frontend.Syntax (Block, Expression, Function (..), FunctionBody (..), Located (..), Parameter (..))
@@ -256,14 +256,16 @@ namedClosure state at target kind entry signature =
 specializeCallable :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> CoreExpression -> Lowered
 specializeCallable = specializeAmong (const True)
 
-specializeOpenTraversal :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> CoreExpression -> Maybe Lowered
-specializeOpenTraversal lower block supplied state target
-  | any open (matchingCallables state (coreExpressionType target)) =
-      Just (specializeAmong open lower block supplied state target)
+specializeTraversalCallback :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> CoreExpression -> Maybe Lowered
+specializeTraversalCallback lower block supplied state target
+  | any traversal candidates = Just (specializeAmong traversal lower block supplied state target)
+  -- Ordinary stored callables adapt to the held item layout as indirect calls do.
+  | not (Map.null candidates) = Just (specializeCallable lower block supplied state target)
   | otherwise = Nothing
  where
-  open template = case callableTemplateSource template of
-    MethodCallable _ _ _ _ member (Just _) _ fact -> openTraversal (snd (selectedMember member)) fact
+  candidates = matchingCallables state (coreExpressionType target)
+  traversal template = case callableTemplateSource template of
+    MethodCallable _ _ _ _ member (Just receiver) _ _ -> isBuiltinTraversal receiver member
     _ -> False
 
 matchingCallables :: LowerState -> CoreType -> Map.Map Text CallableTemplate

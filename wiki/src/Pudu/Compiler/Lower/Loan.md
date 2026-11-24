@@ -145,3 +145,5 @@ the body or publishing any finals.
 
 Resolved Grill Log: a prepared place read can select a slice and
 therefore reserve native locals before collecting later arguments.
+
+Resolved Grill Log: a loan final that cannot project into its place's layout uses the range-key store when the place may be indexed by a range, and otherwise records the wider layout for replay.

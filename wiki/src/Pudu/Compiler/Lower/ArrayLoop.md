@@ -42,8 +42,12 @@ Resolved Grill Log: traversal supplies values. When the selected
 callback returns mutable finals, extract its ordinary result and
 release the finals without writing back to the collection.
 
-Resolved Grill Log: a stored open traversal used as a callback can
+Resolved Grill Log: a stored builtin traversal used as a callback can
 specialize to the retained callback operands when the original input
 layout differs. The loop asks the same callable specialization used by
 ordinary indirect calls. It generates the specialization inside the
 visited arm, so empty traversals still make no callback call.
+
+Resolved Grill Log: sortBy supplies a comparison lowerer that binds fresh operand locals and invokes the callback for each site.
+
+Resolved Grill Log: a reduction whose invoked callback returns a layout outside the accumulator widens the accumulator to every carrier seen and lowers the loop again with the seed projected into the wider slot.

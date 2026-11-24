@@ -5,7 +5,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
-import Pudu.Compiler.Lower.Types (referenceTarget, sharedReferenceTarget, typeForSpan)
+import Pudu.Compiler.Lower.Types (nativeValueType, referenceTarget, sharedReferenceTarget, typeForSpan)
 import Pudu.Core (CoreExpression, CoreType (..))
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
@@ -25,8 +25,10 @@ lowerReference lower state at operator operand = case lower state operand of
     , let matches expected = expected == kind || hasRuntimeChoice kind
     , (case operator of
         "&" -> maybe False matches (sharedReferenceTarget types at)
+        -- A specialized copy may hold a concrete layout other than the checked
+        -- one; reading through the reference passes that carrier unchanged.
         "*" -> case referenceTarget types (locatedSpan operand) of
-          Just expected -> typeForSpan types at == Just expected && matches expected
+          Just expected -> typeForSpan types at == Just expected && (matches expected || nativeValueType kind)
           Nothing -> False
         _ -> False) -> (after, Just (core, kind))
     | otherwise -> halt at "a shared reference without matching solved type facts" after

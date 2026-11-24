@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, missingR
 import Pudu.Compiler.Lower.Decimal (lowerTextToDecimal)
 import Pudu.Compiler.Lower.Place (HeldPlace, withMemberReceiver)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
-import Pudu.Compiler.Lower.Types (typeForSpan)
+import Pudu.Compiler.Lower.Types (selectedMember, typeForSpan)
 import Pudu.Core
 import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.FloatLiteral (FloatWidth (..))
@@ -41,7 +41,7 @@ lowerSelectedMember lower fallback state at callee member arguments =
 
 lowerMemberOn :: LowerExpression -> (LowerState -> CoreExpression -> Maybe Lowered)
   -> LowerState -> Span -> Span -> Text -> [Located Expression] -> Bool -> CoreExpression -> Lowered
-lowerMemberOn lower fallback state at callee member arguments initiallySelected value =
+lowerMemberOn lower fallback state at callee written arguments initiallySelected value =
   let (ready, lowered) = select initiallySelected state value
       preserve (answer, _)
         | initiallySelected, Just expected <- typeForSpan (contextTypes (lowerContext state)) at =
@@ -50,6 +50,7 @@ lowerMemberOn lower fallback state at callee member arguments initiallySelected 
         | otherwise = (answer, coreExpressionType answer)
    in (ready, preserve <$> lowered)
  where
+  member = snd (selectedMember written)
   select selected current held
     | kind == CoreNeverType = (current, Just (held, kind))
     | Just dispatch <- mapRuntimeChoice current at CoreNeverType held
@@ -69,7 +70,7 @@ lowerMemberOn lower fallback state at callee member arguments initiallySelected 
   missing selected current held
     | Just implementation <- fallback current held = implementation
     | selected =
-        let failure = missingRuntimeMember callee member held
+        let failure = missingRuntimeMember callee written held
          in (current, Just (failure, CoreNeverType))
     | otherwise = halt at ("the method '" <> member <> "' on " <> coreTypeName (coreExpressionType held)) current
 

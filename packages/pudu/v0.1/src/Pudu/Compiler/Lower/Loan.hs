@@ -19,7 +19,7 @@ import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
 import Pudu.Compiler.Lower.Default (callArityFailure, suppliedArguments, withLoanedCallableArity)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, widen)
 import Pudu.Compiler.Lower.Generic (runtimeCallSignature)
-import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld)
+import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld, storeThroughRangeKey)
 import Pudu.Compiler.Lower.State (CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType)
 import Pudu.Core
@@ -275,7 +275,9 @@ lowerLoanedOperands lower state at callee signature defaulted operands = case ca
               (after, projected) = projectRuntimeValue (types prior) prior (heldType found) source
            in if coreExpressionType projected == heldType found
                 then (after, Just (storeHeld (types after) (heldSpan found) found projected))
-                else (observeHeldLayout after found (coreExpressionType projected), Nothing)
+                else case storeThroughRangeKey after found source of
+                  Just (stored, statement) -> (stored, Just statement)
+                  Nothing -> (observeHeldLayout after found (coreExpressionType projected), Nothing)
         (final, stores) = mapAccumL publish bound finals
         result
           | null (signatureLoaned exact) = answered

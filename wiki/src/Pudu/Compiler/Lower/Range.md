@@ -84,3 +84,5 @@ Resolved Grill Log: Range calls consume the selected range and preserve its meth
 ## Exact held range strides
 
 Resolved Grill Log: The held stride uses integer selection. Materialization receives its original mathematical value. A wrong argument is diagnosed after operand evaluation.
+
+Resolved Grill Log: a range method returning numbers holds its receiver and operands in locals declared once around both item materializers, receiver first.

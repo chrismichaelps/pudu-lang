@@ -167,6 +167,10 @@ differs from its checked result. Register the actual native result on the
 ordinary callable replay path, including when the receiver itself has the
 checked layout. [[Compiler Lower Lambda]]
 
+Resolved Grill Log. Collection callback specialization identifies a bound
+builtin traversal by its receiver and unqualified member. A concrete
+checking fact and an open fact both use this same dispatch path.
+
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]
 
 Resolved Grill Log: reuse [[Type Check Receiver]] for constructor-wide

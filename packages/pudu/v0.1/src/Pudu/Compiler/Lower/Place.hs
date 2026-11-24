@@ -7,14 +7,14 @@
     reads the root again. -}
 module Pudu.Compiler.Lower.Place
   ( HeldPlace (..), declareLocal, holdPlace, withMemberReceiver, lowerPlaceAssignment, observeHeldLayout
-  , readHeld, readHeldAtKeys, storeHeld ) where
+  , readHeld, readHeldAtKeys, storeHeld, storeThroughRangeKey ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailure, exactPosition)
 import Pudu.Compiler.Lower.Array (takeReceiver)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, settledMutableLayout, storageCarrier)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, runtimeCarriers, settledMutableLayout, storageCarrier)
 import Pudu.Compiler.Lower.Slice (lowerIndexOn)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, bindMutable, halt, intType, lookupLocal, mutableSite, observeMutableLayout, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields)
@@ -131,6 +131,10 @@ observeHeldLayout state found actual
     before <- lookup field fields
     expanded <- grow before rest
     pure (recordWithFields types checked [if label == field then expanded else kind | (label, kind) <- fields])
+  -- A store through a held range key always fails, so a value read through
+  -- such a key never widens the element slot.
+  grow (CoreArrayType _) (Right (HeldIndex _ _ key) : _)
+    | CoreRangeType `elem` runtimeCarriers (coreExpressionType key) = Nothing
   grow (CoreArrayType member) (Right _ : rest) = CoreArrayType <$> grow member rest
   grow _ _ = Nothing
 
@@ -257,6 +261,26 @@ readHeldBy spanOfIndex state found =
         (current, Just (CoreExpression (heldSpan found) kind (CoreField field value), kind))
     | otherwise =
         (current, Just (missingRuntimeMember (heldSpan found) field value, CoreNeverType))
+
+{-| A writeback through a place whose key may hold a range. A range key
+    fails at the store before the value is read; an integer key receives the
+    element layout, so any other held layout fails the same assignment. -}
+storeThroughRangeKey :: LowerState -> HeldPlace -> CoreExpression -> Maybe (LowerState, CoreStatement)
+storeThroughRangeKey state found source
+  | any rangeKey (heldSteps found)
+  , Just (after, Just (narrowed, kind)) <- mapRuntimeChoice state at (heldType found) source pick
+  , kind == heldType found =
+      Just (after, storeHeld (contextTypes (lowerContext after)) at found narrowed)
+  | otherwise = Nothing
+ where
+  at = heldSpan found
+  rangeKey step = case step of
+    Right (HeldIndex _ _ key) -> CoreRangeType `elem` runtimeCarriers (coreExpressionType key)
+    Left _ -> False
+  pick ready held
+    | coreExpressionType held == heldType found = (ready, Just held)
+    | otherwise = (ready, Just (argumentFailure AtInvocation at "E7001"
+        ("an element of a " <> coreStaticRuntimeKind (coreLocalType (heldRoot found)) <> " cannot be assigned")))
 
 {-| Store a value through a held place, reading the root as it is now. -}
 storeHeld :: LowerTypes -> Span -> HeldPlace -> CoreExpression -> CoreStatement

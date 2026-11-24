@@ -47,3 +47,5 @@ run out is carried to the next round as is.
 Resolved Grill Log: the caller supplies the comparison expression.
 The sort retains its order of comparisons and leaves the caller in
 charge of selecting the held callable's native signature.
+
+Resolved Grill Log: the comparison is lowered once for each of its four sites. Each site owns the locals its comparison declares, so a callback whose invocation declares locals never declares one identity twice.

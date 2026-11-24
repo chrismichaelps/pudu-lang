@@ -49,3 +49,5 @@ Resolved Grill Log: neither refusal has a successor block.
 Resolved Grill Log: exercise a callable selected after checking can
 no longer constrain its visible arity. Verify the traversal call
 supplies the hidden count and the omitted ABI slot.
+
+Resolved Grill Log. Traversal lowering takes a callback specializer; frame target checks follow variant switch arms and their fallback.

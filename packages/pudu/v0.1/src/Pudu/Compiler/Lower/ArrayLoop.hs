@@ -2,11 +2,12 @@
 module Pudu.Compiler.Lower.ArrayLoop (CallbackSpecializer, arrayMethodWith, joinsHeldText) where
 
 import Data.List (mapAccumL)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (argumentFailure, argumentFailureWith, methodArgumentBlame, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
 import Pudu.Compiler.Lower.Default (couldReturnLoanFinals, suppliedArguments, withCallableArity, withLoanedCallableArity)
-import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType)
 import Pudu.Compiler.Lower.Sort (sortStatements)
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), bindLocal, halt, intType, refused )
@@ -79,31 +80,43 @@ arrayMethodWith specialize state at member operands kind element toItems = case 
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
   -- reduce: the accumulator first, then the item, as `foldM` passes them.
+  -- The accumulator slot holds every layout the callback can return. A
+  -- callback whose invoked result is outside the slot widens it and the
+  -- loop is lowered again with the seed projected into the wider slot.
   reduced = case (state, operands) of
     (after, Nothing) -> refused after
     (after, Just (cores, core))
       | any stops (core : cores) -> (after, Just (stopped at (core : cores), CoreNeverType))
-      | [function, initial] <- cores ->
-          let accumulated = coreExpressionType initial
-              (withFunction, functionLocal) = hidden after (coreExpressionType function)
-              (withInitial, accumulatorLocal) = hidden withFunction accumulated
-              (withArray, arrayLocal, prefixArray, convertArray) = holdArray withInitial core
-              (withItem, itemLocal) = hidden withArray element
-              (invoked, invocation) = invokeCallback withItem (reading functionLocal) [reading accumulatorLocal, reading itemLocal]
-              prefix =
-                prefixArray <> [statement (CoreDeclare functionLocal function), statement (CoreDeclare accumulatorLocal initial)] <>
-                convertArray
-           in case invocation of
-                Just applied ->
-                  let (ready, carried) = projectRuntimeValue types invoked accumulated applied
-                      (body, loop) = walkArrayItems at ready arrayLocal element $ \item ->
-                        [ statement (CoreDeclare itemLocal (reading item))
-                        , statement (CoreAssign accumulatorLocal carried) ]
-                   in if coreExpressionType carried `elem` [accumulated, CoreNeverType]
-                        then (body, Just (expression accumulated (CoreBlockValue (CoreBlock (prefix <> loop) (Just (reading accumulatorLocal)))), accumulated))
-                        else halt at "an array reduction with incompatible callback result layouts" ready
-                Nothing -> refused invoked
+      | [function, initial] <- cores -> reduceInto after core function initial (coreExpressionType initial)
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
+
+  reduceInto after core function initial accumulated =
+    let (seeded, seed) = projectRuntimeValue types after accumulated initial
+        (withFunction, functionLocal) = hidden seeded (coreExpressionType function)
+        (withInitial, accumulatorLocal) = hidden withFunction accumulated
+        (withArray, arrayLocal, prefixArray, convertArray) = holdArray withInitial core
+        (withItem, itemLocal) = hidden withArray element
+        (invoked, invocation) = invokeCallback withItem (reading functionLocal) [reading accumulatorLocal, reading itemLocal]
+        prefix =
+          prefixArray <> [statement (CoreDeclare functionLocal function), statement (CoreDeclare accumulatorLocal seed)] <>
+          convertArray
+        checked = maybe (coreExpressionType initial) id (typeForSpan types at)
+     in case invocation of
+          _ | coreExpressionType seed /= accumulated ->
+                halt at "an array reduction with incompatible accumulator layouts" seeded
+          Just applied ->
+            let (ready, carried) = projectRuntimeValue types invoked accumulated applied
+                answers = runtimeCarriers (coreExpressionType applied)
+                held = runtimeCarriers accumulated
+                (body, loop) = walkArrayItems at ready arrayLocal element $ \item ->
+                  [ statement (CoreDeclare itemLocal (reading item))
+                  , statement (CoreAssign accumulatorLocal carried) ]
+             in if coreExpressionType carried `elem` [accumulated, CoreNeverType]
+                  then (body, Just (expression accumulated (CoreBlockValue (CoreBlock (prefix <> loop) (Just (reading accumulatorLocal)))), accumulated))
+                  else if not (answers `Set.isSubsetOf` held)
+                    then reduceInto after core function initial (runtimeResultType checked (held <> answers))
+                    else halt at "an array reduction with incompatible callback result layouts" ready
+          Nothing -> refused invoked
 
   -- sortBy: the array and the closure run once, then the sort asks the
   -- closure exactly what `sortWith` asks it.
@@ -114,18 +127,21 @@ arrayMethodWith specialize state at member operands kind element toItems = case 
       | [function] <- cores ->
           let (withFunction, functionLocal) = hidden after (coreExpressionType function)
               (withArray, arrayLocal, prefixArray, convertArray) = holdArray withFunction core
-              (withLeft, left) = hidden withArray element
-              (withRight, right) = hidden withLeft element
-              (invoked, invocation) = invokeCallback withRight (reading functionLocal) [reading left, reading right]
               prefix = prefixArray <> [statement (CoreDeclare functionLocal function)] <> convertArray
-           in case invocation of
-                Just value ->
-                      let (checked, applied) = predicate True "sortBy comparison must return Bool" invoked value
-                          before x y = expression (coreExpressionType applied) (CoreBlockValue (CoreBlock
-                            [statement (CoreDeclare left x), statement (CoreDeclare right y)] (Just applied)))
-                          (final, statements, result) = sortStatements checked at arrayLocal before
-                       in (final, Just (expression kind (CoreBlockValue (CoreBlock (prefix <> statements) (Just (reading result)))), kind))
-                Nothing -> refused invoked
+              before current x y =
+                let (withLeft, left) = hidden current element
+                    (withRight, right) = hidden withLeft element
+                    (invoked, invocation) = invokeCallback withRight (reading functionLocal) [reading left, reading right]
+                 in case invocation of
+                      Just value ->
+                        let (checked, applied) = predicate True "sortBy comparison must return Bool" invoked value
+                         in (checked, Just (expression (coreExpressionType applied) (CoreBlockValue (CoreBlock
+                              [statement (CoreDeclare left x), statement (CoreDeclare right y)] (Just applied)))))
+                      Nothing -> (invoked, Nothing)
+           in case sortStatements withArray at arrayLocal before of
+                (final, Just (statements, result)) ->
+                  (final, Just (expression kind (CoreBlockValue (CoreBlock (prefix <> statements) (Just (reading result)))), kind))
+                (final, Nothing) -> refused final
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
   joined = case (state, operands) of
@@ -200,9 +216,14 @@ arrayMethodWith specialize state at member operands kind element toItems = case 
               then (ready, Just (value, coreExpressionType value))
               else if adaptable && null loans
                 then case specialize (map coreExpressionType given) replay target of
+                  -- The selection declares locals; hold it once before the
+                  -- invocation reads it as both the kind check and the target.
                   Just (after, Just (selected, _)) ->
-                    let (finished, answer) = invoke False after selected given
-                     in (finished, (\held -> (held, coreExpressionType held)) <$> answer)
+                    let (holding, chosen) = hidden after (coreExpressionType selected)
+                        (finished, answer) = invoke False holding (reading chosen) given
+                        held answered = expression (coreExpressionType answered) (CoreBlockValue
+                          (CoreBlock [statement (CoreDeclare chosen selected)] (Just answered)))
+                     in (finished, (\answered -> (held answered, coreExpressionType answered)) <$> answer)
                   Just (after, Nothing) -> refused after
                   Nothing -> (replay, Just (mismatch, CoreNeverType))
                 else (ready, Just (mismatch, CoreNeverType))

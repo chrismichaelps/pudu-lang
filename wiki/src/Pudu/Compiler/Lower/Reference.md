@@ -48,3 +48,5 @@ LowerState/optional CoreExpression-and-type result.
 
 Resolved Grill Log: checking proves the reference target's source
 type. Dereference reads the actual native layout used by that place.
+
+Resolved Grill Log: reading through a reference in a specialized copy accepts a concrete native layout other than the checked one; the carrier passes unchanged.

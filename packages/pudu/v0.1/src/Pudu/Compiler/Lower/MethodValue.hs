@@ -4,7 +4,7 @@
     method on it through the same lowering a written call gets. -}
 module Pudu.Compiler.Lower.MethodValue
   ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue
-  , boundMemberFact, declaredMemberType, lowerHeldMethodValue, openTraversal, specializeTraversalMethod ) where
+  , boundMemberFact, declaredMemberType, lowerHeldMethodValue, isBuiltinTraversal, specializeTraversalMethod ) where
 
 import Control.Applicative ((<|>))
 import qualified Data.Set as Set
@@ -104,11 +104,17 @@ openTraversal member signature = case (member, signature) of
   ("reduce", FunctionTypeRequiring _ _ _ VariableType{}) -> True
   _ -> False
 
+isBuiltinTraversal :: CoreType -> Text -> Bool
+isBuiltinTraversal receiver member =
+  isNothing provider && plain `elem` ["map", "reduce"] && builtinMember receiver plain
+ where
+  (provider, plain) = selectedMember member
+
 {-| The open template keeps the receiver independently of its unit
     instantiation. A call with a different callback or seed selects a copy. -}
 specializeTraversalMethod :: Span -> CoreType -> Text -> Type -> [CoreType] -> Maybe (CoreType, Type)
 specializeTraversalMethod at receiver member original supplied
-  | openTraversal plain original = do
+  | isBuiltinTraversal receiver member, openTraversal plain original = do
       result <- case (plain, supplied) of
         ("map", [CoreFunctionType _ answer]) | nativeValueType answer -> Just (CoreArrayType answer)
         ("reduce", [_, seed]) | nativeValueType seed -> Just seed
@@ -446,8 +452,7 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
     | otherwise = CoreTupleType (ownResult : [input | (index, input) <- zip [0 ..] inputs, index `elem` loaned])
   kind = CoreFunctionType inputs result
   (provider, plain) = selectedMember member
-  traversal = isNothing provider && plain `elem` ["map", "reduce"]
-    && maybe False (\receiverKind -> builtinMember receiverKind plain) bound
+  traversal = maybe False (`isBuiltinTraversal` member) bound
   identity = case (provider, bound) of
     (Nothing, Just receiverKind)
       | builtinMember receiverKind plain, Just owner <- ownerKeyOf receiverKind ->

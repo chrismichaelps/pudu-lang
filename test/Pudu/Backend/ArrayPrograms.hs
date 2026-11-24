@@ -102,6 +102,14 @@ arraySuccessPrograms =
   , ("an entry may return an array", program
       [ "fn main() -> Array[Str] {", "  [\"done\", \"x\"]", "}" ]
     , "[\"done\", \"x\"]\n")
+  , ("sortBy asks an annotated tuple comparison at every merge step", program
+      [ "type Entry = { neededAt: Int }"
+      , "fn main() -> Int {"
+      , "  let entries: Array[(Str, Entry)] = [(\"a\", Entry{neededAt: 1}), (\"c\", Entry{neededAt: 2}), (\"b\", Entry{neededAt: 3})]"
+      , "  let sorted = entries.sortBy(|left: (Str, Entry), right: (Str, Entry)| left[1].neededAt > right[1].neededAt)"
+      , "  print(show(sorted.map(|pair| pair[0])))"
+      , "  return 0", "}" ]
+    , "[\"b\", \"c\", \"a\"]\n")
   ]
 
 {-| Failures report where the evaluator reports them: `get` at the call, an

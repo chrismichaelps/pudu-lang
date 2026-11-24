@@ -28,6 +28,14 @@ rangeSuccessPrograms =
       , "  print(\"[\" + \"éa\"[2..2] + \"]\")"
       , "  return 0", "}" ]
     , "[] []\n[]\n")
+  , ("a stored and a written range step each hold the receiver and stride once", program
+      [ "fn main() -> Int {"
+      , "  let r = 0..=4"
+      , "  let step = r.step"
+      , "  print(show(step(2)))"
+      , "  print(show(r.step(3)))"
+      , "  return 0", "}" ]
+    , "[0, 2, 4]\n[0, 3]\n")
   ]
 
 {-| Each fails where `Eval.Range` fails, after printing "start". -}
