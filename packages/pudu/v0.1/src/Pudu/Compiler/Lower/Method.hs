@@ -18,7 +18,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Head (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , bindLocal, halt, inModule, refused, withTypeBindings )
 import Pudu.Compiler.Lower.Generic (instantiationOf, matchType, runtimeCallSignature, specialize, unformed)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, pathText, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, widen, writtenType)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, isDynamic, joinRuntimeArms, mapRuntimeChoice, pathText, preserveRuntimeResult, projectRuntimeValue, widen, writtenType)
 import Pudu.Compiler.Lower.Loan (Callee (..), Operand (..), loanedType, lowerLoanedOperands)
 import Pudu.Compiler.Lower.MethodValue (boundMemberFact, declaredMemberType, lowerDynamicTextCall)
 import Pudu.Compiler.Lower.Place (HeldPlace (..), holdPlace, observeHeldLayout, readHeld, readHeldAtKeys, storeHeld, withMemberReceiver)
@@ -373,8 +373,8 @@ publishDynamicFinals :: Span -> LowerState -> [CoreStatement] -> CoreExpression
 publishDynamicFinals at state declarations subject lent checked arms
   | CoreTupleType (result : finals) <- shared
   , let project current arm =
-          let (ready, value) = projectRuntimeValue types current shared (coreArmBody arm)
-           in (ready, arm{coreArmBody = value})
+          let (projected, value) = projectRuntimeValue types current shared (coreArmBody arm)
+           in (projected, arm{coreArmBody = value})
         (ready, projectedArms) = mapAccumL project state arms
   , all ((== shared) . coreExpressionType . coreArmBody) projectedArms =
       let chosen = CoreExpression at shared (CoreMatch subject projectedArms)
@@ -383,8 +383,8 @@ publishDynamicFinals at state declarations subject lent checked arms
           publish current (index, ((_, place), finalKind)) = case place of
             Nothing -> (current, Just [])
             Just found ->
-              let value = CoreExpression (heldSpan found) finalKind (CoreTupleIndex index read')
-                  (next, carried) = projectRuntimeValue types current (heldType found) value
+              let finalValue = CoreExpression (heldSpan found) finalKind (CoreTupleIndex index read')
+                  (next, carried) = projectRuntimeValue types current (heldType found) finalValue
                in if coreExpressionType carried == heldType found
                     then (next, Just [storeHeld types (heldSpan found) found carried])
                     else (observeHeldLayout next found (coreExpressionType carried), Nothing)

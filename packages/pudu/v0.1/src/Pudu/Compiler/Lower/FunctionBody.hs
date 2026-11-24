@@ -140,9 +140,9 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
                 _ -> Nothing
               printed prior value = case outputResult prior at "print"
                 (expression CoreTextType (CoreShow value)) (CoreSumType "Result" [CoreUnitType, CoreTextType]) of
-                  (ready, Just (written, _)) ->
-                    (ready, expression answer (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate written)] zero)))
-                  (ready, Nothing) -> (ready, expression answer (CoreBlockValue (CoreBlock [] zero)))
+                  (afterOutput, Just (written, _)) ->
+                    (afterOutput, expression answer (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate written)] zero)))
+                  (afterOutput, Nothing) -> (afterOutput, expression answer (CoreBlockValue (CoreBlock [] zero)))
               (withGood, good)
                 | success == answer = (bound, reading held)
                 | otherwise = printed bound (reading held)

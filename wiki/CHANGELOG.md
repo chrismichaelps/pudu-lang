@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Native layout warning cleanup (#956)
+
+- Disambiguate projection and output states in loan publication and
+  async entry reporting. [[Compiler Lower Method]] ·
+  [[Compiler Lower Function Body]]
+
 ## 2026-11-23 — Concrete held writes (#956)
 
 - Discover writable layouts required by concrete replacements
