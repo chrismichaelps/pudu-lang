@@ -579,6 +579,7 @@ data CorePattern
   | CoreRecordPattern ![CorePattern]
   | CoreVariantPattern !Text ![CorePattern]
   | CoreAlternativePattern ![CorePattern]
+  | CoreProjectPattern !CorePattern ![(CoreLocal, CoreExpression)]
   {-| `[a, ..rest, z]`: items read from the front, then the rest (absent,
       skipped, or bound to a local), then items read from the back. -}
   | CoreArrayPattern ![CorePattern] !(Maybe (Maybe CoreLocal)) ![CorePattern]

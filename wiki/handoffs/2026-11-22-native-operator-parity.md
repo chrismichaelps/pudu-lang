@@ -500,10 +500,17 @@ the slots of successful held alternatives into enclosing bindings.
 [[Backend Rendering Callable Programs]] exercises a held first
 element, a rest binding, and the fallback's outer scope.
 
+## Nested alternative binding layouts
+
+Architect → Backend Engineer. [[Compiler Lower Match]] settles a
+shared layout for each capture. [[Compiler Frame Match]] publishes
+the capture after the first matching alternative. [[Backend Rendering
+Callable Programs]] covers guard and enclosing-scope reads.
+
 ## Next action
 
-Project nested pattern alternatives with heterogeneous native
-bindings before guards, bodies, or enclosing statements read them.
+Preserve shapes and runtime diagnostics for iteration binders when
+the held element differs from its checked layout.
 
 ## Referenced by
 

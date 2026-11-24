@@ -206,3 +206,8 @@ binding diagnostic when its subject has the wrong shape.
 Resolved Grill Log: use a binding after two successful held layouts
 and exercise a failing alternative that runs the fallback without
 publishing a value.
+
+## Nested alternate binding layouts
+
+Resolved Grill Log: use an alternate capture with two held layouts
+in a guard and body. A rejected guard proceeds to the following arm.

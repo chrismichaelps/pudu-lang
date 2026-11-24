@@ -96,3 +96,6 @@ A delegate construction contributes the value types of every method's group memb
 ## Stored callable dispatch (#956)
 
 Resolved Grill Log: The closure-target test contributes the type and nested layouts of its closure operand.
+
+Resolved Grill Log: pattern projections contribute their destination
+slot types and every layout used by the copied expressions.

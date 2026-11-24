@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Nested alternative binding layouts (#956)
+
+- Project private captures into shared slots after structural success.
+  Guards, bodies and enclosing statements read those slots.
+  [[Compiler Lower Match]] · [[Compiler Frame Match]]
+
 ## 2026-11-23 — Escaping refutable bindings (#956)
 
 - Project bindings from successful held alternatives into enclosing

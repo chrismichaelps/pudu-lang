@@ -132,63 +132,19 @@ lowerLetSequence lower state at pattern' subject = case lowerMatchSubject lower 
 lowerEscaping :: LowerExpression -> LowerState -> Span -> Located Pattern -> CoreExpression
   -> (CoreExpression -> CoreExpression) -> (LowerState, Maybe [CoreStatement])
 lowerEscaping lower state at written subject failure =
-  case foldl' collect (state, Just []) cases of
+  case lowerPattern lower state subjectKind Map.empty written of
     (after, Nothing) -> refused after
-    (after, Just collected) ->
-      let successes = reverse collected
-          layouts = Map.unionsWith (<>) [Map.map (pure . coreLocalType) bindings | (_, bindings) <- successes]
-          types = contextTypes (lowerContext after)
-          allocate current (name, kinds) =
-            let kind = case kinds of
-                  first : rest -> storageCarrier types first (first : rest)
-                  [] -> CoreUnitType
-                (allocated, local) = bindLocal current name kind
-             in (allocated, (name, local))
-          (opened, locals) = mapAccumL allocate after (Map.toAscList layouts)
-          declarations = [CoreStatement at (CoreDeclare local (CoreExpression at (coreLocalType local) CoreAbsent)) | (_, local) <- locals]
-          (bound, failedSubject) = bindLocal opened "" subjectKind
-          (ready, arms) = mapAccumL (publish types locals) bound successes
-          fallback = CoreArm at (CoreBindPattern failedSubject) Nothing (failure (reading failedSubject))
-          result = if null arms then CoreNeverType else CoreUnitType
-       in case sequence arms of
-            Just valid ->
-              let matched = CoreExpression at result (CoreMatch subject (valid <> [fallback]))
-               in (ready, Just (declarations <> [CoreStatement at (CoreEvaluate matched)]))
-            Nothing -> halt at "incompatible layouts in escaping pattern bindings" ready
+    (after, Just (matched, _)) ->
+      let (ready, failedSubject) = bindLocal after "" subjectKind
+          held = CoreExpression at subjectKind (CoreReadLocal failedSubject)
+          unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+          success = [CoreArm at matched Nothing unit | not (impossiblePattern matched)]
+          fallback = CoreArm at (CoreBindPattern failedSubject) Nothing (failure held)
+          result = if null success then CoreNeverType else CoreUnitType
+          value = CoreExpression at result (CoreMatch subject (success <> [fallback]))
+       in (ready, Just [CoreStatement at (CoreEvaluate value)])
  where
   subjectKind = coreExpressionType subject
-  reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
-  alternatives (Located _ (AlternativePattern choices)) = concatMap alternatives choices
-  alternatives pattern' = [pattern']
-  targets choice
-    | Just variants <- runtimeChoiceAlternatives subjectKind =
-        [(payload, \inner -> CoreVariantPattern tag [inner]) | (tag, payload) <- variants]
-    | isDynamic subjectKind, Just owner <- nominalPatternOwner (locatedValue choice) =
-        [(payload, \inner -> CoreVariantPattern (coreVariantName variant) [inner])
-        | variant <- maybe [] id (sumVariants (contextTypes (lowerContext state)) subjectKind)
-        , [(_, payload)] <- [coreVariantFields variant], ownerKeyOf payload == Just owner]
-    | otherwise = [(subjectKind, id)]
-  cases = [(choice, kind, wrap) | choice <- alternatives written, (kind, wrap) <- targets choice]
-  collect prior@(_, Nothing) _ = prior
-  collect (current, Just done) (choice, kind, wrap) =
-    let opened = current{lowerScopes = [] : lowerScopes current}
-        (after, matched) = lowerPattern lower opened kind Map.empty choice
-        closed = after{lowerScopes = lowerScopes current}
-        add (pattern', bindings)
-          | impossiblePattern pattern' = done
-          | otherwise = (wrap pattern', bindings) : done
-     in (closed, add <$> matched)
-  publish types locals current (pattern', bindings) =
-    let copy prior (name, local) = case Map.lookup name bindings of
-          Nothing -> (prior, Nothing)
-          Just source ->
-            let (projected, value) = projectRuntimeValue types prior (coreLocalType local) (reading source)
-             in if coreExpressionType value == coreLocalType local
-                  then (projected, Just (CoreStatement at (CoreAssign local value)))
-                  else (projected, Nothing)
-        (ready, stores) = mapAccumL copy current locals
-        body statements = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock statements Nothing))
-     in (ready, (CoreArm at pattern' Nothing . body) <$> sequence stores)
 
 {-| Whether a pattern tests a sequence's length anywhere inside it. -}
 hasSequencePattern :: Located Pattern -> Bool
@@ -230,7 +186,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
         | variant <- maybe [] id (sumVariants types kind)
         , [(_, payload)] <- [coreVariantFields variant]
         , ownerKeyOf payload == Just owner ] ->
-        narrowed state bound [] variants
+        narrowed variants
   WildcardPattern -> done state CoreWildcardPattern bound
   BindingPattern (Located _ name) -> case Map.lookup name bound of
     Just local
@@ -243,7 +199,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   -- is built at the subject's kind; one the kind cannot hold never matches,
   -- and an empty alternative is a pattern that never does.
   _ | Just variants <- runtimeChoiceAlternatives kind ->
-        narrowed state bound [] variants
+        narrowed variants
   LiteralPattern literal
     | CoreIntegerType integerKind <- kind, Just number <- integerOf literal ->
         if integerKindFits integerKind number
@@ -288,7 +244,8 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
       | Just variant <- variantOf (writtenLabel written), coreVariantRecord variant ->
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
     _ -> done state never bound
-  AlternativePattern alternatives -> alternativesOf state bound [] alternatives
+  AlternativePattern alternatives ->
+    lowerPatternChoices lower state at bound [(choice, kind, id) | choice <- alternatives]
   ArrayPattern front rest back -> case kind of
     CoreArrayType element -> case sequenceOf CoreTuplePattern state bound [(element, member) | member <- front] of
       (afterFront, Just (CoreTuplePattern fronts, withFront)) ->
@@ -316,14 +273,8 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     IntegerValue text -> parsedIntegerValue <$> parseIntegerLiteral text
     _ -> Nothing
   variantOf name = sumVariants types kind >>= find ((== name) . coreVariantName)
-  narrowed current names collected [] =
-    done current (case collected of { [one] -> one; _ -> CoreAlternativePattern (reverse collected) }) names
-  narrowed current names collected ((tag, payload) : rest) =
-    case lowerPattern lower current payload names (Located at shape) of
-      (after, Just (inner, bindings))
-        | impossiblePattern inner -> narrowed after{lowerScopes = lowerScopes current} names collected rest
-        | otherwise -> narrowed after bindings (CoreVariantPattern tag [inner] : collected) rest
-      (after, Nothing) -> refused after
+  narrowed variants = lowerPatternChoices lower state at bound
+    [(Located at shape, payload, \inner -> CoreVariantPattern tag [inner]) | (tag, payload) <- variants]
   lowerSequence current names pairs = case sequenceOf CoreTuplePattern current names pairs of
     (after, Just (CoreTuplePattern members, names')) -> (after, Just (members, names'))
     (after, _) -> (after, Nothing)
@@ -344,14 +295,59 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
      in if all ((`elem` map fst declared) . fst) written
           then sequenceOf build state bound (map member declared)
           else done state never bound
-  alternativesOf current names collected [] = done current (CoreAlternativePattern (reverse collected)) names
-  alternativesOf current names collected (alternative : rest) = case lowerPattern lower current kind names alternative of
-    (next, Just (pattern', after)) -> alternativesOf next after (pattern' : collected) rest
-    (next, Nothing) -> (next, Nothing)
+lowerPatternChoices :: LowerExpression -> LowerState -> Span -> Map Text CoreLocal
+  -> [(Located Pattern, CoreType, CorePattern -> CorePattern)]
+  -> (LowerState, Maybe (CorePattern, Map Text CoreLocal))
+lowerPatternChoices lower state at bound cases = case foldl' collect (state, Just []) cases of
+  (after, Nothing) -> refused after
+  (after, Just []) -> (after, Just (CoreAlternativePattern [], bound))
+  (after, Just [(pattern', bindings)]) ->
+    (after{lowerScopes = expose (Map.toList bindings) (lowerScopes after)}, Just (pattern', Map.union bindings bound))
+  (after, Just collected) ->
+    let successes = reverse collected
+        layouts = Map.unionsWith (<>) [Map.map (pure . coreLocalType) bindings | (_, bindings) <- successes]
+        types = contextTypes (lowerContext after)
+        allocate current (name, kinds) =
+          let kind = case kinds of
+                first : _ -> storageCarrier types first kinds
+                [] -> CoreUnitType
+              (allocated, local) = bindLocal current name kind
+           in (allocated, (name, local))
+        (opened, locals) = mapAccumL allocate after (Map.toAscList layouts)
+        (ready, projected) = mapAccumL (projectArm types locals) opened successes
+     in case sequence projected of
+          Just patterns -> (ready, Just (CoreAlternativePattern patterns, Map.union (Map.fromList locals) bound))
+          Nothing -> halt at "incompatible layouts in alternative pattern bindings" ready
+ where
+  expose names (frame : rest) = (names <> frame) : rest
+  expose names [] = [names]
+  collect prior@(_, Nothing) _ = prior
+  collect (current, Just done) (choice, kind, wrap) =
+    let opened = current{lowerScopes = [] : lowerScopes current}
+        (after, matched) = lowerPattern lower opened kind bound choice
+        closed = after{lowerScopes = lowerScopes current}
+        add (pattern', bindings)
+          | impossiblePattern pattern' = done
+          | otherwise = (wrap pattern', Map.difference bindings bound) : done
+     in (closed, add <$> matched)
+  projectArm types locals current (pattern', bindings) =
+    let copy prior (name, local) = case Map.lookup name bindings of
+          Nothing -> (prior, Nothing)
+          Just source ->
+            let reading = CoreExpression at (coreLocalType source) (CoreReadLocal source)
+                (projected, value) = projectRuntimeValue types prior (coreLocalType local) reading
+             in if coreExpressionType value == coreLocalType local
+                  then (projected, Just (local, value))
+                  else (projected, Nothing)
+        (ready, copies) = mapAccumL copy current locals
+        withCopies [] = pattern'
+        withCopies stores = CoreProjectPattern pattern' stores
+     in (ready, withCopies <$> sequence copies)
 
 impossiblePattern :: CorePattern -> Bool
 impossiblePattern shape = case shape of
   CoreAlternativePattern alternatives -> all impossiblePattern alternatives
+  CoreProjectPattern inner _ -> impossiblePattern inner
   CoreTuplePattern members -> any impossiblePattern members
   CoreRecordPattern fields -> any impossiblePattern fields
   CoreVariantPattern _ fields -> any impossiblePattern fields

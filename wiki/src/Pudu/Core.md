@@ -284,6 +284,10 @@ Resolved Grill Log: `CoreArrayPattern` holds front patterns, an optional rest
 optional fourth operand, help text computed at run time, which replaces the
 written help; a slice failure needs it to name the length.
 
+Resolved Grill Log: a projected pattern tests its inner pattern
+first, then copies successful captures into shared binding locals.
+Guards and bodies consume these locals after the projection.
+
 ## Str methods with collection results (#559)
 
 `TextSplit`, `TextLines` and `TextChars` answer arrays. `TextParsesInt`,

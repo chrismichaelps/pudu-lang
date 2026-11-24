@@ -130,3 +130,10 @@ Resolved Grill Log: each held subject layout and written alternative
 gets private pattern locals. A successful arm projects those values
 to shared enclosing slots after the complete pattern matches.
 Failure sees only the original scope.
+
+## Nested alternative binding layouts
+
+Resolved Grill Log: isolate captures in every alternative and project
+new names to shared slots after that alternative matches. Use the
+same projection for selected runtime tags and written alternatives.
+A guard runs once after the first structural success.

@@ -38,6 +38,10 @@ Front items are read by position, back items from the length minus the back
 count, and a bound rest is the slice between them. Pattern matching has no
 effects, so reading the back before binding the rest changes nothing.
 
+Resolved Grill Log: projected patterns assign shared locals only
+after the inner pattern succeeds. Alternative dispatch still stops
+at the first structural success.
+
 ## Referenced by
 
 [[Compiler Frame Lowering]] · [[Compiler Lower Match]] · [[src/_MOC]]

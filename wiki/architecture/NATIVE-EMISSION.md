@@ -375,6 +375,13 @@ layout and written alternative. Successful arms publish the chosen
 values to the enclosing block. [[Compiler Lower Match]] ·
 [[Backend Rendering Callable Programs]]
 
+## Nested alternative binding layouts (#956)
+
+Written alternatives and retained runtime tags can bind different
+native layouts. The selected pattern copies its captures into shared
+slots before the guard or body reads them. A false guard continues
+with the next arm. [[Compiler Lower Match]] · [[Compiler Frame Match]]
+
 ## Published progress (#496)
 
 The README progress bar counts **completed coverage areas**, not individual language

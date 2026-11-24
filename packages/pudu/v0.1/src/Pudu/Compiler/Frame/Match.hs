@@ -146,6 +146,14 @@ matches lowering at pattern' source failed = case pattern' of
           go rest
     go alternatives
     begin matched
+  CoreProjectPattern inner copies -> do
+    matches lowering at inner source failed
+    sequence_
+      [ do
+          value <- operand expression
+          slot <- bound local
+          storeValue at slot (Just value)
+      | (local, expression) <- copies ]
  where
   positions shape members = do
     kinds <- memberKinds (length members)

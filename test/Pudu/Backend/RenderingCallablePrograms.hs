@@ -560,6 +560,32 @@ renderingCallableSuccessPrograms =
         , "  print(show(read(\"λ\".toBytes())))"
         , "  0", "}" ])
     , "receiver\nguard\n7\nreceiver\n0\n", "")
+  , ("nested pattern alternatives project the held binding before the guard", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\"]" <>
+        [ "fn decide(item: Int) -> Bool { print(show(item))\n show(item) == \"7\" }"
+        , "fn read(value: dynamic View) -> Int {"
+        , "  match (choose(value).items(), true) {"
+        , "    case ([item] | [item, _, ..], true) if decide(item) => item"
+        , "    case _ => 0"
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(show(read(\"plain\")))"
+        , "  print(show(read(\"λ\".toBytes())))"
+        , "  0", "}" ])
+    , "receiver\n7\n7\nreceiver\n\"held\"\n0\n", "")
+  , ("nested sequence alternatives publish into the scope after let else", program
+      (selectedReceiverTypes <> selectedEscapingSubject "[\"held\"]" <>
+        [ "fn read(value: dynamic View) -> Int {"
+        , "  let ([item] | [item, _, ..], true) = (choose(value).items(), true) else { return 9 }"
+        , "  print(show(item))"
+        , "  0"
+        , "}"
+        , "fn main() -> Int {"
+        , "  read(\"plain\")"
+        , "  read(\"λ\".toBytes())"
+        , "  0", "}" ])
+    , "receiver\n7\nreceiver\n\"held\"\n", "")
   , ("let else publishes values across distinct held element layouts", program
       (selectedReceiverTypes <> selectedEscapingSubject "[\"held\", \"tail\"]" <>
         [ "fn read(value: dynamic View) -> Int {"

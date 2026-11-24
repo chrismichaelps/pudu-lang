@@ -122,6 +122,8 @@ pattern shape = case shape of
   CoreRecordPattern members -> concatMap pattern members
   CoreVariantPattern _ members -> concatMap pattern members
   CoreAlternativePattern members -> concatMap pattern members
+  CoreProjectPattern inner copies ->
+    pattern inner <> concat [coreLocalType local : expression value | (local, value) <- copies]
   CoreArrayPattern front rest back -> concatMap pattern (front <> back) <> foldMap (foldMap (pure . coreLocalType)) rest
   CoreWildcardPattern -> []
 
