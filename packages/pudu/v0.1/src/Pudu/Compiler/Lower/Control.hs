@@ -1,11 +1,12 @@
 {-| @Pudu.Compiler.Lower.Control — numeric lexical loop targets and Never joins.
     Traversal callbacks keep the expression/block recursion owned by Body. -}
 module Pudu.Compiler.Lower.Control
-  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType, pushLoop, popLoop
+  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType, joinBranchValues, pushLoop, popLoop
   , ConditionUse (StrictCondition, MatchGuard), lowerCondition
   , printValued, expressionIsPrintValued, droppedTail
   ) where
 
+import Control.Applicative ((<|>))
 import Data.List (mapAccumL)
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.Set as Set
@@ -160,6 +161,32 @@ joinType CoreNeverType right = Just right
 joinType left CoreNeverType = Just left
 joinType left right | left == right = Just left
 joinType _ _ = Nothing
+
+{-| Project returning arms independently so selecting a layout never runs an
+    unchosen arm. Divergent arms only carry their transfer. -}
+joinBranchValues :: LowerState -> Maybe CoreType -> [CoreExpression]
+  -> Maybe (LowerState, CoreType, [CoreExpression])
+joinBranchValues state checked values =
+  case foldr (\kind previous -> previous >>= joinType kind) (Just CoreNeverType) kinds of
+    Just kind -> Just (state, kind, values)
+    Nothing -> fromChecked <|> fromHeld
+ where
+  kinds = map coreExpressionType values
+  live = filter (/= CoreNeverType) kinds
+  types = contextTypes (lowerContext state)
+  fromChecked = checked >>= project
+  fromHeld = case live of
+    [] -> Nothing
+    first : _ ->
+      let guide = fromMaybe first checked
+          aggregate = commonAggregateCarrier types guide live >>= project
+          alternatives = runtimeResultType guide (foldMap runtimeCarriers live)
+       in aggregate <|> project alternatives
+  project kind =
+    let (ready, projected) = mapAccumL (\prior -> projectRuntimeValue types prior kind) state values
+     in if all ((`elem` [kind, CoreNeverType]) . coreExpressionType) projected
+          then Just (ready, kind, projected)
+          else Nothing
 
 blockType :: [CoreStatement] -> Maybe CoreExpression -> CoreType
 blockType statements result

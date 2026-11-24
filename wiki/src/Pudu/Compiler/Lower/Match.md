@@ -152,6 +152,10 @@ or same-named records. A named sum payload path applies only to a named
 variant. Preserve the evaluator's short-name matching for paths without
 a resolved owner. [[Backend Rendering Callable Programs]]
 
+Resolved Grill Log. Join returning arm layouts through [[Compiler Lower Control]].
+Guards and bindings remain inside their arms, and a projection can run
+only after the arm body returns.
+
 ## Structural patterns on held payloads
 
 An anonymous record pattern tests the fields of a held record or a

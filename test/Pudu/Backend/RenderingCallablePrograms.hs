@@ -37,6 +37,26 @@ renderingCallableSuccessPrograms =
         , "  print(displayBreak(false))"
         , "  0", "}" ])
     , "()\nreceiver\nitems\n\"held\"\n", "")
+  , ("if and match project only the result of the selected branch", program
+      (selectedReceiverTypes <> selectedIterable "Bool" "true" "Str" "\"held\"" <>
+        [ "fn fromIf(first: Bool) -> Str {"
+        , "  let value = if first { print(\"if fixed\")\n true } else { choose(\"λ\".toBytes()).items() }"
+        , "  show(value)"
+        , "}"
+        , "fn fromMatch(first: Bool) -> Str {"
+        , "  let value = match first {"
+        , "    case true => { print(\"match fixed\")\n false }"
+        , "    case false => choose(\"λ\".toBytes()).items()"
+        , "  }"
+        , "  show(value)"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(fromIf(true))"
+        , "  print(fromIf(false))"
+        , "  print(fromMatch(true))"
+        , "  print(fromMatch(false))"
+        , "  0", "}" ])
+    , "if fixed\ntrue\nreceiver\nitems\n\"held\"\nmatch fixed\nfalse\nreceiver\nitems\n\"held\"\n", "")
   , ("held conditions distinguish skipped operands and false guards", heldConditionProgram
       [ "  print(show(false && choose(\"λ\".toBytes()).items()))"
       , "  print(show(true || choose(\"λ\".toBytes()).items()))"

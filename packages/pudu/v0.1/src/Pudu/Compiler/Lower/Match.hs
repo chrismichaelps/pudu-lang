@@ -7,12 +7,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.List (find, mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
-import Pudu.Compiler.Lower.Control (ConditionUse (MatchGuard), expressionIsPrintValued, joinType, lowerCondition)
+import Pudu.Compiler.Lower.Control (ConditionUse (MatchGuard), expressionIsPrintValued, joinBranchValues, lowerCondition)
 import Pudu.Compiler.Lower.Place (declareLocal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, projectRuntimeValue, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, projectRuntimeValue, storageCarrier)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..), BindingKind (Immutable, Mutable), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
@@ -56,24 +56,12 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
      where
       go prior _ done [] =
         let lowered = reverse done
-         in case foldr (\arm found -> found >>= joinType (coreExpressionType (coreArmBody arm))) (Just CoreNeverType) lowered of
-              Just result -> (prior, Just (CoreExpression at result (CoreMatch core lowered), result))
-              Nothing
-                | Just expected <- typeForSpan (contextTypes (lowerContext prior)) at
-                , let widened = [arm{coreArmBody = widen (contextTypes (lowerContext prior)) expected (coreArmBody arm)} | arm <- lowered]
-                , all ((`elem` [expected, CoreNeverType]) . coreExpressionType . coreArmBody) widened ->
-                    (prior, Just (CoreExpression at expected (CoreMatch core widened), expected))
-                | let types = contextTypes (lowerContext prior)
-                , Just checked <- typeForSpan types at
-                , Just shared <- commonAggregateCarrier types checked
-                    (filter (/= CoreNeverType) (map (coreExpressionType . coreArmBody) lowered))
-                , let project entered arm =
-                        let (ready, value) = projectRuntimeValue types entered shared (coreArmBody arm)
-                         in (ready, arm{coreArmBody = value})
-                      (final, projected) = mapAccumL project prior lowered
-                , all ((`elem` [shared, CoreNeverType]) . coreExpressionType . coreArmBody) projected ->
-                    (final, Just (CoreExpression at shared (CoreMatch core projected), shared))
-                | otherwise -> halt at "a match whose arms have different types" prior
+            checked = typeForSpan (contextTypes (lowerContext prior)) at
+         in case joinBranchValues prior checked (map coreArmBody lowered) of
+              Just (ready, result, values) ->
+                let projected = zipWith (\arm value -> arm{coreArmBody = value}) lowered values
+                 in (ready, Just (CoreExpression at result (CoreMatch core projected), result))
+              Nothing -> halt at "a match whose arms have incompatible native layouts" prior
       go prior subjectKind done (Located armSpan (MatchArm pattern' guard' body) : rest) =
         let opened = prior{lowerScopes = [] : lowerScopes prior}
             close next = next{lowerScopes = drop 1 (lowerScopes next)}

@@ -18,6 +18,12 @@ Resolved Grill Log. Exercise both exits from a loop with mixed held
 break layouts. Include a labelled outer break through an inner
 loop, a bare break carrying unit, and effects in a valued operand.
 
+## Held branch result layouts
+
+Resolved Grill Log. Return different held layouts through if and
+match arms. Render each selected value and inspect the ordered
+effects to detect premature or repeated arm evaluation.
+
 ## Held iteration sources
 
 Resolved Grill Log. Cover a tuple with different held item layouts,

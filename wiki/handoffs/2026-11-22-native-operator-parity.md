@@ -570,10 +570,17 @@ observed exits. [[Compiler Lower Control]] settles the destination
 and projects each break. [[Backend Rendering Callable Programs]]
 covers labelled and bare breaks with different held layouts.
 
+## Held branch result layouts
+
+Architect → Backend Engineer. [[Compiler Lower Control]] joins
+returning layouts. [[Compiler Lower Body]] and [[Compiler Lower Match]]
+project the selected arm. [[Backend Rendering Callable Programs]]
+covers both arm forms.
+
 ## Next action
 
-Join unrelated held result layouts from value-producing if and match
-arms, preserving the selected result after its branch effects.
+Audit positional and named sum pattern fields whose nested runtime
+layouts differ from their checked layouts.
 
 ## Referenced by
 

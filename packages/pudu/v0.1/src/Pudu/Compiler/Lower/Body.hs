@@ -4,10 +4,10 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody, lowerExpress
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Set as Set
-import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
+import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeForSpan, nativeIntegerKind, nativeValueType, treeType, unformed, withFacts, writtenLabel)
 import Pudu.Compiler.Lower.Control
-  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
+  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinBranchValues
   , ConditionUse (StrictCondition), lowerCondition
   , expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
@@ -28,7 +28,7 @@ import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry, unwrapOrLeave)
 import Pudu.Compiler.Lower.Scope (leaving, leavingLoop, lowerScope, released)
 import Pudu.Compiler.Lower.Decimal (decimalLiteral)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
@@ -541,31 +541,18 @@ lowerExpression state (Located spanValue expression) = case expression of
     case lowerCondition StrictCondition spanValue lowerExpression state condition of
       (after, Just stopped@(_, CoreNeverType)) -> (after, Just stopped)
       (afterCondition, Just (coreCondition, _)) ->
-          let (afterThen, coreThen, thenType) = lowerBlock afterCondition thenBlock
-           in case lowerExpression afterThen elseExpression of
-                (afterElse, Just (coreElse, elseType))
-                  | Just resultType <- joinType thenType elseType ->
-                      typed afterElse (CoreIfValue coreCondition coreThen coreElse) (eagerType resultType [coreCondition])
-                  | Just expected <- typeForSpan (contextTypes (lowerContext afterElse)) spanValue
-                  , let types = contextTypes (lowerContext afterElse)
-                        thenValue = CoreExpression (locatedSpan thenBlock) thenType (CoreBlockValue coreThen)
-                        (withThen, widenedThen) = projectRuntimeValue types afterElse expected thenValue
-                        (ready, widenedElse) = projectRuntimeValue types withThen expected coreElse
-                  , all (`elem` [expected, CoreNeverType]) (map coreExpressionType [widenedThen, widenedElse]) ->
-                      typed ready (CoreIfValue coreCondition (CoreBlock [] (Just widenedThen)) widenedElse)
-                        (eagerType expected [coreCondition])
-                  | let types = contextTypes (lowerContext afterElse)
-                  , Just checked <- typeForSpan types spanValue
-                  , Just shared <- commonAggregateCarrier types checked [thenType, elseType]
-                  , let thenValue = CoreExpression (locatedSpan thenBlock) thenType (CoreBlockValue coreThen)
-                        (withThen, projectedThen) = projectRuntimeValue types afterElse shared thenValue
-                        (ready, projectedElse) = projectRuntimeValue types withThen shared coreElse
-                  , all ((`elem` [shared, CoreNeverType]) . coreExpressionType) [projectedThen, projectedElse] ->
-                      typed ready (CoreIfValue coreCondition (CoreBlock [] (Just projectedThen)) projectedElse)
-                        (eagerType shared [coreCondition])
-                  | otherwise ->
-                      halt (locatedSpan elseExpression) "an if whose branches have different types" afterElse
-                (afterElse, Nothing) -> refused afterElse
+        let (afterThen, coreThen, thenType) = lowerBlock afterCondition thenBlock
+            thenValue = CoreExpression (locatedSpan thenBlock) thenType (CoreBlockValue coreThen)
+            branch value' = case coreExpressionShape value' of
+              CoreBlockValue entered -> entered
+              _ -> CoreBlock [] (Just value')
+         in case lowerExpression afterThen elseExpression of
+              (afterElse, Nothing) -> refused afterElse
+              (afterElse, Just (coreElse, _)) ->
+                let checked = typeForSpan (contextTypes (lowerContext afterElse)) spanValue
+                 in case joinBranchValues afterElse checked [thenValue, coreElse] of
+                      Just (ready, result, [yes, no]) -> typed ready (CoreIfValue coreCondition (branch yes) no) result
+                      _ -> halt (locatedSpan elseExpression) "an if whose branches have incompatible native layouts" afterElse
       (afterCondition, Nothing) -> refused afterCondition
   IfExpression _ _ Nothing ->
     case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of

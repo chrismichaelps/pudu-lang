@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held branch results (#956)
+
+- Join the actual returned layouts of if and match arms and project
+  only the value from the selected arm. [[Compiler Lower Control]]
+
 ## 2026-11-23 — Held break values (#956)
 
 - Settle value-producing loop destinations from their reachable break

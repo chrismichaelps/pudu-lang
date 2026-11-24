@@ -125,3 +125,10 @@ lexical targets and publishes observations from the final pass. An
 inner transfer that prevents its enclosing break from running provides
 only its own result. Bare break supplies unit before projection.
 [[Backend Rendering Callable Programs]]
+
+## Held branch results
+
+Resolved Grill Log. Use one result carrier for the returning arms
+of an if or match. Try the checked layout, then a shared aggregate
+layout, then the reachable runtime carriers. Project inside each
+arm. Transfers remain unmodified and consume no result slot.

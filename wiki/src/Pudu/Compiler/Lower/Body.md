@@ -596,6 +596,10 @@ Resolved Grill Log. Statement and value conditions share
 [[Compiler Lower Control]]'s held-value validation. If a condition
 transfers, its branches are unreachable.
 
+Resolved Grill Log. If results use [[Compiler Lower Control]]'s
+branch layout join. Project the selected arm after its effects and
+leave the other arm unevaluated.
+
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.
