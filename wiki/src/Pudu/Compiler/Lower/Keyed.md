@@ -77,6 +77,10 @@ ownership stay with the existing operations.
 
 Resolved Grill Log: Construction reads the lowered item layouts. Updates and binary operations rebuild wider carriers from the retained entries. Lookups return an Option whose payload carrier matches the stored value.
 
+Resolved Grill Log. A set literal uses the array literal's carrier
+join for its items. A map builder joins the actual pair fields so
+key and value storage retain their separate layouts.
+
 ## Held collection member selection
 
 Resolved Grill Log: Keyed calls consume a retained receiver, so a missing member stops before keys or values evaluate.

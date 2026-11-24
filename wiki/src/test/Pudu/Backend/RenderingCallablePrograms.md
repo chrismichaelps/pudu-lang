@@ -6,6 +6,12 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Concrete held aggregate construction
+
+Resolved Grill Log. Construct records, updates, arrays, sets and
+maps from a concrete held character through Bool-checked fields.
+Include a mixed key layout, duplicate keys and ordered field effects.
+
 ## Concrete held writes
 
 Resolved Grill Log. Write a held character through a Bool-checked

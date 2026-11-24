@@ -174,6 +174,13 @@ layout, including reads of runtime alternatives.
 
 Resolved Grill Log: Array calls consume a retained receiver supplied by member selection. Callback specialization and copy-on-write continue to use its actual element layout.
 
+## Concrete held literal members
+
+Resolved Grill Log. Join the represented members after checked
+projection. Keep element layouts needed for their actual values.
+Share this rule with set literals. Empty literals keep the checked
+element layout.
+
 ## Held array method arguments
 
 Resolved Grill Log: validate held array method slots after all operand

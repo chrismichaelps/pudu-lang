@@ -304,7 +304,7 @@ settledMutableLayout context site checked =
 
 commonAggregateCarrier :: LowerTypes -> CoreType -> [CoreType] -> Maybe CoreType
 commonAggregateCarrier types checked carriers
-  | any hasRuntimeChoice carriers = case checked of
+  | not (null carriers) = case checked of
       CoreTupleType members -> do
         alternatives <- traverse (tupleMembers (length members)) carriers
         pure (CoreTupleType (zipWith (storageCarrier types) members (transpose alternatives)))

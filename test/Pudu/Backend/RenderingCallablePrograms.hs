@@ -9,7 +9,24 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("concrete held arguments enter named, stored and loaned bodies", program
+    ("aggregate constructors retain concrete held values and written effects", program
+      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
+        [ "type Holder = { flag: Bool, count: Int }"
+        , "fn main() -> Int {"
+        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "    let original = Holder{flag: true, count: 4}"
+        , "    let built = Holder{count: { print(\"count\")\n 4 }, flag: { print(\"flag\")\n item }}"
+        , "    let changed = Holder{..original, flag: item}"
+        , "    print(show((built, changed, original)))"
+        , "    print(show([true, item]))"
+        , "    print(show([item]))"
+        , "    print(show(#{item, false, item}))"
+        , "    print(show(setOf([item, item])))"
+        , "    print(show(mapOf([(item, item), (false, true), (item, false)])))"
+        , "  }"
+        , "  0", "}" ])
+    , "receiver\nitems\ncount\nflag\n(Holder{flag: 'x', count: 4}, Holder{flag: 'x', count: 4}, Holder{flag: true, count: 4})\n[true, 'x']\n['x']\n#{false, 'x'}\n#{'x'}\n{false: true, 'x': false}\n", "")
+  , ("concrete held arguments enter named, stored and loaned bodies", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "fn describe(value: Bool) -> Str { show(value) }"
         , "fn peek(slot: &mut Bool) -> Str { show(*slot) }"

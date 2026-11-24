@@ -11,12 +11,12 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments
   ( ArgumentSlot (..), argumentFailure, callWithRuntimeArguments, collectArguments, methodArgumentBlame, wrappedPosition )
-import Pudu.Compiler.Lower.Array (collect, reboxArray, stopped, stops)
+import Pudu.Compiler.Lower.Array (collect, literalElementCarrier, reboxArray, stopped, stops)
 import Pudu.Compiler.Lower.Control (popLoop, pushLoop)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, projectRuntimeValue, runtimeCarriers, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, projectRuntimeValue, runtimeCarriers, storageCarrier, widen)
 import Pudu.Compiler.Lower.Sum (constructVariant)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
-import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -93,8 +93,9 @@ lowerSetLiteral lower state at members = case typeForSpan (contextTypes (lowerCo
       | let types = contextTypes (lowerContext after)
             widened = map (widen types member) written
             layouts = map coreExpressionType widened
-            stored = if any hasRuntimeChoice layouts then storageCarrier types member layouts else member
+            stored = literalElementCarrier types member layouts
             (ready, projected) = mapAccumL (\current -> projectRuntimeValue types current stored) after widened
+      , all nativeValueType layouts
       , all ((== stored) . coreExpressionType) projected ->
           built AtCall ready at (if stored == member then kind else CoreSetType stored) id "set member"
             (CoreExpression at (CoreArrayType stored) (CoreArray projected))

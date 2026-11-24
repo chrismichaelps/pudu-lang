@@ -8,7 +8,7 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
 import Pudu.Compiler.Lower.Sum (constructVariant)
-import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier, widen)
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
@@ -83,9 +83,10 @@ carryFields types declared given = [(name, carried name expected) | (name, expec
   carried name expected
     | Just value <- lookup name given
     , let actual = coreExpressionType (widen types expected value)
-    , actual /= expected
-    , hasRuntimeChoice actual || hasRuntimeChoice expected =
-        storageCarrier types expected [actual]
+    , actual /= expected =
+        if hasRuntimeChoice actual || hasRuntimeChoice expected
+          then storageCarrier types expected [actual]
+          else if nativeValueType actual then actual else expected
     | otherwise = expected
 
 projectFields :: LowerTypes -> LowerState -> [(Text, CoreType)] -> [(Text, CoreExpression)]

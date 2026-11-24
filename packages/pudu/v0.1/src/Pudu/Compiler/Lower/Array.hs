@@ -3,10 +3,11 @@
     and `reduce` become loops calling the closure once per item, in order,
     as `callArrayMethod` does. -}
 module Pudu.Compiler.Lower.Array
-  ( LowerCallback, lowerArrayLiteral, lowerArrayMethod, lowerArrayLoop, reboxArray, takeReceiver, collect, stops, stopped
+  ( LowerCallback, literalElementCarrier, lowerArrayLiteral, lowerArrayMethod, lowerArrayLoop, reboxArray, takeReceiver, collect, stops, stopped
   ) where
 
 import Data.List (mapAccumL)
+import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -17,9 +18,9 @@ import Pudu.Compiler.Lower.Arguments
 import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, intType, refuse, refused)
-import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
+import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, typeFactAt, typeForSpan)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Type (..))
@@ -42,9 +43,9 @@ lowerArrayLiteral lower state at members = case arrayAt state at members of
             then (ready, Just (stopped at cores, CoreNeverType))
             else if all (== element) kinds
               then (ready, Just (CoreExpression at kind (CoreArray cores), kind))
-              else if any hasRuntimeChoice kinds
+              else if all nativeValueType kinds
                 then
-                  let stored = combinedElement element kinds
+                  let stored = literalElementCarrier types element kinds
                       (settled, projected) = mapAccumL (carry stored) ready cores
                       arrayType = CoreArrayType stored
                    in if all ((== stored) . coreExpressionType) projected
@@ -52,6 +53,12 @@ lowerArrayLiteral lower state at members = case arrayAt state at members of
                         else halt at "an array literal whose items have different types" settled
                 else halt at "an array literal whose items have different types" ready
   _ -> halt at "an array without a native element type" state
+
+literalElementCarrier :: LowerTypes -> CoreType -> [CoreType] -> CoreType
+literalElementCarrier types checked kinds
+  | all (== checked) kinds = checked
+  | otherwise = fromMaybe (runtimeResultType checked (foldMap runtimeCarriers kinds))
+      (commonAggregateCarrier types checked kinds)
 
 {-| The array type at a literal. `[]` with nothing to settle its element
     type holds no item, so any layout serves; unit is used, as for a sum's

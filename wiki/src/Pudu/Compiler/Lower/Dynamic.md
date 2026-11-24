@@ -81,6 +81,10 @@ that need it to record a runtime alternative.
 
 ## Runtime layouts in products (#956)
 
+Resolved Grill Log. A nonempty list of concrete layouts can also
+share an aggregate carrier. Retain the existing per-field joins and
+preserve the caller's empty-list fallback.
+
 Resolved Grill Log: Project compatible tuples and same-owner records by retaining the source once and projecting each field. Native product joins give every branch one stable carrier.
 
 ## Runtime layouts in sum payloads (#956)

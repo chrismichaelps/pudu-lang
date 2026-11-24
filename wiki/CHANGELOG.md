@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Concrete held aggregate construction (#956)
+
+- Preserve concrete field, element and key layouts during record
+  and collection construction. [[Compiler Lower Record]] ·
+  [[Compiler Lower Array]] · [[Compiler Lower Keyed]]
+
 ## 2026-11-23 — Native layout warning cleanup (#956)
 
 - Disambiguate projection and output states in loan publication and

@@ -67,3 +67,7 @@ Resolved Grill Log: Build records using their actual field layouts. An update pr
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Record-style variants reuse the sum payload construction after evaluating fields in source order.
+
+Resolved Grill Log. Use a represented concrete field layout after
+trying the checked projection. A record update retains untouched
+fields and settles each written replacement independently.

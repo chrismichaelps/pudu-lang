@@ -606,10 +606,18 @@ Architect → Backend Engineer. [[Compiler Lower Place]] and
 written paths. [[Backend Rendering Callable Programs]] covers
 local, field and indexed writes and alias preservation.
 
+## Concrete held aggregate construction
+
+Architect → Backend Engineer. [[Compiler Lower Record]], [[Compiler
+Lower Array]] and [[Compiler Lower Keyed]] retain concrete values
+through construction. [[Compiler Lower Dynamic]] joins compatible
+aggregate layouts. [[Backend Rendering Callable Programs]] checks
+effects and stored values.
+
 ## Next action
 
-Preserve concrete held field and element layouts during record,
-array, set and map construction.
+Validate the declared owner of a held record update after evaluating
+the base and written replacement expressions.
 
 ## Referenced by
 
