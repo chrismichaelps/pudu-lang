@@ -9,7 +9,35 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("held conditions distinguish skipped operands and false guards", heldConditionProgram
+    ("labelled breaks share a layout and keep the selected value", program
+      (selectedReceiverTypes <> selectedIterable "Bool" "true" "Str" "\"held\"" <>
+        [ "fn displayBreak(early: Bool) -> Str {"
+        , "  let value = @outer loop {"
+        , "    if early { break @outer false }"
+        , "    loop { break @outer choose(\"λ\".toBytes()).items() }"
+        , "  }"
+        , "  show(value)"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(displayBreak(true))"
+        , "  print(displayBreak(false))"
+        , "  0", "}" ])
+    , "false\nreceiver\nitems\n\"held\"\n", "")
+  , ("a bare break projects unit alongside a held value", program
+      (selectedReceiverTypes <> selectedIterable "()" "()" "Str" "\"held\"" <>
+        [ "fn displayBreak(early: Bool) -> Str {"
+        , "  let value = loop {"
+        , "    if early { break }"
+        , "    break choose(\"λ\".toBytes()).items()"
+        , "  }"
+        , "  show(value)"
+        , "}"
+        , "fn main() -> Int {"
+        , "  print(displayBreak(true))"
+        , "  print(displayBreak(false))"
+        , "  0", "}" ])
+    , "()\nreceiver\nitems\n\"held\"\n", "")
+  , ("held conditions distinguish skipped operands and false guards", heldConditionProgram
       [ "  print(show(false && choose(\"λ\".toBytes()).items()))"
       , "  print(show(true || choose(\"λ\".toBytes()).items()))"
       , "  print(show(true && choose(\"text\").items()))"

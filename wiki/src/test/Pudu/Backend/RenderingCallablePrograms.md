@@ -12,6 +12,12 @@ Resolved Grill Log. Compare reached and skipped operands of both
 logical operators. Cover condition diagnostics from if and while,
 and verify a non-Bool guard runs its effects before falling through.
 
+## Held loop results
+
+Resolved Grill Log. Exercise both exits from a loop with mixed held
+break layouts. Include a labelled outer break through an inner
+loop, a bare break carrying unit, and effects in a valued operand.
+
 ## Held iteration sources
 
 Resolved Grill Log. Cover a tuple with different held item layouts,

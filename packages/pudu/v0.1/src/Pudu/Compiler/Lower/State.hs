@@ -212,7 +212,7 @@ data LoopFrame = LoopFrame
   { loopIdentity :: !CoreLoopId
   , loopLabel :: !(Maybe Text)
   , loopExpectedBreakType :: !(Maybe CoreType)
-  , loopBreakType :: !(Maybe CoreType)
+  , loopBreakTypes :: !(Set CoreType)
   }
 
 {-| @Compiler.Lower.Signature — a validated non-entry function: its parameter

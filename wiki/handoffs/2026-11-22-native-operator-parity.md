@@ -563,10 +563,17 @@ held Bool or applies the evaluator's failure or guard rule.
 Lower Scalar]] consume it. [[Backend Rendering Callable Programs]]
 covers short-circuiting, guard fallthrough and strict diagnostics.
 
+## Held break values
+
+Architect → Backend Engineer. [[Compiler Lower State]] records the
+observed exits. [[Compiler Lower Control]] settles the destination
+and projects each break. [[Backend Rendering Callable Programs]]
+covers labelled and bare breaks with different held layouts.
+
 ## Next action
 
-Preserve held break values across branches of a value-producing loop
-and project them into the destination's settled layout.
+Join unrelated held result layouts from value-producing if and match
+arms, preserving the selected result after its branch effects.
 
 ## Referenced by
 

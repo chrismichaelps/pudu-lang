@@ -111,3 +111,17 @@ conditions require Bool and report E7001 with the held kind at the
 operation's span. Match guards treat a held non-Bool as false after
 its effects. A condition that transfers keeps its original transfer.
 [[Compiler Lower Body]] · [[Compiler Lower Scalar]] · [[Compiler Lower Match]]
+
+## Held break values
+
+Collect the resulting carriers of the breaks that reach each loop.
+Use the checked carrier to guide projection and keep a single observed
+carrier directly. For mixed exits, settle a common aggregate or a
+runtime choice and lower the body against that destination layout.
+
+Resolved Grill Log. Lower all transfers targeting the same loop
+against the same carrier. Replaying from before the loop preserves
+lexical targets and publishes observations from the final pass. An
+inner transfer that prevents its enclosing break from running provides
+only its own result. Bare break supplies unit before projection.
+[[Backend Rendering Callable Programs]]

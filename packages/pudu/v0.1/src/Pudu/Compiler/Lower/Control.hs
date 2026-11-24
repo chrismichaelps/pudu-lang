@@ -7,9 +7,11 @@ module Pudu.Compiler.Lower.Control
   ) where
 
 import Data.List (mapAccumL)
-import Data.Maybe (isJust)
+import Data.Maybe (fromMaybe, isJust)
+import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Dynamic (isDynamic, joinRuntimeArms, widenTo)
+import Pudu.Compiler.Lower.Dynamic
+  ( commonAggregateCarrier, isDynamic, joinRuntimeArms, projectRuntimeValue, runtimeCarriers, runtimeResultType )
 import Pudu.Compiler.Lower.State
   ( LowerContext (..), LowerState (..), LoopFrame (..), bindLocal, halt, refused )
 import Pudu.Compiler.Lower.Types (nativeValueType, sumVariants, typeForSpan)
@@ -69,14 +71,29 @@ lowerWhile lower block spanValue label condition body state =
     (after, Nothing) -> refused after
 
 lowerLoop :: BlockLowerer -> Span -> Maybe (Located Text) -> Located Block -> LowerState -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerLoop block spanValue label body state =
-  let expected = typeForSpan (contextTypes (lowerContext state)) spanValue
-      (pushed, identity) = pushLoopWith expected label state
-      (after, coreBody, _) = block pushed (droppedTail body)
-      resultType = case lowerLoops after of
-        frame : _ -> maybe CoreNeverType id (loopBreakType frame)
-        [] -> CoreNeverType
-   in (popLoop after, Just (CoreExpression spanValue resultType (CoreLoopValue identity coreBody), resultType))
+lowerLoop block spanValue label body state = settle (maybe Set.empty Set.singleton checked) checked
+ where
+  checked = typeForSpan (contextTypes (lowerContext state)) spanValue
+  loopBody = droppedTail body
+  settle attempted expected =
+    let (pushed, identity) = pushLoopWith expected label state
+        (after, coreBody, _) = block pushed loopBody
+        back = popLoop after
+        breaks = case lowerLoops after of
+          frame : _ -> Set.toList (loopBreakTypes frame)
+          [] -> []
+        done kind = (back, Just (CoreExpression spanValue kind (CoreLoopValue identity coreBody), kind))
+     in case breaks of
+          [] -> done CoreNeverType
+          [kind] -> done kind
+          first : _ ->
+            let types = contextTypes (lowerContext after)
+                guide = fromMaybe first checked
+                shared = fromMaybe (runtimeResultType guide (foldMap runtimeCarriers breaks))
+                  (commonAggregateCarrier types guide breaks)
+             in if Set.member shared attempted
+                  then halt spanValue "loop breaks with incompatible native layouts" back
+                  else settle (Set.insert shared attempted) (Just shared)
 
 {-| A loop body's value is thrown away each turn, so its tail is just another
     statement. Lowered that way, a tail like `match ... { case _ => print(..) }`
@@ -92,7 +109,7 @@ pushLoop = pushLoopWith Nothing
 pushLoopWith :: Maybe CoreType -> Maybe (Located Text) -> LowerState -> (LowerState, CoreLoopId)
 pushLoopWith expected label state =
   let identity = CoreLoopId (lowerNextLoop state)
-      frame = LoopFrame identity (locatedValue <$> label) expected Nothing
+      frame = LoopFrame identity (locatedValue <$> label) expected Set.empty
    in (state{lowerNextLoop = lowerNextLoop state + 1, lowerLoops = frame : lowerLoops state}, identity)
 
 popLoop :: LowerState -> LowerState
@@ -105,16 +122,11 @@ lowerTransfer expression spanValue label transfer state = case destination of
   Nothing -> halt spanValue "a loop transfer without a native target" state
   Just frame -> case transfer of
     Nothing -> built state (CoreContinue identity)
-    Just Nothing -> observe identity state Nothing CoreUnitType
+    Just Nothing -> projectBreak frame state Nothing
     Just (Just operand) -> case expression state operand of
-      (after, Just lowered)
+      (after, Just (coreOperand, _))
         | expressionIsPrintValued coreOperand -> halt (locatedSpan operand) "breaking with a Result[(), Str] value" after
-        | nativeValueType operandType || operandType == CoreNeverType -> observe identity after (Just coreOperand) operandType
-        | otherwise -> halt (locatedSpan operand) ("breaking with a " <> coreTypeName operandType <> " value") after
-        where
-          (coreOperand, operandType) = case loopExpectedBreakType frame of
-            Just expected -> widenTo (contextTypes (lowerContext after)) expected lowered
-            Nothing -> lowered
+        | otherwise -> projectBreak frame after (Just coreOperand)
       (after, Nothing) -> refused after
     where
       identity = loopIdentity frame
@@ -123,17 +135,25 @@ lowerTransfer expression spanValue label transfer state = case destination of
       frame : _ -> Just frame
       [] -> Nothing
     built after shape = (after, Just (CoreStatement spanValue shape))
-    observe identity after operand operandType
-      | operandType == CoreNeverType = built after (CoreBreak identity operand)
-      | otherwise = case traverse update (lowerLoops after) of
-          Just frames -> built after{lowerLoops = frames} (CoreBreak identity operand)
-          Nothing -> halt spanValue "loop breaks with different native result types" after
+    projectBreak frame after operand
+      | kind == CoreNeverType = built ready transfer'
+      | nativeValueType kind = built ready{lowerLoops = map observe (lowerLoops ready)} transfer'
+      | otherwise = halt (coreExpressionSpan value) ("breaking with a " <> coreTypeName kind <> " value") ready
       where
-        update frame
-          | loopIdentity frame /= identity = Just frame
-          | otherwise = case loopBreakType frame of
-              Nothing -> Just frame{loopBreakType = Just operandType}
-              Just previous -> (\joined -> frame{loopBreakType = Just joined}) <$> joinType previous operandType
+        unit = CoreExpression spanValue CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+        value = fromMaybe unit operand
+        (ready, projected) = case loopExpectedBreakType frame of
+          Nothing -> (after, value)
+          Just expected -> projectRuntimeValue (contextTypes (lowerContext after)) after expected value
+        kind = coreExpressionType projected
+        payload = case operand of
+          Nothing | kind == CoreUnitType -> Nothing
+          _ -> Just projected
+        transfer' = CoreBreak (loopIdentity frame) payload
+        observe destinationFrame
+          | loopIdentity destinationFrame == loopIdentity frame =
+              destinationFrame{loopBreakTypes = Set.insert kind (loopBreakTypes destinationFrame)}
+          | otherwise = destinationFrame
 
 joinType :: CoreType -> CoreType -> Maybe CoreType
 joinType CoreNeverType right = Just right

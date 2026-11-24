@@ -211,6 +211,11 @@ at a break. The observed break type continues to record which result can
 leave the loop. The two fields remain separate for divergent operands and
 for synthetic loops without a checked carrier.
 
+Resolved Grill Log. Each frame tracks the set of observed emitted
+break carriers. [[Compiler Lower Control]] combines mixed exits
+before emitting the loop's destination slot. Observations stay local
+to the frame and exclude diverging operands.
+
 ## Sanctioned runtime results for internal calls (#956)
 
 Resolved Grill Log: keep the current pass's observations separate from

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held break values (#956)
+
+- Settle value-producing loop destinations from their reachable break
+  layouts, including labelled exits. [[Compiler Lower Control]]
+
 ## 2026-11-23 — Held runtime conditions (#956)
 
 - Validate held Bool operands in branches, loops and short-circuit
