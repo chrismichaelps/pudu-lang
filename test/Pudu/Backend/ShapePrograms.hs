@@ -232,6 +232,32 @@ shapeSuccessPrograms =
       , "  print(borrowed())"
       , "  0", "}" ]
     , "Some(\"λ\")\nplain\nplain\nindex\nSome(\"λ\")\nplain\nSome(\"λ\")\n")
+  , ("destructured mutable slots settle assignments and loan finals independently", program
+      [ "trait View { fn size(self: &Self) -> Int }"
+      , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"
+      , "fn retain(value: dynamic View) -> fn() -> Str { value.toText }"
+      , "fn plain() -> Str { \"plain\" }"
+      , "type Holder = { action: fn() -> Str }"
+      , "fn replace(slot: &mut fn() -> Str, next: fn() -> Str) { *slot = next }"
+      , "fn main() -> Int {"
+      , "  let decode = retain(\"λ\".toBytes())"
+      , "  var (selected, {action}) = (plain, Holder{action: plain})"
+      , "  let original = action"
+      , "  selected = decode"
+      , "  replace(&mut action, decode)"
+      , "  print(selected())"
+      , "  print(action())"
+      , "  print(original())"
+      , "  var [front, ..rest] = [plain, plain]"
+      , "  front = decode"
+      , "  rest = [decode, plain]"
+      , "  print(front())"
+      , "  let first = rest[0]"
+      , "  let second = rest[1]"
+      , "  print(first())"
+      , "  print(second())"
+      , "  0", "}" ]
+    , "Some(\"λ\")\nSome(\"λ\")\nplain\nSome(\"λ\")\nSome(\"λ\")\nplain\n")
   , ("stored loan callables widen finals without replacing their captures", program
       [ "trait View { fn size(self: &Self) -> Int }"
       , "impl View for Bytes { fn size(self: &Self) -> Int { 0 } }"

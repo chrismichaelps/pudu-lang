@@ -8,12 +8,13 @@ import qualified Data.Map.Strict as Map
 import Data.List (find, mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
+import Pudu.Compiler.Lower.Place (declareLocal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, isDynamic, mapRuntimeChoice, normalizeAggregateValue, preserveRuntimeResult, projectRuntimeValue, storageCarrier, widen)
 import Pudu.Frontend.Syntax
-  ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
+  ( ArrayRest (..), BindingKind (Immutable, Mutable), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.IntegerLiteral (ParsedInteger (..), integerKindBounds, integerKindFits, parseIntegerLiteral)
@@ -107,18 +108,18 @@ lowerLetElse lower state at pattern' subject fallback = case lowerMatchSubject l
     | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
     | otherwise -> case lower after (Located (locatedSpan fallback) (BlockExpression fallback)) of
         (ready, Just (otherwise', CoreNeverType)) ->
-          lowerEscaping lower ready at pattern' core (const otherwise')
+          lowerEscaping lower ready at Immutable pattern' core (const otherwise')
         (ready, Just _) -> halt (locatedSpan fallback) "a let else fallback that does not diverge" ready
         (ready, Nothing) -> refused ready
 
-lowerLetSequence :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression
+lowerLetSequence :: LowerExpression -> LowerState -> Span -> BindingKind -> Located Pattern -> Located Expression
   -> (LowerState, Maybe [CoreStatement])
-lowerLetSequence lower state at pattern' subject = case lowerMatchSubject lower state subject of
+lowerLetSequence lower state at binding pattern' subject = case lowerMatchSubject lower state subject of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just [CoreStatement at (CoreEvaluate core)])
   (after, Just (core, _))
     | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
-    | otherwise -> lowerEscaping lower after at pattern' core failure
+    | otherwise -> lowerEscaping lower after at binding pattern' core failure
  where
   failure value =
     let here = CoreExpression (locatedSpan pattern')
@@ -129,12 +130,12 @@ lowerLetSequence lower state at pattern' subject = case lowerMatchSubject lower 
           (append named (text (CoreTextLiteral " it was given")))
      in here CoreNeverType (CoreFailText "E7013" (Just "check the number of elements the pattern names against the value") message Nothing)
 
-lowerEscaping :: LowerExpression -> LowerState -> Span -> Located Pattern -> CoreExpression
+lowerEscaping :: LowerExpression -> LowerState -> Span -> BindingKind -> Located Pattern -> CoreExpression
   -> (CoreExpression -> CoreExpression) -> (LowerState, Maybe [CoreStatement])
-lowerEscaping lower state at written subject failure =
+lowerEscaping lower state at binding written subject failure =
   case lowerPattern lower state subjectKind Map.empty written of
     (after, Nothing) -> refused after
-    (after, Just (matched, _)) ->
+    (after, Just (matched, captures)) ->
       let (ready, failedSubject) = bindLocal after "" subjectKind
           held = CoreExpression at subjectKind (CoreReadLocal failedSubject)
           unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
@@ -142,7 +143,15 @@ lowerEscaping lower state at written subject failure =
           fallback = CoreArm at (CoreBindPattern failedSubject) Nothing (failure held)
           result = if null success then CoreNeverType else CoreUnitType
           value = CoreExpression at result (CoreMatch subject (success <> [fallback]))
-       in (ready, Just [CoreStatement at (CoreEvaluate value)])
+          check = CoreStatement at (CoreEvaluate value)
+       in if binding == Mutable && result /= CoreNeverType
+            then
+              let publish current (name, source) = declareLocal binding current at name
+                    (CoreExpression at (coreLocalType source) (CoreReadLocal source))
+                  beforePublication = ready{lowerScopes = lowerScopes state}
+                  (final, declarations) = mapAccumL publish beforePublication (Map.toAscList captures)
+               in (final, (check :) <$> sequence declarations)
+            else (ready, Just [check])
  where
   subjectKind = coreExpressionType subject
 

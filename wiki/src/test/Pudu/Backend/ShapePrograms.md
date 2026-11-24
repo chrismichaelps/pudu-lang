@@ -90,3 +90,9 @@ Resolved Grill Log: start with the checked carrier and introduce alternatives af
 ## Stored loan writeback layouts (#956)
 
 Resolved Grill Log: a stored lambda and a retained bound method write selected callable values through places that started with the checked layout.
+
+## Mutable destructured slots
+
+Resolved Grill Log. Start a tuple field, a nested record field, and
+a sequence rest at their checked layouts. Assign and lend their
+bindings using held callables. Check values saved before the writes.

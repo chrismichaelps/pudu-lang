@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Mutable destructuring slots (#956)
+
+- Keep tuple, record and sequence bindings writable across held
+  layout changes. [[Compiler Lower Place]] · [[Compiler Lower Tuple]] ·
+  [[Compiler Lower Match]]
+
 ## 2026-11-23 — Structural patterns on held payloads (#956)
 
 - Match anonymous record fields on named sum payloads and preserve

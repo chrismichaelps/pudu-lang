@@ -164,3 +164,9 @@ Resolved Grill Log. Join captures only from successful structural
 alternatives. Use the same private captures and publication as written
 alternatives, so guard order, fallback scopes, and loop skips agree
 with the evaluator. [[Backend Rendering Callable Programs]]
+
+## Mutable sequence bindings
+
+Resolved Grill Log. Keep sequence captures private until the match
+succeeds. Publish mutable captures through [[Compiler Lower Place]]
+after success. Preserve the original failure path and span.

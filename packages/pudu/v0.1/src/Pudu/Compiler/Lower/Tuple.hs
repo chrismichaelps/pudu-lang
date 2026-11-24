@@ -5,11 +5,12 @@ import Data.List (mapAccumL, transpose)
 import qualified Data.Set as Set
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
+import Pudu.Compiler.Lower.Place (declareLocal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, ownerKeyOf, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Expression, FieldPattern (..), Located (..), Pattern (..), TypeSyntax )
+  ( BindingKind, Expression, FieldPattern (..), Located (..), Pattern (..) )
 import Pudu.Source (Span)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -44,9 +45,9 @@ lowerTuple lower state at = go state []
 
 {-| Retain the subject while testing the whole pattern. Bindings are
     published together after the selected shape has matched. -}
-lowerTuplePattern :: LowerExpression -> LowerState -> Span -> Located Pattern -> Maybe (Located TypeSyntax)
+lowerTuplePattern :: LowerExpression -> LowerState -> Span -> BindingKind -> Located Pattern
   -> Located Expression -> (LowerState, Maybe [CoreStatement])
-lowerTuplePattern lower state at pattern _ subject = case lower state subject of
+lowerTuplePattern lower state at binding pattern subject = case lower state subject of
   (after, Nothing) -> refused after
   (after, Just (value, kind))
     | expressionIsPrintValued value -> halt at "binding a Result[(), Str] value" after
@@ -58,7 +59,7 @@ lowerTuplePattern lower state at pattern _ subject = case lower state subject of
             root = readLocal rootLocal
             (ready, packed) = bindPattern root withRoot root pattern finish
             (final, declarations) = publish types ready packed
-         in (final, Just (declare rootLocal held : declarations))
+         in (final, (declare rootLocal held :) <$> declarations)
  where
   patternAt = locatedSpan pattern
   declare local value = CoreStatement at (CoreDeclare local value)
@@ -138,7 +139,7 @@ lowerTuplePattern lower state at pattern _ subject = case lower state subject of
 
   publish types current packed = case coreExpressionShape packed of
     CoreTuple values -> publishLocals current (zip (names pattern) values)
-    _ | coreExpressionType packed == CoreNeverType || null (names pattern) -> (current, [evaluate packed])
+    _ | coreExpressionType packed == CoreNeverType || null (names pattern) -> (current, Just [evaluate packed])
     _ ->
       let vectors = [slots | CoreTupleType slots <- Set.toList (runtimeCarriers (coreExpressionType packed))]
           layout kinds = case kinds of
@@ -151,7 +152,9 @@ lowerTuplePattern lower state at pattern _ subject = case lower state subject of
           values = [CoreExpression at kind (CoreTupleIndex position (readLocal saved))
             | (position, kind) <- zip [0 ..] members]
           (final, statements) = publishLocals ready (zip (names pattern) values)
-       in (final, declare saved carried : statements)
-  publishLocals = mapAccumL (\prior (name, value) ->
-    let (next, local) = bindLocal prior (locatedValue name) (coreExpressionType value)
-     in (next, declare local value))
+       in (final, (declare saved carried :) <$> statements)
+  publishLocals current captures =
+    let (ready, declarations) = mapAccumL
+          (\prior (name, value) -> declareLocal binding prior at (locatedValue name) value)
+          current captures
+     in (ready, sequence declarations)

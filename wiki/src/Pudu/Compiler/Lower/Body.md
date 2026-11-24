@@ -587,6 +587,9 @@ Resolved Grill Log: Await selects the held task and its result layout, then prop
 
 Resolved Grill Log: Initialize a mutable binding with the settled layout required by its writes. The initializer still runs once at the declaration.
 
+Resolved Grill Log. Pass the written binding kind into both
+destructuring paths. [[Compiler Lower Place]] owns local publication.
+
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.

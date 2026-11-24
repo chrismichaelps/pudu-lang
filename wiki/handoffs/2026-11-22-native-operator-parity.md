@@ -548,10 +548,17 @@ layout joining for written alternatives and named payload matches.
 [[Backend Rendering Callable Programs]] covers iteration, guards and
 sequence binding diagnostics.
 
+## Mutable destructuring slots
+
+Architect → Backend Engineer. [[Compiler Lower Body]] forwards binding
+kind. [[Compiler Lower Tuple]] and [[Compiler Lower Match]] publish
+successful captures through [[Compiler Lower Place]].
+[[Backend Shape Programs]] covers later assignment and loan finals.
+
 ## Next action
 
-Preserve mutable destructured bindings and their runtime carriers in
-native tuple, record and sequence patterns.
+Check the held condition in native branches and short-circuit
+operators before continuing control flow.
 
 ## Referenced by
 

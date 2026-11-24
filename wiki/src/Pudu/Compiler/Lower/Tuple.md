@@ -59,3 +59,9 @@ Resolved Grill Log: evaluate the subject once, test each held shape,
 and publish bindings only after the entire pattern succeeds. Join
 different successful layouts by binding position. Report E7013 at
 the whole pattern using the original subject's runtime kind.
+
+## Mutable destructuring
+
+Resolved Grill Log. Publish each successful capture through
+[[Compiler Lower Place]] using the original binding kind. Each
+mutable name has its own layout requirements, including later loans.

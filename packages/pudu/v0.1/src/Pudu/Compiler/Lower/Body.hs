@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Control
   , expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, bindMutable, halt, isModuleQualifier, lookupConstant, lookupLocal, mutableSite
+  , bindLocal, halt, isModuleQualifier, lookupConstant, lookupLocal
   , observeMutableLayout, refuse, refused, resolveFunction )
 import Pudu.Compiler.Lower.Text (lowerSelectedMember, lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerHeldMethod, lowerMethodCall, lowerOwnedMethod, lowerQualifiedMethod)
@@ -27,7 +27,7 @@ import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry, unwrapOrLeave)
 import Pudu.Compiler.Lower.Scope (leaving, leavingLoop, lowerScope, released)
 import Pudu.Compiler.Lower.Decimal (decimalLiteral)
-import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, settledMutableLayout, storageCarrier)
+import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Intrinsic (annotatedPanic, lowerIntrinsicValue)
@@ -39,7 +39,7 @@ import Pudu.Compiler.Lower.MethodValue (lowerMethodValue, lowerTraitMethodValue)
 import Pudu.Compiler.Lower.Stop (lowerPanic, lowerUntypedConvert)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerFunctionValueWithInputs, lowerLambda, lowerLambdaWithInputs, lowerValueCall, specializeCallable)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTuplePattern)
-import Pudu.Compiler.Lower.Place (lowerPlaceAssignment)
+import Pudu.Compiler.Lower.Place (declareLocal, lowerPlaceAssignment)
 import Pudu.Compiler.Lower.Loan (loanedReturn)
 import Pudu.Compiler.Lower.Record (lowerField, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -50,7 +50,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Core
 import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax
-  ( BindingKind (Mutable), Block (..), Declaration (..), Expression (..)
+  ( Block (..), Declaration (..), Expression (..)
   , Function, Literal (..), Located (..), Statement (..), TypeSyntax (NamedType) )
 import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
@@ -123,12 +123,12 @@ foldStatements state = go state []
   where
     go current collected [] = (current, reverse collected, False)
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
-      LetPatternStatement _ pattern _ subject | hasSequencePattern pattern ->
-        case lowerLetSequence lowerExpression current statementSpan pattern subject of
+      LetPatternStatement kind pattern _ subject | hasSequencePattern pattern ->
+        case lowerLetSequence lowerExpression current statementSpan kind pattern subject of
           (after, Just statements) -> binding after collected statements rest
           (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
-      LetPatternStatement _ pattern annotation subject
-        -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
+      LetPatternStatement kind pattern _ subject
+        -> case lowerTuplePattern lowerExpression current statementSpan kind pattern subject of
             (after, Just statements) -> binding after collected statements rest
             (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       LetElseStatement pattern' subject fallback ->
@@ -164,25 +164,6 @@ lowerBindingValue state written = case lowerExpression state written of
         (ready, held) = normalizeAggregateValue types (typeForSpan types (locatedSpan written)) after core
      in (ready, Just (held, coreExpressionType held))
   (after, Nothing) -> refused after
-
-declareLocal :: BindingKind -> LowerState -> Span -> Text.Text -> CoreExpression -> (LowerState, Maybe CoreStatement)
-declareLocal binding state at name initial
-  | binding == Mutable, original /= CoreNeverType =
-      let context = lowerContext state
-          types = contextTypes context
-          site = mutableSite state at name
-          expected = settledMutableLayout context site original
-          (ready, held) = projectRuntimeValue types state expected initial
-       in if coreExpressionType held == expected
-            then let (bound, local) = bindMutable ready site name expected
-                  in declared bound local held
-            else halt at "a mutable binding with incompatible initializer and write layouts" ready
-  | otherwise =
-      let (bound, local) = bindLocal state name original
-       in declared bound local initial
- where
-  original = coreExpressionType initial
-  declared after local value = (after, Just (CoreStatement at (CoreDeclare local value)))
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of

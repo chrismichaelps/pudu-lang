@@ -6,7 +6,7 @@
     indices run once, where the argument stands, and the store after the call
     reads the root again. -}
 module Pudu.Compiler.Lower.Place
-  ( HeldPlace (..), holdPlace, withMemberReceiver, lowerPlaceAssignment, observeHeldLayout
+  ( HeldPlace (..), declareLocal, holdPlace, withMemberReceiver, lowerPlaceAssignment, observeHeldLayout
   , readHeld, readHeldAtKeys, storeHeld ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
@@ -14,17 +14,36 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailure, exactPosition)
 import Pudu.Compiler.Lower.Array (takeReceiver)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, storageCarrier)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, settledMutableLayout, storageCarrier)
 import Pudu.Compiler.Lower.Slice (lowerIndexOn)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, observeMutableLayout, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, bindMutable, halt, intType, lookupLocal, mutableSite, observeMutableLayout, refused)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields)
 import Pudu.Core
-import Pudu.Frontend.Syntax (Expression (..), Located (..))
+import Pudu.Frontend.Syntax (BindingKind (Mutable), Expression (..), Located (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
+
+declareLocal :: BindingKind -> LowerState -> Span -> Text -> CoreExpression -> (LowerState, Maybe CoreStatement)
+declareLocal binding state at name initial
+  | binding == Mutable, original /= CoreNeverType =
+      let context = lowerContext state
+          types = contextTypes context
+          site = mutableSite state at name
+          expected = settledMutableLayout context site original
+          (ready, held) = projectRuntimeValue types state expected initial
+       in if coreExpressionType held == expected
+            then let (bound, local) = bindMutable ready site name expected
+                  in declared bound local held
+            else halt at "a mutable binding with incompatible initializer and write layouts" ready
+  | otherwise =
+      let (bound, local) = bindLocal state name original
+       in declared bound local initial
+ where
+  original = coreExpressionType initial
+  declared after local value = (after, Just (CoreStatement at (CoreDeclare local value)))
 
 data Step = FieldStep !Text | IndexStep !(Located Expression)
 

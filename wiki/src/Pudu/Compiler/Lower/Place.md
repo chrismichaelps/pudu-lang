@@ -72,3 +72,10 @@ Resolved Grill Log: a position checked as an integer can hold a
 range. Keep that key for read preparation and delegate its slice
 bounds to [[Compiler Lower Slice]]. A range remains an invalid
 assignment key, including when publishing a mutable final.
+
+## Declaring writable pattern bindings
+
+Resolved Grill Log. A named local and a destructured capture use the
+same declaration rule. Mutable sites join the initializer and later
+write layouts before allocating the slot. The captured initializer
+runs once.
