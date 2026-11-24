@@ -6,6 +6,12 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Concrete held writes
+
+Resolved Grill Log. Write a held character through a Bool-checked
+local, record field and indexed slot. Assert index order, the
+resulting value layouts, and the original held aliases.
+
 ## Concrete held call arguments
 
 Resolved Grill Log. Iterate text through a Bool-checked binder and

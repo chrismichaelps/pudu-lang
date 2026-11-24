@@ -599,10 +599,17 @@ Lower Lambda]] and [[Compiler Lower Loan]] specialize concrete laid-out
 operands. [[Backend Rendering Callable Programs]] exercises direct,
 indirect and lent arguments.
 
+## Concrete held writes
+
+Architect → Backend Engineer. [[Compiler Lower Place]] and
+[[Compiler Lower Body]] observe concrete layout changes along
+written paths. [[Backend Rendering Callable Programs]] covers
+local, field and indexed writes and alias preservation.
+
 ## Next action
 
-Track concrete held replacements that widen writable local,
-record-field, or indexed layouts.
+Preserve concrete held field and element layouts during record,
+array, set and map construction.
 
 ## Referenced by
 

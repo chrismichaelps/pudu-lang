@@ -31,6 +31,25 @@ renderingCallableSuccessPrograms =
         , "  }"
         , "  0", "}" ])
     , "receiver\nitems\n'x'\n'x'\ncaptured 'x'\nSome('x')\n'x'\n'x'\n'x'\n", "")
+  , ("concrete held replacements widen local, field and indexed slots", program
+      (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
+        [ "type Holder = { mut flag: Bool }"
+        , "fn index() -> Int { print(\"index\")\n 0 }"
+        , "fn main() -> Int {"
+        , "  var direct = true"
+        , "  var holder = Holder{flag: true}"
+        , "  var values = [true]"
+        , "  let oldHolder = holder"
+        , "  let oldValues = values"
+        , "  for item in choose(\"λ\".toBytes()).items() {"
+        , "    direct = item"
+        , "    holder.flag = item"
+        , "    values[index()] = item"
+        , "  }"
+        , "  print(show((direct, holder.flag, values)))"
+        , "  print(show((oldHolder.flag, oldValues)))"
+        , "  0", "}" ])
+    , "receiver\nitems\nindex\n('x', 'x', ['x'])\n(true, [true])\n", "")
   , ("nested positional and named patterns read concrete held fields", program
       (selectedReceiverTypes <>
         [ "type Packet = Pos((Bool, Int)) | Named{pair: (Bool, Int)}" ] <>

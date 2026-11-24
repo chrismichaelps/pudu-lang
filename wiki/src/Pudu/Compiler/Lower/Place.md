@@ -51,6 +51,10 @@ their carrier is narrower than the place's carrier.
 
 Resolved Grill Log: A write to a field or array element can demand a wider root layout. It records the changed path and keeps the layouts of unaffected fields.
 
+Resolved Grill Log. A different concrete native replacement can demand
+wider storage. Observe it at the written path and replay the root binding
+without altering unaffected members.
+
 ## Member receiver preparation
 
 Resolved Grill Log: prepare a receiver as a read with an optional

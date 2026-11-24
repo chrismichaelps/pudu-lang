@@ -14,10 +14,10 @@ import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailure, exactPosition)
 import Pudu.Compiler.Lower.Array (takeReceiver)
 import Pudu.Compiler.Lower.Control (blockType, expressionIsPrintValued)
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, settledMutableLayout, storageCarrier)
+import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, missingRuntimeMember, preserveRuntimeResult, projectRuntimeValue, recordWithFields, settledMutableLayout, storageCarrier)
 import Pudu.Compiler.Lower.Slice (lowerIndexOn)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, bindMutable, halt, intType, lookupLocal, mutableSite, observeMutableLayout, refused)
-import Pudu.Compiler.Lower.Types (LowerTypes, recordFields)
+import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields)
 import Pudu.Core
 import Pudu.Frontend.Syntax (BindingKind (Mutable), Expression (..), Located (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
@@ -117,7 +117,8 @@ lowerPlaceAssignment lower state at target value = do
 
 observeHeldLayout :: LowerState -> HeldPlace -> CoreType -> LowerState
 observeHeldLayout state found actual
-  | hasRuntimeChoice actual
+  | actual /= heldType found
+  , nativeValueType actual
   , Just expanded <- grow (coreLocalType root) (heldSteps found) =
       observeMutableLayout state root expanded
   | otherwise = state

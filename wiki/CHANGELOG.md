@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Concrete held writes (#956)
+
+- Discover writable layouts required by concrete replacements
+  through local, field and indexed places. [[Compiler Lower Place]]
+
 ## 2026-11-23 — Concrete held call arguments (#956)
 
 - Specialize named and retained callables for a concrete held

@@ -152,7 +152,7 @@ lowerLocalReplacement state local value = case lowerExpression state value of
         (ready, projected) = projectRuntimeValue types after expected core
         actual = coreExpressionType projected
         recorded
-          | expected /= actual, hasRuntimeChoice actual =
+          | expected /= actual, nativeValueType actual =
               observeMutableLayout ready local (storageCarrier types expected [actual])
           | otherwise = ready
      in (recorded, Just (projected, actual))
