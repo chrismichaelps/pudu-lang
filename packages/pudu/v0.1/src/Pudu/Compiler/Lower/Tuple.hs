@@ -140,7 +140,7 @@ lowerTuplePattern lower state at pattern _ subject = case lower state subject of
     CoreTuple values -> publishLocals current (zip (names pattern) values)
     _ | coreExpressionType packed == CoreNeverType || null (names pattern) -> (current, [evaluate packed])
     _ ->
-      let vectors = [members | CoreTupleType members <- Set.toList (runtimeCarriers (coreExpressionType packed))]
+      let vectors = [slots | CoreTupleType slots <- Set.toList (runtimeCarriers (coreExpressionType packed))]
           layout kinds = case kinds of
             first : _ -> storageCarrier types first kinds
             [] -> CoreUnitType

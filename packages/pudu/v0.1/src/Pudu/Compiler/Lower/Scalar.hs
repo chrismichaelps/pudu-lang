@@ -236,7 +236,7 @@ dynamicBinary state at operator left right
     | equality, common : _ <- filter heldAlternatives [leftType, rightType]
     , let heldA = widen types common a
           heldB = widen types common b
-    , all ((== common) . coreExpressionType) [heldA, heldB] ->
+    , all ((== common) . coreExpressionType) [heldA, heldB] =
         (current, Just (CoreExpression at CoreBoolType (CoreBinary equalityOperator heldA heldB)))
     | equality = (current, Just (CoreExpression at CoreBoolType (CoreBoolLiteral (operator == "!="))))
     | aType == bType, comparisonOnlyType aType =

@@ -522,6 +522,12 @@ structural impossibility check. [[Backend Rendering Callable Programs]]
 covers the held sources and binder skips. Local execution is deferred
 until emission coding is complete.
 
+## Native lowering compilation
+
+Backend Engineer. Restore compilation of the existing equality,
+destructuring and text-position paths in [[Compiler Lower Scalar]],
+[[Compiler Lower Tuple]] and [[Compiler Lower Text]].
+
 ## Next action
 
 Preserve the held state and result when a declared sequence's advance

@@ -85,9 +85,9 @@ lowerMemberOn lower fallback state at callee member arguments initiallySelected 
         (textOperation method result)
     | otherwise = missing selected current held
   textOperation method result current held operands =
-    let clamp value
-          | CoreIntegerType _ <- coreExpressionType value = clampedPosition at value
-          | otherwise = value
+    let clamp operand
+          | CoreIntegerType _ <- coreExpressionType operand = clampedPosition at operand
+          | otherwise = operand
         applied = CoreTextMethod method held (map clamp operands)
      in case (method, operands) of
           (TextRepeat, [count]) | coreExpressionType count /= intType ->

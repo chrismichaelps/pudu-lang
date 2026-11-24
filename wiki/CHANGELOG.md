@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Native lowering compilation (#956)
+
+- Correct the held equality guard and disambiguate local names in
+  destructuring and text position conversion. [[Compiler Lower Scalar]] ·
+  [[Compiler Lower Tuple]] · [[Compiler Lower Text]]
+
 ## 2026-11-23 — Held iteration sources (#956)
 
 - Select iteration from the retained source and skip impossible
