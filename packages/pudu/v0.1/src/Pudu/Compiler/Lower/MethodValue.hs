@@ -176,7 +176,7 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
   types = contextTypes (lowerContext state)
   receiverFact = if traitValue then Nothing else typeForSpan types (locatedSpan receiver)
   unboundOwner self = case locatedValue receiver of
-    NameExpression ("::trait-method::" :| [provider]) -> Just provider
+    NameExpression ("::trait-method::" :| [traitName]) -> Just traitName
     NameExpression (owner :| [])
       | Nothing <- lookupLocal state owner, declared self
       , ownerKeyOf self == Just owner || fmap displayName (ownerKeyOf self) == Just owner ->

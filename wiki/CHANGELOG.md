@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Native warning cleanup (#956)
+
+- Disambiguate locally scoped operator diagnostics and method providers.
+  [[Compiler Lower Scalar]] · [[Compiler Lower Method Value]]
+
 ## 2026-11-23 — Mutable destructuring slots (#956)
 
 - Keep tuple, record and sequence bindings writable across held

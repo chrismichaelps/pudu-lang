@@ -188,9 +188,9 @@ exactBinary state at operator left right =
     , Just (ready, answer) <- mixedInteger current at operator (integerKindMeet leftKind rightKind) a b =
         (ready, Just (answer, coreExpressionType answer))
     | operator `elem` ["==", "!="] = built current at (CoreBoolLiteral (operator == "!=")) CoreBoolType
-    | otherwise = namedFailure current at failure [a, b]
-  failure [a, b] = cannotApplyBinaryMessage operator a b
-  failure _ = unsupportedOperatorMessage operator
+    | otherwise = namedFailure current at invalidOperands [a, b]
+  invalidOperands [a, b] = cannotApplyBinaryMessage operator a b
+  invalidOperands _ = unsupportedOperatorMessage operator
 
 dynamicPayloads :: LowerTypes -> CoreType -> Maybe [(Text, CoreType)]
 dynamicPayloads types kind = sumVariants types kind >>= traverse payloadType
@@ -334,15 +334,15 @@ exactShift state at operator kind left right =
       tag = if operator == "<<" then CoreShiftLeft else CoreShiftRight
       moved = expression big (CoreBinary tag input count)
       nonnegative = expression CoreBoolType (CoreBinary CoreGreaterOrEqual count (number PlatformSigned 0))
-      failure message help = expression CoreNeverType
+      invalidShift message help = expression CoreNeverType
         (CoreFailText shiftCode (Just help) (expression CoreTextType (CoreTextLiteral message)) Nothing)
       choose condition yes no = expression target (CoreIfValue condition (CoreBlock [] (Just yes)) no)
       bounded = case integerKindWidth kind of
         Nothing -> moved
         Just width ->
           let inside = expression CoreBoolType (CoreBinary CoreLess count (number PlatformSigned (toInteger width)))
-           in choose inside (wrap moved) (failure (wideShiftMessage kind) wideShiftHelp)
-      result = choose nonnegative bounded (failure negativeShiftMessage negativeShiftHelp)
+           in choose inside (wrap moved) (invalidShift (wideShiftMessage kind) wideShiftHelp)
+      result = choose nonnegative bounded (invalidShift negativeShiftMessage negativeShiftHelp)
    in (state, Just (result, target))
 
 checkedIntegerResult :: Span -> IntegerKind -> CheckedOperation -> CoreExpression -> CoreExpression
