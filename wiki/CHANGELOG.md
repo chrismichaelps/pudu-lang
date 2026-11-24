@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held runtime conditions (#956)
+
+- Validate held Bool operands in branches, loops and short-circuit
+  operators. Evaluate a non-Bool match guard before falling through.
+  [[Compiler Lower Control]] · [[Compiler Lower Match]]
+
 ## 2026-11-23 — Native warning cleanup (#956)
 
 - Disambiguate locally scoped operator diagnostics and method providers.

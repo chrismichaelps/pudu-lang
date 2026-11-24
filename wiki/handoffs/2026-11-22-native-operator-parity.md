@@ -555,10 +555,18 @@ kind. [[Compiler Lower Tuple]] and [[Compiler Lower Match]] publish
 successful captures through [[Compiler Lower Place]].
 [[Backend Shape Programs]] covers later assignment and loan finals.
 
+## Held runtime conditions
+
+Architect → Backend Engineer. [[Compiler Lower Control]] selects the
+held Bool or applies the evaluator's failure or guard rule.
+[[Compiler Lower Body]], [[Compiler Lower Match]] and [[Compiler
+Lower Scalar]] consume it. [[Backend Rendering Callable Programs]]
+covers short-circuiting, guard fallthrough and strict diagnostics.
+
 ## Next action
 
-Check the held condition in native branches and short-circuit
-operators before continuing control flow.
+Preserve held break values across branches of a value-producing loop
+and project them into the destination's settled layout.
 
 ## Referenced by
 

@@ -9,7 +9,22 @@ import Pudu.Comptime.Limits (callDepthLimit)
 renderingCallableSuccessPrograms :: [(String, Text, Text, Text)]
 renderingCallableSuccessPrograms =
   [
-    ("iteration keeps the layouts and order of a held heterogeneous tuple", program
+    ("held conditions distinguish skipped operands and false guards", heldConditionProgram
+      [ "  print(show(false && choose(\"λ\".toBytes()).items()))"
+      , "  print(show(true || choose(\"λ\".toBytes()).items()))"
+      , "  print(show(true && choose(\"text\").items()))"
+      , "  print(show(false || choose(\"\").items()))"
+      , "  if choose(\"text\").items() { print(\"taken\") }"
+      , "  let value = if choose(\"\").items() { 1 } else { 7 }"
+      , "  print(show(value))"
+      , "  while choose(\"\").items() { print(\"unreached\") }"
+      , "  match 0 {"
+      , "    case 0 if choose(\"λ\".toBytes()).items() => print(\"unreached\")"
+      , "    case _ => print(\"fell through\")"
+      , "  }"
+      ]
+    , "false\ntrue\nreceiver\nitems\ntrue\nreceiver\nitems\nfalse\nreceiver\nitems\ntaken\nreceiver\nitems\n7\nreceiver\nitems\nreceiver\nitems\nfell through\n", "")
+  , ("iteration keeps the layouts and order of a held heterogeneous tuple", program
       (selectedReceiverTypes <> selectedIterable "Array[Int]" "[7, 8]" "(Int, Str, Bool)" "(3, \"four\", true)" <>
         [ "fn main() -> Int {"
         , "  for item in choose(\"λ\".toBytes()).items() { print(show(item)) }"
@@ -694,7 +709,17 @@ renderingCallableSuccessPrograms =
 renderingCallableRefusalPrograms :: [(String, Text)]
 renderingCallableRefusalPrograms =
   [
-    ("rendering builtin unary failures name builtin", program
+    ("a held non-Bool if condition reports before either branch", heldConditionProgram
+      [ "  let chosen = if choose(\"λ\".toBytes()).items() { \"left\" } else { \"right\" }"
+      , "  print(chosen)"
+      ])
+  , ("a held non-Bool while condition reports before its body", heldConditionProgram
+      [ "  while choose(\"λ\".toBytes()).items() { print(\"unreached\") }" ])
+  , ("an invalid held left operand stops before the logical right operand", heldConditionProgram
+      [ "  print(show(choose(\"λ\".toBytes()).items() && { print(\"unreached\")\n true }))" ])
+  , ("an invalid held right operand fails only on the taken logical path", heldConditionProgram
+      [ "  print(show({ print(\"left\")\n false } || choose(\"λ\".toBytes()).items()))" ])
+  , ("rendering builtin unary failures name builtin", program
       [ "fn main() -> Int { let renderer: fn(Int) -> Str = show\n let invalid = -renderer\n print(display(invalid))\n 0 }" ])
   , ("rendering builtin ordering is refused after operand effects", program
       [ "fn left() -> fn(Int) -> Str { print(\"left\")\n display }"
@@ -1056,6 +1081,11 @@ selectedIterable checked checkedBody held heldBody =
   , "  fn items(self: &Self) -> " <> held <> " { print(\"items\")\n " <> heldBody <> " }"
   , "}"
   ]
+
+heldConditionProgram :: [Text] -> Text
+heldConditionProgram body = program
+  (selectedReceiverTypes <> selectedIterable "Bool" "self.length() > 0" "Str" "\"wrong\"" <>
+    ["fn main() -> Int {"] <> body <> ["  0", "}"])
 
 selectedByteConversion :: [Text]
 selectedByteConversion =

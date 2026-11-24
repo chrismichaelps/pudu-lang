@@ -6,6 +6,12 @@ aliases: [Backend Rendering Callable Programs]
 ---
 # Backend Rendering Callable Programs
 
+## Held runtime conditions
+
+Resolved Grill Log. Compare reached and skipped operands of both
+logical operators. Cover condition diagnostics from if and while,
+and verify a non-Bool guard runs its effects before falling through.
+
 ## Held iteration sources
 
 Resolved Grill Log. Cover a tuple with different held item layouts,

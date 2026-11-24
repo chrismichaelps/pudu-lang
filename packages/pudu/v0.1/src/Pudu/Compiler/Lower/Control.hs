@@ -2,14 +2,17 @@
     Traversal callbacks keep the expression/block recursion owned by Body. -}
 module Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType, pushLoop, popLoop
+  , ConditionUse (StrictCondition, MatchGuard), lowerCondition
   , printValued, expressionIsPrintValued, droppedTail
   ) where
 
+import Data.List (mapAccumL)
+import Data.Maybe (isJust)
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Dynamic (widenTo)
+import Pudu.Compiler.Lower.Dynamic (isDynamic, joinRuntimeArms, widenTo)
 import Pudu.Compiler.Lower.State
-  ( LowerContext (..), LowerState (..), LoopFrame (..), halt, refused )
-import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
+  ( LowerContext (..), LowerState (..), LoopFrame (..), bindLocal, halt, refused )
+import Pudu.Compiler.Lower.Types (nativeValueType, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block (..), Expression, Located (..), Statement (..))
 import Pudu.Source (Span)
@@ -17,16 +20,52 @@ import Pudu.Source (Span)
 type ExpressionLowerer = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type BlockLowerer = LowerState -> Located Block -> (LowerState, CoreBlock, CoreType)
 
+data ConditionUse = StrictCondition | MatchGuard
+
+{-| A guard accepts only true. A strict condition diagnoses any non-Bool. -}
+lowerCondition :: ConditionUse -> Span -> ExpressionLowerer -> ExpressionLowerer
+lowerCondition use at lower state written = case lower state written of
+  (after, Nothing) -> refused after
+  (after, Just (value, _)) -> select after value
+ where
+  expression kind shape = CoreExpression at kind shape
+  select current held
+    | kind `elem` [CoreBoolType, CoreNeverType] = (current, Just (held, kind))
+    | isDynamic kind || isJust (runtimeChoiceAlternatives kind) =
+        case sumVariants (contextTypes (lowerContext current)) kind >>= traverse payloadOf of
+          Nothing -> halt at "a condition without a settled payload layout" current
+          Just variants ->
+            let (after, arms) = mapAccumL arm current variants
+                result = joinRuntimeArms at CoreBoolType held <$> sequence arms
+             in (after, (\value -> (value, coreExpressionType value)) <$> result)
+    | otherwise = case use of
+        StrictCondition ->
+          let text = expression CoreTextType
+              message = text (CoreBinary CoreAdd (text (CoreTextLiteral "expected a bool, found a "))
+                (text (CoreRuntimeKind held)))
+           in (current, Just (expression CoreNeverType (CoreFailText "E7001" Nothing message Nothing), CoreNeverType))
+        MatchGuard ->
+          let effects = [CoreStatement (coreExpressionSpan held) (CoreEvaluate held)]
+              value = expression CoreBoolType (CoreBlockValue (CoreBlock effects (Just (expression CoreBoolType (CoreBoolLiteral False)))))
+           in (current, Just (value, CoreBoolType))
+   where
+    kind = coreExpressionType held
+  payloadOf variant = case coreVariantFields variant of
+    [(_, payload)] -> Just (coreVariantName variant, payload)
+    _ -> Nothing
+  arm current (tag, kind) =
+    let (bound, local) = bindLocal current "" kind
+        (after, result) = select bound (expression kind (CoreReadLocal local))
+     in (after, (\(body, _) -> CoreArm at (CoreVariantPattern tag [CoreBindPattern local]) Nothing body) <$> result)
+
 lowerWhile :: ExpressionLowerer -> BlockLowerer -> Span -> Maybe (Located Text) -> Located Expression -> Located Block -> LowerState -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerWhile expression block spanValue label condition body state =
-  case expression state condition of
-    (afterCondition, Just (coreCondition, conditionType))
-      | conditionType `elem` [CoreBoolType, CoreNeverType] ->
-          let (pushed, identity) = pushLoop label afterCondition
-              (afterBody, coreBody, _) = block pushed body
-              resultType = if conditionType == CoreNeverType then CoreNeverType else CoreUnitType
-           in (popLoop afterBody, Just (CoreExpression spanValue resultType (CoreWhileValue identity coreCondition coreBody), resultType))
-      | otherwise -> halt (locatedSpan condition) ("a while condition of type " <> coreTypeName conditionType) afterCondition
+lowerWhile lower block spanValue label condition body state =
+  case lowerCondition StrictCondition spanValue lower state condition of
+    (after, Just stopped@(_, CoreNeverType)) -> (after, Just stopped)
+    (afterCondition, Just (coreCondition, _)) ->
+      let (pushed, identity) = pushLoop label afterCondition
+          (afterBody, coreBody, _) = block pushed (droppedTail body)
+       in (popLoop afterBody, Just (CoreExpression spanValue CoreUnitType (CoreWhileValue identity coreCondition coreBody), CoreUnitType))
     (after, Nothing) -> refused after
 
 lowerLoop :: BlockLowerer -> Span -> Maybe (Located Text) -> Located Block -> LowerState -> (LowerState, Maybe (CoreExpression, CoreType))

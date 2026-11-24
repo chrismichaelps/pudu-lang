@@ -103,3 +103,11 @@ span before lowering the body. Each valued break widens to the carrier of
 its own destination, including a labelled outer destination. The observed
 break type is tracked separately so an operand that transfers control or
 a loop with no reachable break cannot create a result.
+
+## Held runtime conditions
+
+Resolved Grill Log. Select a held condition before branching. Strict
+conditions require Bool and report E7001 with the held kind at the
+operation's span. Match guards treat a held non-Bool as false after
+its effects. A condition that transfers keeps its original transfer.
+[[Compiler Lower Body]] · [[Compiler Lower Scalar]] · [[Compiler Lower Match]]

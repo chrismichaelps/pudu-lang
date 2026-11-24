@@ -8,6 +8,7 @@ import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, selectedMember, typeForSpan, nativeIntegerKind, nativeValueType, treeType, unformed, withFacts, writtenLabel)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
+  , ConditionUse (StrictCondition), lowerCondition
   , expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
@@ -215,9 +216,11 @@ lowerStatement state (Located statementSpan statement) = case statement of
           (after, Nothing) -> refused after
     -- Expression lowering hands `=` back here; refuse rather than loop.
     BinaryExpression _ "=" _ -> halt statementSpan "this assignment target" state
-    IfExpression condition thenBlock elseExpression -> case lowerExpression state condition of
-      (afterCondition, Just (coreCondition, conditionType))
-        | conditionType `elem` [CoreBoolType, CoreNeverType] ->
+    IfExpression condition thenBlock elseExpression ->
+      case lowerCondition StrictCondition (locatedSpan locatedExpression) lowerExpression state condition of
+        (after, Just (coreCondition, CoreNeverType)) ->
+          (after, Just (CoreStatement statementSpan (CoreIf coreCondition (CoreBlock [] Nothing) Nothing)))
+        (afterCondition, Just (coreCondition, _)) ->
           let (afterThen, coreThen, _) = lowerBlock afterCondition thenBlock
            in case elseExpression of
                 Nothing ->
@@ -238,9 +241,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
                           }
                     )
                   (afterElse, Nothing) -> refused afterElse
-      (afterCondition, Just (_, coreType)) ->
-        halt (locatedSpan condition) ("an if condition of type " <> coreTypeName coreType) afterCondition
-      (afterCondition, Nothing) -> refused afterCondition
+        (afterCondition, Nothing) -> refused afterCondition
     _ -> case lowerExpression state locatedExpression of
       (after, Just (coreExpression, _)) ->
         ( after
@@ -537,9 +538,9 @@ lowerExpression state (Located spanValue expression) = case expression of
           then refused after
           else typed after (CoreBlockValue coreBlock) resultType
   IfExpression condition thenBlock (Just elseExpression) ->
-    case lowerExpression state condition of
-      (afterCondition, Just (coreCondition, conditionType))
-        | conditionType `elem` [CoreBoolType, CoreNeverType] ->
+    case lowerCondition StrictCondition spanValue lowerExpression state condition of
+      (after, Just stopped@(_, CoreNeverType)) -> (after, Just stopped)
+      (afterCondition, Just (coreCondition, _)) ->
           let (afterThen, coreThen, thenType) = lowerBlock afterCondition thenBlock
            in case lowerExpression afterThen elseExpression of
                 (afterElse, Just (coreElse, elseType))
@@ -565,8 +566,6 @@ lowerExpression state (Located spanValue expression) = case expression of
                   | otherwise ->
                       halt (locatedSpan elseExpression) "an if whose branches have different types" afterElse
                 (afterElse, Nothing) -> refused afterElse
-      (afterCondition, Just (_, conditionType)) ->
-        halt (locatedSpan condition) ("an if condition of type " <> coreTypeName conditionType) afterCondition
       (afterCondition, Nothing) -> refused afterCondition
   IfExpression _ _ Nothing ->
     case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of

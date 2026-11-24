@@ -165,6 +165,12 @@ alternatives. Use the same private captures and publication as written
 alternatives, so guard order, fallback scopes, and loop skips agree
 with the evaluator. [[Backend Rendering Callable Programs]]
 
+## Held match guards
+
+Resolved Grill Log. Apply the guard's truth rule only after structural
+success. A non-Bool result falls through after its effects. A guard
+that transfers suppresses its arm body. [[Compiler Lower Control]]
+
 ## Mutable sequence bindings
 
 Resolved Grill Log. Keep sequence captures private until the match

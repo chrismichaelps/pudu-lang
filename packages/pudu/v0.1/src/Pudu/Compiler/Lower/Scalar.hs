@@ -6,7 +6,7 @@ import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Control (ConditionUse (StrictCondition), expressionIsPrintValued, lowerCondition)
 import Pudu.Compiler.Lower.Arguments (clampedPosition)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, runtimeCarriers, widen)
 import Pudu.Compiler.Lower.Keyed (setMembership)
@@ -87,14 +87,16 @@ dynamicUnary state at operator operand =
 lowerBinary :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerBinary lower state at left operator right
   | operator == "=" = halt at "an assignment used as a value" state
+  | operator `elem` ["&&", "||"] = case condition state left of
+      (after, Nothing) -> refused after
+      (after, Just stopped@(_, CoreNeverType)) -> (after, Just stopped)
+      (afterLeft, Just (lhs, _)) -> case condition afterLeft right of
+        (after, Nothing) -> refused after
+        (after, Just (rhs, _)) ->
+          built after at (CoreBinary (if operator == "&&" then CoreAnd else CoreOr) lhs rhs) CoreBoolType
   | otherwise = case lowerLeft of
       (afterLeft, Just (coreLeft, leftType)) -> case lowerOperand afterLeft right (Just leftType) of
         (after, Just (coreRight, rightType))
-          | operator `elem` ["&&", "||"] ->
-              if all (`elem` [CoreBoolType, CoreNeverType]) [leftType, rightType]
-                then built after at (CoreBinary (if operator == "&&" then CoreAnd else CoreOr) coreLeft coreRight)
-                  (eagerType CoreBoolType [coreLeft])
-                else halt at "a logical operation outside Bool" after
           | CoreNeverType `elem` [leftType, rightType] ->
               built after at (CoreBlockValue (CoreBlock
                 [CoreStatement (coreExpressionSpan core) (CoreEvaluate core) | core <- [coreLeft, coreRight]] Nothing)) CoreNeverType
@@ -124,6 +126,7 @@ lowerBinary lower state at left operator right
         (after, Nothing) -> refused after
       (after, Nothing) -> refused after
  where
+  condition = lowerCondition StrictCondition at lower
   -- An empty array literal holds no element, so it takes the other
   -- operand's array type where checking left its element open.
   lowerOperand current (Located spanValue (ArrayExpression [])) (Just kind@(CoreArrayType _)) =

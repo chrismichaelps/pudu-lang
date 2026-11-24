@@ -590,6 +590,12 @@ Resolved Grill Log: Initialize a mutable binding with the settled layout require
 Resolved Grill Log. Pass the written binding kind into both
 destructuring paths. [[Compiler Lower Place]] owns local publication.
 
+## Held runtime conditions
+
+Resolved Grill Log. Statement and value conditions share
+[[Compiler Lower Control]]'s held-value validation. If a condition
+transfers, its branches are unreachable.
+
 ## Selected receiver layouts (#956)
 
 Resolved Grill Log: Pass the callee span separately from the invocation span on text and byte method calls.

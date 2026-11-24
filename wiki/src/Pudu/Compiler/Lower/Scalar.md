@@ -259,3 +259,10 @@ Resolved Grill Log: Use exact operands for checked arithmetic and comparisons of
 Resolved Grill Log: dispatch on the held payload before choosing
 checked exact arithmetic. Trait layout tags do not choose
 a different arithmetic kind.
+
+## Held logical operands
+
+Resolved Grill Log. Use strict Bool validation on both operands at
+the written operation. The right operand stays on the taken
+short-circuit path. A left-side transfer suppresses right-side lowering.
+[[Compiler Lower Control]]

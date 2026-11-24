@@ -7,7 +7,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.List (find, mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued, joinType)
+import Pudu.Compiler.Lower.Control (ConditionUse (MatchGuard), expressionIsPrintValued, joinType, lowerCondition)
 import Pudu.Compiler.Lower.Place (declareLocal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
@@ -83,6 +83,9 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
                 | impossiblePattern corePattern -> go (close afterPattern) subjectKind done rest
               (afterPattern, Just (corePattern, _)) -> case maybe (afterPattern, Just Nothing) (fmap (fmap Just) . guardOf afterPattern) guard' of
                 (afterGuard, Nothing) -> refused (close afterGuard)
+                (afterGuard, Just (Just coreGuard))
+                  | coreExpressionType coreGuard == CoreNeverType ->
+                      go (close afterGuard) subjectKind (CoreArm armSpan corePattern Nothing coreGuard : done) rest
                 (afterGuard, Just coreGuard) -> case lower afterGuard body of
                   (afterBody, Nothing) -> refused (close afterBody)
                   (afterBody, Just (coreBody, bodyKind))
@@ -92,11 +95,8 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
                          in go (close afterBody) subjectKind (CoreArm armSpan corePattern coreGuard dropped : done) rest
                     | expressionIsPrintValued coreBody -> halt (locatedSpan body) "a match arm returning Result[(), Str]" (close afterBody)
                     | otherwise -> go (close afterBody) subjectKind (CoreArm armSpan corePattern coreGuard coreBody : done) rest
-      guardOf current test = case lower current test of
-        (next, Just (coreGuard, guardKind))
-          | guardKind `elem` [CoreBoolType, CoreNeverType] -> (next, Just coreGuard)
-          | otherwise -> halt (locatedSpan test) ("a guard of type " <> coreTypeName guardKind) next
-        (next, Nothing) -> refused next
+      guardOf current test =
+        fmap (fmap fst) (lowerCondition MatchGuard (locatedSpan test) lower current test)
 
 {-| Only a successful arm publishes locals into the enclosing block. -}
 lowerLetElse :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression -> Located Block
