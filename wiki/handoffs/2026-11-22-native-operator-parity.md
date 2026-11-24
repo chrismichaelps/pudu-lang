@@ -614,10 +614,18 @@ through construction. [[Compiler Lower Dynamic]] joins compatible
 aggregate layouts. [[Backend Rendering Callable Programs]] checks
 effects and stored values.
 
+## Held record updates
+
+Architect → Backend Engineer. [[Compiler Lower Record]] keeps the
+base's held record identity and validates its shape after
+evaluating the written fields. [[Backend Rendering Callable
+Programs]] covers field effects, missing fields and a non-record
+base.
+
 ## Next action
 
-Validate the declared owner of a held record update after evaluating
-the base and written replacement expressions.
+Preserve held field and missing-member diagnostics in ordinary
+record member reads.
 
 ## Referenced by
 

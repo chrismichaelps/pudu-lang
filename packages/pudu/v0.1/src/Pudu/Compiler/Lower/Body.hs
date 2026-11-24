@@ -530,7 +530,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   RecordExpression (ModuleName ("::constructor::" :| [owner, label])) [] ->
     lowerConstructorValue lowerExpression state spanValue owner label
   RecordExpression written fields -> lowerRecord lowerExpression state spanValue (writtenLabel written) fields
-  RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
+  RecordUpdateExpression written source fields -> lowerRecordUpdate lowerExpression state spanValue (writtenLabel written) source fields
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block
         refusalCount = length . contextRefusals . lowerContext

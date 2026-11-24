@@ -71,3 +71,11 @@ Resolved Grill Log: Record-style variants reuse the sum payload construction aft
 Resolved Grill Log. Use a represented concrete field layout after
 trying the checked projection. A record update retains untouched
 fields and settles each written replacement independently.
+
+## Held record update base
+
+Resolved Grill Log. Evaluate the base and all written replacements
+before testing the held base. A held record keeps its owner and
+fields. A written replacement for a missing field runs for its
+effects. A non-record base reports the evaluator's E7001 at the
+update after the field effects, unless an operand already transferred.

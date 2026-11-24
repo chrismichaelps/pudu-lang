@@ -6,11 +6,11 @@ import Data.List (mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Sum (constructVariant)
 import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
-import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, projectRuntimeValue, recordWithFields, storageCarrier, widen)
+import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, recordWithFields, storageCarrier, widen)
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
 import Pudu.Source (Span)
 
@@ -49,9 +49,9 @@ lowerRecord lower state at name fields = case typeForSpan types at of
     _ -> concat [coreVariantFields variant | variant <- maybe [] id (sumVariants types kind), coreVariantName variant == name]
 
 {-| The base runs first, then the written fields. -}
-lowerRecordUpdate :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located FieldInit]
+lowerRecordUpdate :: LowerExpression -> LowerState -> Span -> Text -> Located Expression -> [Located FieldInit]
   -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerRecordUpdate lower state at source fields = case lower state source of
+lowerRecordUpdate lower state at name source fields = case lower state source of
   (after, Nothing) -> refused after
   (after, Just (base, CoreNeverType)) -> (after, Just (base, CoreNeverType))
   (after, Just (base, _)) -> case lowerFields lower after fields of
@@ -59,20 +59,38 @@ lowerRecordUpdate lower state at source fields = case lower state source of
     (final, Just written)
       | any ((== CoreNeverType) . coreExpressionType) (base : map snd written) ->
           (final, Just (stopped at (base : map snd written), CoreNeverType))
-      | otherwise -> case update written final base of
-          (ready, Just value) -> (ready, Just (value, coreExpressionType value))
-          (ready, Nothing) -> refused ready
+      | otherwise ->
+          let (withBase, saved) = bindLocal final "" (coreExpressionType base)
+              (withFields, retained) = mapAccumL hold withBase written
+              declarations = declare saved base : [declare local value | (_, local, value) <- retained]
+              replacements = [(label, reading local) | (label, local, _) <- retained]
+           in case update replacements withFields (reading saved) of
+                (ready, Just value) ->
+                  let checked = typeForSpan (contextTypes (lowerContext ready)) at
+                      carried = maybe value (`preserveRuntimeResult` value) checked
+                      kind = coreExpressionType carried
+                   in (ready, Just (CoreExpression at kind (CoreBlockValue (CoreBlock declarations (Just carried))), kind))
+                (ready, Nothing) -> refused ready
  where
+  hold current (label, value) =
+    let (ready, local) = bindLocal current "" (coreExpressionType value)
+     in (ready, (label, local, value))
+  declare local value = CoreStatement (coreExpressionSpan value) (CoreDeclare local value)
+  reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
   update written current base
     | Just selected <- mapRuntimeChoice current at kind base (update written) = fmap (fmap fst) selected
     | Just declared <- recordFields types kind =
         let adjusted = carryFields types declared written
             actual = recordWithFields types kind (map snd adjusted)
-            (ready, projected) = projectFields types current adjusted written
+            applicable = filter (\(label, _) -> label `elem` map fst declared) written
+            (ready, projected) = projectFields types current adjusted applicable
          in if fieldsMatch adjusted projected
               then (ready, Just (CoreExpression at actual (CoreRecordUpdate base projected)))
               else halt at "a record update with incompatible field layouts" ready
-    | otherwise = halt at ("updating a " <> coreTypeName kind <> " value") current
+    | otherwise =
+        let message = CoreExpression at CoreTextType
+              (CoreTextLiteral (name <> " can only be updated from a record of the same type"))
+         in (current, Just (CoreExpression at CoreNeverType (CoreFailText "E7001" Nothing message Nothing)))
    where
     kind = coreExpressionType base
     types = contextTypes (lowerContext current)

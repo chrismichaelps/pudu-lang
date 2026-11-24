@@ -12,6 +12,13 @@ Resolved Grill Log. Construct records, updates, arrays, sets and
 maps from a concrete held character through Bool-checked fields.
 Include a mixed key layout, duplicate keys and ordered field effects.
 
+## Held record updates
+
+Resolved Grill Log. An update on a different held record keeps
+that record's identity, replaces fields it has, and evaluates
+absent-field initializers. A non-record base reports after
+replacement effects and preserves an earlier operand transfer.
+
 ## Concrete held writes
 
 Resolved Grill Log. Write a held character through a Bool-checked

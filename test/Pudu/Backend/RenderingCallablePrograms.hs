@@ -26,6 +26,26 @@ renderingCallableSuccessPrograms =
         , "  }"
         , "  0", "}" ])
     , "receiver\nitems\ncount\nflag\n(Holder{flag: 'x', count: 4}, Holder{flag: 'x', count: 4}, Holder{flag: true, count: 4})\n[true, 'x']\n['x']\n#{false, 'x'}\n#{'x'}\n{false: true, 'x': false}\n", "")
+  , ("a record update keeps the held owner and evaluates absent-field replacements", program
+      (selectedReceiverTypes <>
+        [ "type Wanted = { value: Int, missing: Int }"
+        , "type Held = { value: Int, spare: Int }"
+        ] <> selectedIterable "Wanted" "Wanted{value: 1, missing: 2}" "Held" "Held{value: 3, spare: 4}" <>
+        [ "fn main() -> Int {"
+        , "  let updated: Wanted = Wanted{..choose(\"λ\".toBytes()).items(), missing: { print(\"missing\")\n 6 }, value: { print(\"value\")\n 7 }}"
+        , "  print(show(updated))"
+        , "  0", "}" ])
+    , "receiver\nitems\nmissing\nvalue\nHeld{value: 7, spare: 4}\n", "")
+  , ("a record replacement can transfer before validating its held base", program
+      (selectedReceiverTypes <>
+        [ "type Wanted = { value: Int }" ] <>
+        selectedIterable "Wanted" "Wanted{value: 1}" "Str" "\"not a record\"" <>
+        [ "fn finish() -> Int {"
+        , "  let updated = Wanted{..choose(\"λ\".toBytes()).items(), value: { print(\"return\")\n return 7 }}"
+        , "  print(show(updated))"
+        , "  0", "}"
+        , "fn main() -> Int { print(show(finish()))\n 0 }" ])
+    , "receiver\nitems\nreturn\n7\n", "")
   , ("concrete held arguments enter named, stored and loaned bodies", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "fn describe(value: Bool) -> Str { show(value) }"
@@ -836,7 +856,15 @@ renderingCallableSuccessPrograms =
 renderingCallableRefusalPrograms :: [(String, Text)]
 renderingCallableRefusalPrograms =
   [
-    ("a held non-Bool if condition reports before either branch", heldConditionProgram
+    ("a record update reports a held non-record after the written fields", program
+      (selectedReceiverTypes <>
+        [ "type Wanted = { first: Int, second: Int }" ] <>
+        selectedIterable "Wanted" "Wanted{first: 1, second: 2}" "Str" "\"not a record\"" <>
+        [ "fn main() -> Int {"
+        , "  let updated = Wanted{..choose(\"λ\".toBytes()).items(), second: { print(\"second\")\n 4 }, first: { print(\"first\")\n 3 }}"
+        , "  print(show(updated))"
+        , "  0", "}" ]))
+  , ("a held non-Bool if condition reports before either branch", heldConditionProgram
       [ "  let chosen = if choose(\"λ\".toBytes()).items() { \"left\" } else { \"right\" }"
       , "  print(chosen)"
       ])

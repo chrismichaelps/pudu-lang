@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held record updates (#956)
+
+- Evaluate record-update fields before validating the held base.
+  Preserve the held record owner and existing fields.
+  [[Compiler Lower Record]]
+
 ## 2026-11-23 — Concrete held aggregate construction (#956)
 
 - Preserve concrete field, element and key layouts during record

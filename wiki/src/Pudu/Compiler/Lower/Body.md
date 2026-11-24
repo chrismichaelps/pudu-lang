@@ -595,6 +595,9 @@ destructuring paths. [[Compiler Lower Place]] owns local publication.
 
 ## Held runtime conditions
 
+Resolved Grill Log. Pass the written record name into native update
+lowering so a held non-record reports the source diagnostic.
+
 Resolved Grill Log. A checked positional constructor reference
 uses [[Compiler Lower Sum]] for its callable or nullary value form.
 
