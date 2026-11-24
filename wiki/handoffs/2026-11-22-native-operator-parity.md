@@ -651,8 +651,8 @@ paths with allocation and ownership regressions.
 
 ## Next action
 
-Audit map, set, and bucket method comparison when the held receivers have
-different element layouts.
+Trace whether a callback returning a held layout can specialize a stored
+traversal when its checked callback result is already concrete.
 
 Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 [[Compiler Lower Record]] select the actual builtin member signature.
@@ -666,7 +666,7 @@ Architect → Backend Engineer. [[Compiler Lower Method Value]] and
 Backend Engineer → Test Engineer. [[Backend Rendering Callable Programs]]
 covers open captures, concrete calls, and empty and nonempty nested traversals.
 [[Compiler Lower Method Value]] and [[Native Aggregate Emission]] compare
-traversal values through their retained receiver layouts.
+builtin method values through their retained receiver layouts.
 
 Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 

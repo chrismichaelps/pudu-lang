@@ -303,3 +303,7 @@ captures through a checked callable with concrete callback and seed types.
 Use a retained map as the callback over nonempty and empty inputs.
 Compare the open map with concrete maps on equal and unequal receivers.
 Compare bound traversals on empty arrays with distinct element layouts.
+
+Resolved Grill Log. Compare bound map, set, and bucket methods in a shared
+callable slot. Empty receivers compare across element layouts. A different
+family, member, or receiver entry makes the comparison unequal.

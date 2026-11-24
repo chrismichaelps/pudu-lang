@@ -447,10 +447,10 @@ registerMethodValue lower current at receiver member key bound solved@(CoreFunct
   kind = CoreFunctionType inputs result
   (provider, plain) = selectedMember member
   identity = case (provider, bound) of
-    (Nothing, Just CoreArrayType{}) | traversal -> "$array-method:" <> plain
-    (Nothing, Just CoreRangeType) | traversal -> "$range-method:" <> plain
+    (Nothing, Just receiverKind)
+      | builtinMember receiverKind plain, Just owner <- ownerKeyOf receiverKind ->
+          "$builtin-method:" <> owner <> ":" <> plain
     _ -> fst (Text.breakOn "$runtime" key)
-  traversal = plain `elem` ["map", "reduce"]
   traitValue = case locatedValue receiver of
     NameExpression ("::trait-method::" :| [_]) -> True
     _ -> False

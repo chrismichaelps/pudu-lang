@@ -13,7 +13,7 @@ tags: [changelog]
 - Keep open traversal captures and specialize their invocation from the
   retained callback or seed, including when they serve as traversal callbacks.
   [[Compiler Lower Lambda]] · [[Compiler Lower Array Loop]]
-- Compare open and concrete traversals by member and receiver value
+- Compare bound builtin methods by family, member, and receiver value
   across capture layouts. [[Compiler Lower Method Value]] ·
   [[Native Aggregate Emission]]
 

@@ -156,9 +156,10 @@ template. The capture and identity use the ordinary unit instantiation,
 which can itself accept unit callbacks. A different invocation derives its
 result from the actual callback or seed. The receiver is captured once.
 
-Resolved Grill Log. A bound traversal has one comparison site per receiver
-family and member. Each callable signature still has its own invocation
-key. Equality reads the receivers using their individual capture layouts.
+Resolved Grill Log. An unqualified builtin member has one comparison site
+per receiver family and member. Each callable signature still has its own
+invocation key. A declared or explicitly qualified member keeps the
+declaration's identity. Equality reads individual capture layouts.
 [[Native Aggregate Emission]] · [[Backend Cross Comparison]]
 
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]

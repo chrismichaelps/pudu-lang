@@ -119,6 +119,21 @@ renderingCallableSuccessPrograms =
         , "  print(display(receiver.ints().map == receiver.texts().map))"
         , "  0", "}" ])
     , "receiver\nreceiver\nitems\nreceiver\nreceiver\nitems\n[\"4\", \"7\"]\n\"seed:47\"\n[[\"4\", \"7\"]]\n[]\ntrue\nfalse\nreceiver\ntrue\n", "")
+  , ("builtin method equality follows the family, member, and receiver", program
+      [ "fn main() -> Int {"
+      , "  let intMap: Map[Int, Int] = mapOf([])"
+      , "  let textMap: Map[Int, Str] = mapOf([])"
+      , "  let intSet: Set[Int] = setOf([])"
+      , "  let textSet: Set[Str] = setOf([])"
+      , "  let intBuckets: Buckets[Int] = bucketsOf()"
+      , "  let textBuckets: Buckets[Str] = bucketsOf()"
+      , "  print(show((intMap.size == textMap.size, intSet.size == textSet.size, intBuckets.size == textBuckets.size)))"
+      , "  print(show((intMap.size == intSet.size, intMap.keys == intMap.values)))"
+      , "  let numbers = intMap.insert(1, 2)"
+      , "  let words = textMap.insert(1, \"2\")"
+      , "  print(show((numbers.size == words.size, numbers.size == intMap.size)))"
+      , "  0", "}" ]
+    , "(true, true, true)\n(false, false)\n(false, false)\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"
