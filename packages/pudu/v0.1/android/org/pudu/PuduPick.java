@@ -93,7 +93,24 @@ final class PuduPick {
     }
   }
 
+  /** Whether `source` names content another application's provider serves: the provider is resolved
+   *  and its package compared, since an authority string can carry a user prefix or mimic a name. */
+  static boolean foreign(Uri source) {
+    String authority = source.getAuthority();
+    if (!"content".equals(source.getScheme()) || authority == null || authority.contains("@")) return false;
+    android.content.pm.ProviderInfo provider = PuduBridge.activity.getPackageManager().resolveContentProvider(authority, 0);
+    return provider != null && !provider.packageName.equals(PuduBridge.activity.getPackageName());
+  }
+
+  /** Whether `row` is a phone row of the system contacts provider. */
+  private static boolean phoneRow(Uri row) {
+    String phones = ContactsContract.CommonDataKinds.Phone.CONTENT_URI.getPath();
+    return "content".equals(row.getScheme()) && ContactsContract.AUTHORITY.equals(row.getAuthority()) && row.getPath() != null
+        && phones != null && row.getPath().startsWith(phones);
+  }
+
   private static String contactText(Uri row) {
+    if (!phoneRow(row)) return null;
     String[] columns = { ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER };
     try (Cursor cursor = PuduBridge.activity.getContentResolver().query(row, columns, null, null, null)) {
       if (cursor == null || !cursor.moveToFirst()) return null;
@@ -115,8 +132,7 @@ final class PuduPick {
 
   /** Copies a picked document from another application's provider, up to the cap. */
   private static String copy(Uri source) {
-    if (!"content".equals(source.getScheme()) || source.getAuthority() == null) return null;
-    if (source.getAuthority().startsWith(PuduBridge.activity.getPackageName())) return null;
+    if (!foreign(source)) return null;
     File target = cacheFile("");
     try (InputStream in = PuduBridge.activity.getContentResolver().openInputStream(source); OutputStream out = new FileOutputStream(target)) {
       if (in == null) return null;

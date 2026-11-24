@@ -25,6 +25,7 @@ The in-app browser, speech and image picking of the Android host (#989). The cla
 
 - Each BROWSE, SPEAK and PICK_IMAGE queues exactly one answer under its tag.
 - A picked image is always copied into the cache directory before its path is reported.
+- A picked image URI passes `PuduPick.foreign` before it is read.
 
 ## Negative Logic
 

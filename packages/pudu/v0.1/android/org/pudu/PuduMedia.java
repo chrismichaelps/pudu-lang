@@ -134,8 +134,7 @@ final class PuduMedia {
   /** Only an image another application's provider serves is accepted: a file URI or one of this
    *  application's own providers could name its private files. */
   private static boolean acceptable(Uri source) {
-    if (!"content".equals(source.getScheme()) || source.getAuthority() == null) return false;
-    if (source.getAuthority().startsWith(PuduBridge.activity.getPackageName())) return false;
+    if (!PuduPick.foreign(source)) return false;
     String type = PuduBridge.activity.getContentResolver().getType(source);
     return type != null && type.startsWith("image/");
   }

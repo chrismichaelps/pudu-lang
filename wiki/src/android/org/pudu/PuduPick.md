@@ -26,7 +26,8 @@ The contact, document and photo pickers, audio recording, the secure screen sett
 ## Invariants
 
 - Each picker request sends exactly one answer under its tag.
-- Content URIs are accepted only from providers of other applications, so a result cannot read this application's own private files through a returned URI.
+- A picked content URI is accepted only when its authority has no `@` and `PackageManager.resolveContentProvider` resolves it to a provider of another package (`PuduPick.foreign`, used by both this class and [[PuduMedia]]), so a result cannot read this application's own private files through a returned URI.
+- A picked contact row must come from the system contacts authority under the phone table's path.
 - A recorder is released when it stops, and a recorder under a new RECORD on 1 replaces none still running.
 
 ## Negative Logic
