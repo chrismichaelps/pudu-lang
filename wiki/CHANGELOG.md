@@ -5,6 +5,44 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-24 — Held builtin member values (#956)
+
+- Bind a builtin method to the selected receiver and apply its own callable
+  layout and argument-count diagnostic at the saved invocation.
+  [[Compiler Lower Method Value]] · [[Compiler Lower Default]]
+
+## 2026-11-24 — Native emission performance
+
+- Use fixed frame storage for small non-suspending entries. Reuse storage
+  for decimal digit pairs and adjacent text views.
+  [[Backend Frame Runtime]] · [[Native Text Runtime]]
+- Pass eligible records and tuples as borrowed pointers through typed calls.
+  [[Backend Typed Integer Calls]]
+- Find MultiMap groups and occurrence counts once per update.
+  [[Compiler Lower Multi Map]]
+- Track reported native runtime costs and record the baseline, semantic
+  guarantees, and regression evidence needed for each fix.
+  [[Native Emission Performance]]
+- Reuse unique array receivers with total scalar operands, allocate small
+  arrays in one block, and recycle storage for small sequential heap calls.
+  [[Native Arrays]] · [[Backend Frame Runtime]]
+- Skip redundant receiver retains for local array indexing, admit floating
+  signatures to typed calls, and build JSON values during validation.
+  [[Compiler Frame Body]] · [[Backend Typed Integer Calls]] · [[Native JSON Kernels]]
+- Bind payloads directly when a freshly constructed scalar variant has a
+  known matching arm. [[Compiler Frame Match]]
+- Emit local frame branches and reuse exclusively owned ordered tree nodes.
+  [[Backend Frame Bodies]] · [[Native Persistent Trees]]
+- Keep small host registries inline and index only the current live token
+  range. [[Native Host State]]
+- Keep zero-byte and one-byte copies in immutable text storage, and select
+  elementwise lane operations before entering their loops.
+  [[Native Text Runtime]] · [[Native Host Lanes]]
+- Use typed arithmetic for signed 8-, 16-, and 32-bit direct calls.
+  [[Backend Typed Integer Calls]]
+- Dispatch distinct variant arms by numeric tag and keep ordinary guard and
+  payload-failure behavior. [[Compiler Frame Match]]
+
 ## 2026-11-23 — Held member reads (#956)
 
 - Read the selected record or named variant field and preserve

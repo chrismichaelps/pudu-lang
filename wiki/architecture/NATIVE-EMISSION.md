@@ -9,6 +9,9 @@ aliases: [Native Emission Coverage]
 
 Compile ordinary checked Pudu programs into portable C11 with interpreter-identical observable behavior. Full coverage requires every implemented language construct and reachable standard-library boundary to have lowering, representation, execution, cleanup, diagnostics, and differential evidence. A typed E6001 refusal is an honest boundary, not completed support. There is no silent interpreter fallback.
 
+The [[Native Emission Performance]] ledger tracks reported costs in emitted
+programs and the measurements and parity cases required to close them.
+
 ## Coverage ledger
 
 | Area | State | Next obligation |
@@ -284,6 +287,16 @@ The method closure keeps the receiver and selected callable layout,
 and a missing member fails at the read. [[Compiler Lower Method
 Value]] · [[Backend Rendering Callable Programs]]. Execution evidence
 is pending.
+
+## Held builtin method values (#956)
+
+A field or method read can select a builtin from the held receiver.
+Its closure uses that receiver's signature, including the checked
+result or accumulator fact for a generic traversal when available.
+When a saved method receives the wrong number of arguments, its
+own diagnostic follows all supplied argument effects. [[Compiler Lower
+Method Value]] · [[Compiler Lower Default]] · [[Backend Rendering
+Callable Programs]]. Native execution evidence is pending.
 
 ## Declared method argument counts (#956)
 

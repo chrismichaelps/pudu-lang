@@ -14,6 +14,9 @@ before C compilation. Select the corresponding typed keyed helper root.
 Resolved Grill Log: no signed narrowing or reinterpretation of another cell
 kind; the type-specific helper is emitted only after exact carrier admission.
 
+Resolved Grill Log: the MultiMap lookup with a default admits only a map
+with its exact key argument and its exact array or platform Int result.
+
 ## Purpose and interface
 
 Export frameValue, slotText and cellMember. Translate pure FrameValue operations

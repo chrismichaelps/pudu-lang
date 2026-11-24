@@ -17,6 +17,14 @@ which they use.
 ## Resolved Grill Log
 
 - The box never moves when its items grow, so slots holding it stay valid.
+- Small initial item buffers share the box allocation at an aligned offset.
+  A unique array that outgrows this storage copies only its initialized cells
+  into a separate buffer. Larger initial arrays allocate their own buffers so
+  later growth does not retain large unused inline storage. All release paths
+  use the same storage helper to distinguish the two cases.
+- The fallible construction and growth parts leave existing array storage
+  intact on failure. The JSON reader can unwind the partial document before
+  reporting host exhaustion. The reporting wrappers serve ordinary updates.
 - One part per helper, so a program carries only what it calls and the C has
   no unused functions.
 

@@ -163,6 +163,18 @@ storeModulePrograms =
       , "  0"
       , "}" ]
     , "MultiMap{groups: {\"a\": [1], \"b\": [2, 2, 3]}, occurrences: {(\"a\", 1): 1, (\"b\", 2): 2, (\"b\", 3): 1}}\ntruefalsefalse\n[2, 2, 3]4[(\"a\", 1), (\"b\", 2), (\"b\", 2), (\"b\", 3)]\nvalue\n{\"a\": [1], \"b\": [2, 2, 3], \"c\": [9]}2\nMultiMap{groups: {0.0: [1, 2]}, occurrences: {(-0.0, 1): 1, (0.0, 2): 1}}true<builtin multiMapAdd>\nMultiMap{groups: {5: [6, 6]}, occurrences: {(5, 6): 2}}\n" )
+  , ("MultiMap defaults preserve existing groups and repeated counts", program
+      [ "import Std.MultiMap as Multi", "import Std.MultiMap {MultiMap}"
+      , "fn main() -> Int {"
+      , "  let empty: MultiMap[Int, Str] = Multi.empty()"
+      , "  let first = Multi.add(&empty, 1, \"north\")"
+      , "  let other = Multi.add(&first, 2, \"west\")"
+      , "  let updated = Multi.add(&Multi.add(&other, 1, \"south\"), 1, \"north\")"
+      , "  print(show(Multi.get(&first, 1)) + show(Multi.get(&updated, 1)))"
+      , "  print(show(Multi.get(&updated, 2)) + show(Multi.get(&first, 2)))"
+      , "  print(show(updated.occurrences.get((1, \"north\"))))"
+      , "  0", "}" ]
+    , "[\"north\"][\"north\", \"south\", \"north\"]\n[\"west\"][]\nSome(2)\n")
   , ( "Std.HashMap inserts, replaces, removes and enumerates in insertion order", program
       [ "import Std.HashMap as HashMap"
       , ""

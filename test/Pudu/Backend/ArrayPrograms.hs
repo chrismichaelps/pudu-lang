@@ -52,11 +52,13 @@ arraySuccessPrograms =
       , "  items = items.concat(items)", "  items = items.pop()"
       , "  print(show(early) + \" \" + show(middle) + \" \" + show(items))"
       , "  var built: Array[Int] = []", "  var i = 0"
-      , "  while i < 2000 {", "    built = built.push(i)", "    i = i + 1", "  }"
+      , "  while i < 2000 {", "    built = built.push(i % 13)", "    i = i + 1", "  }"
       , "  var total = 0", "  for value in built { total = total + value }"
       , "  print(display(built.length()) + \" \" + display(total))"
+      , "  let original = built", "  built = built.push(i % 13)"
+      , "  print(display(original.length()) + \" \" + display(built[2000]))"
       , "  return 0", "}" ]
-    , "[\"a\"] [\"a\", \"b\"] [\"z\", \"b\", \"c\", \"z\", \"b\"]\n2000 1999000\n")
+    , "[\"a\"] [\"a\", \"b\"] [\"z\", \"b\", \"c\", \"z\", \"b\"]\n2000 11989\n2000 11\n")
   , ("array updates and callbacks retain the receiver before operands", program
       [ "fn items() -> Array[Int] { print(\"array\")\n [1, 2] }"
       , "fn callback() -> fn(Int) -> Int { print(\"callback\")\n |n| n + 1 }"
@@ -69,6 +71,13 @@ arraySuccessPrograms =
       , "  print(show(items().map(callback())))"
       , "  0", "}" ]
     , "[1, 2, 1]\n[1, 2, 1, 9]\narray\ncallback\n[2, 3]\n")
+  , ("indexing preserves owned elements and snapshots effectful receivers", program
+      [ "fn main() -> Int {"
+      , "  var rows = [[1], [2]]", "  let position = 1", "  let saved = rows[position]"
+      , "  rows[1] = [8]", "  print(show(saved))"
+      , "  print(show(rows[{ rows = [[9]]\n 0 }]))"
+      , "  print(show(rows))", "  0", "}" ]
+    , "[2]\n[1]\n[[9]]\n")
   , ("map, filter and reduce call back once per item, in order", program
       [ "fn noted(label: Str, value: Int) -> Int {", "  print(label + display(value))", "  value", "}"
       , "fn main() -> Int {"
@@ -105,6 +114,10 @@ arrayRefusalPrograms =
   , ("a negative index fails at the index", program
       [ "fn main() -> Int {", "  let items = [1, 2]", "  print(display(items[0]))"
       , "  print(display(items[-1]))", "  return 0", "}" ])
+  , ("a failing append argument reports its original diagnostic", program
+      [ "fn main() -> Int {", "  var items = [1, 2]", "  let divisor = items[0] - 1"
+      , "  print(show(items))", "  items = items.push(12 % divisor)"
+      , "  return 0", "}" ])
   , ("arrays are not ordered", program
       [ "fn main() -> Int {", "  print(\"before\")", "  print(display([1] < [2]))", "  return 0", "}" ])
   , ("non-text join evaluates the receiver and separator before refusing", program

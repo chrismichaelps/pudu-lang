@@ -35,8 +35,8 @@ import qualified Data.Map.Strict as Map
 import Data.List (nub)
 import Pudu.Core (closureIsBuiltin, CoreCallbackSignature (..), CoreForeign (..), closureHasEnvironment, closureMethod, CoreLayout (..), CoreType (..), CoreVariant (..))
 import Pudu.Core.Frame
-  ( FrameFault (..), FrameFunction (..), FrameLabel (..)
-  , FrameModule (..), FrameSlot (..), FrameSlotId (..) )
+  ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
+  , FrameModule (..), FrameSlot (..), FrameSlotId (..), FrameTerminator (..) )
 import Pudu.Source (Source)
 
 emitFrameProgram :: Text -> [Source] -> FrameModule -> Either FrameFault Text
@@ -181,7 +181,7 @@ emitFrameUnit form version sources logical = do
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked))
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) (startupCells entry)
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
     -- Only a program that reads its arguments keeps them.
@@ -194,6 +194,14 @@ emitFrameUnit form version sources logical = do
     }
   where
     source = compactFrameSlots logical
+    startupCells function
+      | cells <= 32, all (returnsLocally . frameBlockTerminator) (frameFunctionBlocks function) = Just cells
+      | otherwise = Nothing
+      where cells = frameCells function
+    returnsLocally ending = case ending of
+      FrameCall{} -> False
+      FrameCallValue{} -> False
+      _ -> True
     -- Keep the owned entry value alive until reporting finishes.
     shownBox kind =
       [ "  pudu_box *pudu_entry = pudu_run_frames(" <> textOfInt entryId' <> ").box;"

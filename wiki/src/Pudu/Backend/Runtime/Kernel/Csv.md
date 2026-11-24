@@ -14,6 +14,8 @@ The delimiter test and the record scan as `Pudu.Eval.Csv` answers them: complete
 ## Resolved Grill Log
 
 Fields are decoded once when they end; a quote in the last byte leaves its record incomplete.
+An incomplete row releases its text fields and then uses the shared array
+storage helper, including when its fields still fit inline.
 
 ## Referenced by
 

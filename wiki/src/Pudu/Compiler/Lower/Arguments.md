@@ -55,3 +55,7 @@ when the evaluator converts them before indexing.
 
 Resolved Grill Log: the shared stopping block evaluates the supplied
 prefix and exits before traversal if the last operand transfers.
+
+Resolved Grill Log: selected builtin method profiles use the receiver
+family's arity diagnostic. The array call and stored array method share the
+same diagnostic constructor.

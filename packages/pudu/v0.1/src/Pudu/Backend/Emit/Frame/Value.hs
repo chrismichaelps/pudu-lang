@@ -26,7 +26,7 @@ import Pudu.Core.Frame
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind))
 
 slotNumber :: FrameSlot -> Text
 slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
@@ -186,6 +186,10 @@ frameValue state value = case frameValueShape value of
           KeyedFromArray -> frameValueType value
           _ -> frameSlotType receiver
         keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+        defaultLookupResult result = case result of
+          CoreArrayType{} -> True
+          CoreIntegerType PlatformSigned -> True
+          _ -> False
         wordKeyed operation = case (kind, map frameSlotType arguments, frameValueType value) of
           (CoreMapType _ (CoreIntegerType (UnsignedKind 64)), [other], result)
             | kind == other && kind == result -> keyed operation
@@ -201,6 +205,11 @@ frameValue state value = case frameValueShape value of
       KeyedIsEmpty -> plain ("(pudu_tree_size(" <> target <> "->fields[0].tree) == 0)") ["tree"]
       KeyedContains -> keyed "contains"
       KeyedLookup -> keyed "lookup"
+      KeyedLookupOrDefault -> case (kind, map frameSlotType arguments) of
+        (CoreMapType key result, [argument])
+          | key == argument, result == frameValueType value, defaultLookupResult result ->
+              keyed "lookup_default"
+        _ -> refused "a keyed default lookup without matching key and result carriers"
       KeyedInsert -> keyed "insert"
       KeyedPut -> keyed "put"
       KeyedRemove -> keyed "remove"

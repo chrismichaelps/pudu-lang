@@ -188,3 +188,10 @@ Resolved Grill Log: A record update may construct a widened layout. Fields copie
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Validate each selected variant payload against its physical layout before emitting its slots.
+
+## Local array indexing
+
+Resolved Grill Log: An integer literal or local integer read cannot modify
+the array owner. Read a local array's frame slot directly for that index.
+An effectful index keeps the ordinary receiver snapshot. The lookup still
+owns any returned element and uses the same bounds and diagnostic path.

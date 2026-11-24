@@ -46,6 +46,20 @@ The allocator bounds the complete C object, including its owner header,
 by `PTRDIFF_MAX`. Text operations still report their own length refusal
 before allocation when their language-level limit is exceeded.
 
+Resolved Grill Log: the fallible allocation helper returns a null owner on
+failure so the JSON reader can release partial values before reporting a
+host failure. Other callers use the reporting wrapper.
+
+Resolved Grill Log: copying zero or one byte can use stable immutable
+storage. All 256 single-byte values are available, including zero and bytes
+that belong to byte sequences. Writable allocation and longer copies keep
+their original ownership contract.
+
+Resolved Grill Log: two decimal digits can use a compact immutable table.
+Copies and concatenations share it, including retained slices of the result.
+Concatenating consecutive views of the same heap owner retains that owner
+once and extends the view. Empty views keep no reference to their source.
+
 ## Grill Log
 
 - **Q:** Why does `pudu_fail_text` copy the message? **A:** Frame cleanup runs before printing and may release the text the message came from (#525).

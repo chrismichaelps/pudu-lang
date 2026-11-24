@@ -9,15 +9,17 @@ module Pudu.Compiler.Lower.Default
 import Control.Applicative ((<|>))
 import Data.List (isSubsequenceOf, mapAccumL)
 import qualified Data.Map.Strict as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtCaller), argumentFailureWith)
+import qualified Data.Text as Text
+import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtCaller), argumentFailureWith, builtinArityFailure, builtinMember)
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, projectRuntimeValue)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), CoreSignature (..), Instance (instanceFunction)
   , LowerContext (..), LowerState (..), bindLocal, intType, refuse, refused )
 import Pudu.Compiler.Lower.Types (loanedInputs, ownerKeyOf, selectedMember, typeFactAt)
 import Pudu.Core
+import Pudu.Core.Closure (textMethodPrefix)
 import Pudu.Frontend.Syntax (Expression, Function (..), Located (..), Parameter (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
@@ -93,6 +95,7 @@ data CallableArity = CallableArity
   { arityParameters :: ![Text]
   , arityDefaulted :: !Bool
   , arityLoans :: ![Int]
+  , arityBuiltin :: !(Maybe (CoreType, Text))
   }
 
 selectCallableArity :: ArgumentBlame -> Span -> LowerState -> Bool -> Maybe [Int] -> CoreExpression
@@ -100,7 +103,7 @@ selectCallableArity :: ArgumentBlame -> Span -> LowerState -> Bool -> Maybe [Int
   -> (LowerState -> Bool -> [Int] -> CoreExpression -> [CoreExpression] -> Lowered) -> Lowered
 selectCallableArity blame at state checkedDefault checkedLoans target inputs result given invoke
   | CoreClosure key _ <- coreExpressionShape target
-  , Just profile <- Map.lookup key known >>= callableArity context =
+  , Just profile <- Map.lookup key known >>= callableArity context key =
       if invalid profile then retained (apply profile) else apply profile demanded target given
   | null alternatives, not (invalid fallback) = apply fallback demanded target given
   | otherwise = retained $ \current held arguments ->
@@ -123,12 +126,12 @@ selectCallableArity blame at state checkedDefault checkedLoans target inputs res
   known = Map.filter ((== coreExpressionType target) . callableTemplateType)
     (Map.union (contextObservedCallables context) (contextKnownCallables context))
   fallback = CallableArity (replicate (length inputs - fromEnum checkedDefault) "argument")
-    checkedDefault (fromMaybe [] checkedLoans)
+    checkedDefault (fromMaybe [] checkedLoans) Nothing
   invalid CallableArity{arityParameters, arityDefaulted} =
     supplied > length arityParameters || not arityDefaulted && supplied < length arityParameters
   alternatives =
     [(key, profile) | (key, template) <- Map.toAscList known
-    , Just profile <- [callableArity context template]
+    , Just profile <- [callableArity context key template]
     , arityDefaulted profile /= checkedDefault || invalid profile
         || maybe False (/= arityLoans profile) checkedLoans]
   couldHaveCount = case reverse inputs of
@@ -136,7 +139,9 @@ selectCallableArity blame at state checkedDefault checkedLoans target inputs res
     _ -> False
   demanded = state{lowerContext = context{contextNeedsCallableReplay =
     contextNeedsCallableReplay context || isJust checkedLoans || checkedDefault || couldHaveCount || invalid fallback}}
-  apply CallableArity{arityParameters, arityDefaulted, arityLoans} current held arguments
+  apply profile@CallableArity{arityParameters, arityDefaulted, arityLoans, arityBuiltin} current held arguments
+    | invalid profile, Just (kind, member) <- arityBuiltin =
+        failed current (builtinArityFailure blame at kind member (length arityParameters))
     | supplied > length arityParameters = failed current (tooManyArguments blame at)
     | not arityDefaulted, name : _ <- drop supplied arityParameters = failed current (missingArgument blame at name)
     | otherwise = invoke current arityDefaulted arityLoans held arguments
@@ -151,12 +156,12 @@ selectCallableArity blame at state checkedDefault checkedLoans target inputs res
           held : arguments -> fmap (fmap reblock) (select ready held arguments)
           [] -> refused ready
 
-callableArity :: LowerContext -> CallableTemplate -> Maybe CallableArity
-callableArity context template = case callableTemplateSource template of
+callableArity :: LowerContext -> Text -> CallableTemplate -> Maybe CallableArity
+callableArity context identity template = case callableTemplateSource template of
   NamedCallable (_, declaration) signature _ ->
-    Just (CallableArity (names (locatedValue declaration)) (takesSuppliedCount signature) (signatureLoaned signature))
+    Just (CallableArity (names (locatedValue declaration)) (takesSuppliedCount signature) (signatureLoaned signature) Nothing)
   LiftedCallable types _ _ at function _ _ _ ->
-    Just (CallableArity (names function) False (maybe [] loanedInputs (typeFactAt types at)))
+    Just (CallableArity (names function) False (maybe [] loanedInputs (typeFactAt types at)) Nothing)
   MethodCallable _ _ _ _ member bound (CoreFunctionType arguments _) fact@(FunctionTypeRequiring _ written required _) ->
     let receiver = bound <|> case arguments of
           self : _ -> Just self
@@ -169,7 +174,11 @@ callableArity context template = case callableTemplateSource template of
           found <- Map.lookup key (contextInstances context)
           pure (drop (fromEnum (isJust bound)) (names (locatedValue (instanceFunction found))))
         parameters = take (length written) (maybe [] id declared <> repeat "argument")
-     in Just (CallableArity parameters (requiredCount required < length written) (loanedInputs fact))
+        intrinsic = case bound of
+          Just kind | isNothing provider
+                    , builtinMember kind plain || Text.isPrefixOf textMethodPrefix identity -> Just (kind, plain)
+          _ -> Nothing
+     in Just (CallableArity parameters (requiredCount required < length written) (loanedInputs fact) intrinsic)
   _ -> Nothing
  where
   names = map (locatedValue . parameterName . locatedValue) . functionParameters

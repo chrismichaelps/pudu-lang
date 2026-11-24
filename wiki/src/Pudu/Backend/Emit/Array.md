@@ -19,6 +19,8 @@ box), and copies it otherwise.
   and `remove` out of range answer the array unchanged, `indexOf` answers -1.
 - Ordering is `compareLists`: the first differing item decides, then the
   length. Equality is the members' own.
+- Drop the initialized elements before using the runtime storage release
+  helper for either inline or separate item buffers.
 
 ## Referenced by
 

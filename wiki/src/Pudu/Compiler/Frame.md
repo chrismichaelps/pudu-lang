@@ -18,6 +18,8 @@ module/function order and canonical parameter/result types. This partition does
 not wire the dispatcher or claim the frame-pressure regression is fixed.
 Before returning a function, check that its entry and every jump, branch and
 call continuation identify a closed block; unreachable labels need no block.
+Resolved Grill Log: verify every variant-switch target and its default with
+the same closed-block rule as a branch.
 
 ## Invariants and failures
 

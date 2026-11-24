@@ -8,6 +8,7 @@ data CoreKeyedMethodName
   | KeyedIsEmpty
   | KeyedContains
   | KeyedLookup
+  | KeyedLookupOrDefault
   | KeyedInsert
   {-| Insert whose key replaces the spelling of an equal held key. -}
   | KeyedPut

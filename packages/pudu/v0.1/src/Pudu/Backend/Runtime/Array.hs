@@ -11,33 +11,76 @@ arrayRuntimeParts :: [(Text, [Text])]
 arrayRuntimeParts =
   [ ("array",
       [ "struct pudu_items { size_t length; size_t capacity; pudu_cell cells[]; };"
-      , "static pudu_box *pudu_array_new(size_t capacity) {"
-      , "  pudu_box *box = pudu_box_new(1);"
+      , "enum { PUDU_INLINE_ARRAY_CELLS = 4 };"
+      , "static size_t pudu_array_inline_offset(void) {"
+      , "  size_t after_field = sizeof(pudu_box) + sizeof(pudu_cell);"
+      , "  size_t alignment = _Alignof(pudu_items);"
+      , "  return (after_field + alignment - 1) / alignment * alignment;"
+      , "}"
+      , "static inline pudu_items *pudu_array_inline_items(pudu_box *box) {"
+      , "  return (pudu_items *)(void *)((unsigned char *)box + pudu_array_inline_offset());"
+      , "}"
+      , "static inline void pudu_array_release_storage(pudu_box *box) {"
+      , "  pudu_items *items = box->fields[0].items;"
+      , "  if (items != pudu_array_inline_items(box)) free(items);"
+      , "  free(box);"
+      , "}"
+      , "static inline pudu_box *pudu_array_allocate(size_t capacity, int report) {"
+      , "  size_t storage = pudu_array_inline_offset();"
+      , "  int use_inline = capacity <= PUDU_INLINE_ARRAY_CELLS;"
+      , "  pudu_box *box;"
       , "  pudu_items *items;"
-      , "  if (capacity > (SIZE_MAX - sizeof(pudu_items)) / sizeof(pudu_cell)) pudu_memory_failure();"
-      , "  items = malloc(sizeof(pudu_items) + capacity * sizeof(pudu_cell));"
-      , "  if (items == NULL) pudu_memory_failure();"
+      , "  if (capacity > (SIZE_MAX - sizeof(pudu_items)) / sizeof(pudu_cell)) goto failed;"
+      , "  if (capacity == 0) capacity = PUDU_INLINE_ARRAY_CELLS;"
+      , "  if (use_inline) storage += sizeof(pudu_items) + capacity * sizeof(pudu_cell);"
+      , "  box = pudu_box_try_new((storage - sizeof(pudu_box) + sizeof(pudu_cell) - 1) / sizeof(pudu_cell));"
+      , "  if (box == NULL) goto failed;"
+      , "  if (use_inline) items = pudu_array_inline_items(box);"
+      , "  else {"
+      , "    items = malloc(sizeof(pudu_items) + capacity * sizeof(pudu_cell));"
+      , "    if (items == NULL) { free(box); goto failed; }"
+      , "  }"
       , "  items->length = 0;"
       , "  items->capacity = capacity;"
       , "  box->fields[0].items = items;"
       , "  return box;"
+      , "failed:"
+      , "  if (report) pudu_memory_failure();"
+      , "  return NULL;"
       , "}"
+      , "#define pudu_array_new(capacity) pudu_array_allocate((capacity), 1)"
+      , "#define pudu_array_try_new(capacity) pudu_array_allocate((capacity), 0)"
       , "#define pudu_array_length(box) ((box)->fields[0].items->length)"
       ])
-  , ("array_reserve",
+  , ("array_try_reserve",
       [ "/* Room for needed items; only for a box with one owner. Doubling keeps"
       , "   a run of pushes linear. */"
-      , "static void pudu_array_reserve(pudu_box *box, size_t needed) {"
+      , "static int pudu_array_try_reserve(pudu_box *box, size_t needed) {"
       , "  pudu_items *items = box->fields[0].items;"
       , "  size_t capacity;"
-      , "  if (needed <= items->capacity) return;"
+      , "  if (needed <= items->capacity) return 1;"
       , "  capacity = items->capacity < 4 ? 4 : items->capacity;"
       , "  while (capacity < needed) capacity = capacity > SIZE_MAX / 2 ? needed : capacity * 2;"
-      , "  if (capacity > (SIZE_MAX - sizeof(pudu_items)) / sizeof(pudu_cell)) pudu_memory_failure();"
-      , "  items = realloc(items, sizeof(pudu_items) + capacity * sizeof(pudu_cell));"
-      , "  if (items == NULL) pudu_memory_failure();"
+      , "  if (capacity > (SIZE_MAX - sizeof(pudu_items)) / sizeof(pudu_cell)) return 0;"
+      , "  size_t bytes = sizeof(pudu_items) + capacity * sizeof(pudu_cell);"
+      , "  if (items == pudu_array_inline_items(box)) {"
+      , "    pudu_items *grown = malloc(bytes);"
+      , "    if (grown == NULL) return 0;"
+      , "    grown->length = items->length;"
+      , "    memcpy(grown->cells, items->cells, items->length * sizeof(pudu_cell));"
+      , "    items = grown;"
+      , "  } else {"
+      , "    items = realloc(items, bytes);"
+      , "    if (items == NULL) return 0;"
+      , "  }"
       , "  items->capacity = capacity;"
       , "  box->fields[0].items = items;"
+      , "  return 1;"
+      , "}"
+      ])
+  , ("array_reserve",
+      [ "static void pudu_array_reserve(pudu_box *box, size_t needed) {"
+      , "  if (!pudu_array_try_reserve(box, needed)) pudu_memory_failure();"
       , "}"
       ])
   , ("array_offset",
@@ -106,7 +149,8 @@ arrayRuntimeParts =
 arrayRuntimeDependencies :: Text -> [Text]
 arrayRuntimeDependencies name = maybe [] id (lookup name
   [ ("array", ["memory_failure"])
-  , ("array_reserve", ["array", "memory_failure"])
+  , ("array_try_reserve", ["array"])
+  , ("array_reserve", ["array_try_reserve", "memory_failure"])
   , ("array_offset", ["array", "magnitude"])
   , ("array_clamp", ["array", "magnitude"])
   , ("array_size", ["array", "make"])

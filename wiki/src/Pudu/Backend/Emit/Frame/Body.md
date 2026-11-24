@@ -10,7 +10,8 @@ aliases: [Backend Frame Bodies]
 
 Export emitFrameBodies :: EmitState -> FrameModule -> Either FrameFault
 (EmitState, Set Text). Generate constant-arity C step functions, one per source
-function, using typed heap-frame slots and a program-counter switch in a loop.
+function, using typed heap-frame slots and jumps between local labels. A
+program-counter switch admits the entry and suspended continuations.
 Numeric function identities follow module order. A call snapshots argument cells
 into frame-owned scratch storage, saves the resume counter and returns a call
 step with callee, count, destination and original call site. No generated user
@@ -33,8 +34,8 @@ uses existing byte lengths and shared helpers. All fault cases return data.
 ### Direct bodies
 
 Every function still gets `pudu_body_<n>` for the function table. A direct function's code
-is emitted once as `static pudu_cell pudu_run_<n>(pudu_frame *frame)`; its block jumps assign
-a local program counter, so the C compiler turns them into direct branches. Its return yields
+is emitted once as `static pudu_cell pudu_run_<n>(pudu_frame *frame)` and
+starts at its entry label. Its return yields
 the retained result cell; its failure paths call the failure helper and then `abort()`. Its
 table body only forwards to `pudu_run_<n>` and returns the result as a return step.
 
@@ -55,7 +56,13 @@ Slots that own nothing are C locals named `pudu_s<n>` in a direct body, because 
 - **Q:** Leave recursive C calls in expression code? **A:** No; calls return steps.
 - **Q:** Put argument vectors on the C stack? **A:** No; frame-owned scratch holds them.
 - **Q:** Claim #499 fixed before dispatch integration? **A:** No; this independently testable generator leaves the allocation boundary open.
-- **Q:** Why a local program counter in direct bodies? **A:** Nothing suspends a direct body, so the counter never needs to outlive the call; keeping it local lets the compiler resolve constant jumps. _Rejected:_ storing it through the frame.
+- **Q:** Which edges need a program counter? **A:** Only a call that returns
+  to the dispatcher writes a resume counter. Local branches and direct-call
+  continuations jump within the body. Every emitted target must exist in the
+  same function, and an invalid incoming counter still returns an invalid step.
+- **Q:** Can one tag select among several arms? **A:** A variant switch
+  evaluates its retained subject tag once and jumps to the selected arm.
+  The default remains the match's next applicable arm or source diagnostic.
 - **Q:** Rewrite slot text instead of threading a locals mode through value emission? **A:** Every slot reference the emitters produce has the one form `frame->slots[<n>]`, so a rewrite over the lines a direct body added is exact and keeps value emission single. _Rejected:_ a second copy of value emission.
 - **Q:** Does a profiler label change the calls in the generated C? **A:** No. A label on the first declaration renames the symbol without touching any reference, so the indexed names stay in every call.
 

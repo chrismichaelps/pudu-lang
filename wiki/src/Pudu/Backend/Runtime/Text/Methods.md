@@ -38,6 +38,9 @@ targets.
   across a scalar boundary, so a byte match is a scalar match, as in Data.Text.
 - **Q:** Why do views retain instead of copy? **A:** drop/take must cost what
   they move, as the grammar page promises for text scans.
+- **Q:** Does an empty view retain its source? **A:** Empty text uses static
+  storage and has no owner to retain. Nonempty views continue to keep the
+  source storage alive.
 
 ## Referenced by
 

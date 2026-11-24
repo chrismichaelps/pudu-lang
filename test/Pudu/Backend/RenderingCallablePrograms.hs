@@ -29,6 +29,38 @@ renderingCallableSuccessPrograms =
         , "  print(show(choose(\"λ\".toBytes()).items().value))"
         , "  0", "}" ])
     , "receiver\nitems\n<fn value>\n", "")
+  , ("a field-checked read retains a held builtin method", program
+      (selectedReceiverTypes <> ["type Checked = { length: Int }"] <>
+        selectedIterable "Checked" "Checked{length: 1}" "Array[Int]" "[4, 7]" <>
+        [ "fn main() -> Int {"
+        , "  print(show(choose(\"λ\".toBytes()).items().length))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<array method length>\n", "")
+  , ("a stored held builtin uses its receiver and result carrier", heldBuiltinGetProgram
+      [ "  var receiver = choose(\"λ\".toBytes()).items()"
+      , "  let get = receiver.get"
+      , "  receiver = Checked{get: format}"
+      , "  print(show(get))"
+      , "  print(show(get({ print(\"position\")\n 1 })))" ]
+    , "receiver\nitems\n<array method get>\nposition\n7\n", "")
+  , ("a checked text method keeps the held range signature", program
+      (selectedReceiverTypes <> selectedIterable "Str" "\"hé\"" "Range[Int]" "1..4" <>
+        [ "fn main() -> Int {"
+        , "  let length = choose(\"λ\".toBytes()).items().length"
+        , "  print(show(length))"
+        , "  print(show(length()))"
+        , "  0", "}" ])
+    , "receiver\nitems\n<range method length>\n3\n", "")
+  , ("a held traversal uses the checked callback result and held element", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { map: fn(fn(Int) -> Str) -> Array[Str] }"
+        , "fn empty(render: fn(Int) -> Str) -> Array[Str] { [] }" ] <>
+        selectedIterable "Checked" "Checked{map: empty}" "Array[Int]" "[4, 7]" <>
+        [ "fn main() -> Int {"
+        , "  let mapping = choose(\"λ\".toBytes()).items().map"
+        , "  print(show(mapping(|n| display(n))))"
+        , "  0", "}" ])
+    , "receiver\nitems\n[\"4\", \"7\"]\n", "")
   , ("aggregate constructors retain concrete held values and written effects", program
       (selectedReceiverTypes <> selectedIterable "Array[Bool]" "[true]" "Str" "\"x\"" <>
         [ "type Holder = { flag: Bool, count: Int }"
@@ -882,6 +914,27 @@ renderingCallableRefusalPrograms =
       [ "type Other = Named{extra: Int} | Empty" ] "Other" "Named{extra: 7}")
   , ("a record read on a held tuple reports its receiver kind", heldFieldProgram
       [] "(Int, Int)" "(3, 4)")
+  , ("a selected builtin failure blames the saved call", heldBuiltinGetProgram
+      [ "  let get = choose(\"λ\".toBytes()).items().get"
+      , "  print(show(get({ print(\"position\")\n 2 })))" ])
+  , ("a held array callable checks its own count after all arguments", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { get: fn(Int, Int) -> Int }"
+        , "fn combine(first: Int, second: Int) -> Int { first + second }" ] <>
+        selectedIterable "Checked" "Checked{get: combine}" "Array[Int]" "[4, 7]" <>
+        [ "fn main() -> Int {"
+        , "  let get = choose(\"λ\".toBytes()).items().get"
+        , "  print(show(get({ print(\"first\")\n 0 }, { print(\"second\")\n 1 })))"
+        , "  0", "}" ]))
+  , ("a held byte callable reports its missing argument after supplied effects", program
+      (selectedReceiverTypes <>
+        [ "type Checked = { slice: fn(Int) -> Int }"
+        , "fn supplied(value: Int) -> Int { value }" ] <>
+        selectedIterable "Checked" "Checked{slice: supplied}" "Bytes" "\"bytes\".toBytes()" <>
+        [ "fn main() -> Int {"
+        , "  let slice = choose(\"λ\".toBytes()).items().slice"
+        , "  print(show(slice({ print(\"start\")\n 1 })))"
+        , "  0", "}" ]))
   , ("a record update reports a held non-record after the written fields", program
       (selectedReceiverTypes <>
         [ "type Wanted = { first: Int, second: Int }" ] <>
@@ -1275,6 +1328,14 @@ heldFieldProgram declarations held heldBody = program
     [ "fn main() -> Int {"
     , "  print(show(choose(\"λ\".toBytes()).items().value))"
     , "  0", "}" ])
+
+heldBuiltinGetProgram :: [Text] -> Text
+heldBuiltinGetProgram statements = program
+  (selectedReceiverTypes <>
+    [ "type Checked = { get: fn(Int) -> Str }"
+    , "fn format(value: Int) -> Str { display(value) }" ] <>
+    selectedIterable "Checked" "Checked{get: format}" "Array[Int]" "[4, 7]" <>
+    ["fn main() -> Int {"] <> statements <> ["  0", "}"])
 
 selectedByteConversion :: [Text]
 selectedByteConversion =

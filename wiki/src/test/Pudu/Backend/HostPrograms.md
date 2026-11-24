@@ -27,6 +27,10 @@ three on glibc) reaches a written expectation only through a relation, and
 hostLibraryPrograms prints such kernels in full with the interpreter's
 output on the same machine as the only expectation.
 
+Resolved Grill Log: use an odd number of lanes and non-finite operands in
+each zip operation, so a vectorized implementation must also preserve the
+scalar tail, signed zero and unordered comparisons.
+
 ## Mutex close (#935)
 
 The mutex program checks immediate retirement, self-close, repeated close and

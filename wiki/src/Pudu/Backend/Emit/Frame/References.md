@@ -12,6 +12,9 @@ in [[Core Frame IR]]. [[Backend Frame Slots]] uses the same traversal
 to collect references and rewrite them. Preserve constructors, spans,
 metadata and reference order.
 
+Resolved Grill Log: a variant switch rewrites only its subject slot. Tags
+and labels are independent of physical slot allocation.
+
 ## Resolved Grill Log
 
 - **Q:** Use a catch-all for standalone value shapes? **A:** Cover every

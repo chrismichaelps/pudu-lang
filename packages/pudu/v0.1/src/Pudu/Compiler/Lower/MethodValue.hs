@@ -4,7 +4,7 @@
     method on it through the same lowering a written call gets. -}
 module Pudu.Compiler.Lower.MethodValue
   ( lowerMethodValue, lowerTraitMethodValue, lowerDynamicTextCall, registerMethodValue
-  , boundMemberFact, declaredMemberType, lowerHeldDeclaredMember ) where
+  , boundMemberFact, declaredMemberType, lowerHeldMethodValue ) where
 
 import Control.Applicative ((<|>))
 import qualified Data.Set as Set
@@ -13,6 +13,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Compiler.Lower.Arguments (builtinMember)
 import Pudu.Compiler.Lower.State
   ( CallableSource (..), CallableTemplate (..), Instance (..), LowerContext (..), LowerState (..), MutableSite (MutableParameterSite, MutableReceiverSite)
   , bindLocal, bindMutable, halt, intType, lookupLocal, refuse, refused, startFunction )
@@ -25,14 +26,19 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Types (formedCoreTypeIn, isDynamic, loanedInputs, ownerKeyOf, recordFields, selectedMember, sumVariants, typeFactAt, typeForSpan, unformed, withFacts)
 import Pudu.Core
 import Pudu.Core.Closure (textMethodPrefix)
-import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Pudu.Source (Span (..), offsetFromInt, zeroOffset)
 import Pudu.Type.Check.Receiver (specializeBareSelf)
+import Pudu.Type.Check.Rule (memberType)
+import Pudu.Type.Env (evalChecker)
 import Pudu.Type.Substitute (substituteRigid)
-import Pudu.Type.Value (Required (Required), Scheme (schemeType), Type (FunctionTypeRequiring, FunctionTypeValue, NominalType, ReferenceTypeValue), requiredCount, stringType)
+import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Value
+  ( Required (Required), Scheme (schemeType), requiredCount, stringType
+  , Type (AppliedType, ErrorType, FunctionTypeRequiring, FunctionTypeValue, NominalType
+         , ReferenceTypeValue, RestrictedType, TupleTypeValue, VariableType) )
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
@@ -68,24 +74,52 @@ intrinsicTextFact :: CoreType -> Type
 intrinsicTextFact CoreBytesType = FunctionTypeValue False [] (NominalType "Option" [stringType])
 intrinsicTextFact _ = FunctionTypeValue False [] stringType
 
-lowerHeldDeclaredMember :: LowerExpression -> LowerState -> Span -> Located Expression -> Text
+builtinMemberFact :: Span -> CoreType -> Text -> Maybe Type -> Maybe Type
+builtinMemberFact at actual plain expected = evalChecker $ do
+  signature <- memberType at (unformed actual) plain
+  lowered <- case (plain, signature, expected) of
+    ("map", FunctionTypeRequiring _ _ _ (NominalType "Array" [open]),
+      Just (FunctionTypeRequiring _ (FunctionTypeRequiring _ _ _ result : _) _ _)) | settled result ->
+        unify at open result >> zonk signature
+    ("reduce", FunctionTypeRequiring _ _ _ open,
+      Just (FunctionTypeRequiring _ [_, accumulator] _ _)) | settled accumulator ->
+        unify at open accumulator >> zonk signature
+    _ -> pure signature
+  pure (if settled lowered then Just lowered else Nothing)
+ where
+  settled value = case value of
+    VariableType{} -> False
+    ErrorType -> False
+    NominalType _ arguments -> all settled arguments
+    TupleTypeValue members -> all settled members
+    FunctionTypeRequiring _ inputs _ output -> all settled (output : inputs)
+    ReferenceTypeValue _ target -> settled target
+    RestrictedType _ target -> settled target
+    AppliedType target arguments -> all settled (target : arguments)
+    _ -> True
+
+lowerHeldMethodValue :: LowerExpression -> LowerState -> Span -> Located Expression -> Text
   -> CoreExpression -> Maybe Lowered
-lowerHeldDeclaredMember lower state at receiver member value = do
-  let context = lowerContext state
-      actual = coreExpressionType value
-      (provider, plain) = selectedMember member
-      builtin = isNothing provider && maybe False (elem plain . builtinMethodNamesFor) (ownerKeyOf actual)
-      declared = declaredMemberType context actual member >>= boundMemberFact actual
-  (fact, universal) <- case declared of
-    Just found | not builtin -> Just (found, False)
-    _ | plain == "toText" ->
-          Just (intrinsicTextFact actual, actual `notElem` [CoreCharType, CoreBytesType])
-      | otherwise -> Nothing
-  kind <- formedCoreTypeIn (contextTypes context) fact
-  let key = (if universal then textMethodPrefix else "$method:") <> member
-        <> ":" <> Text.pack (show actual) <> ":" <> Text.pack (show kind)
-      (ready, registered) = registerMethodValue lower state at receiver member key (Just actual) kind fact
-  pure (ready, (\exact -> (CoreExpression at exact (CoreClosure key [value]), exact)) <$> registered)
+lowerHeldMethodValue lower state at receiver member value
+  | isNothing provider, builtinMember actual plain =
+      Just (maybe unsettled (`bind` False) (builtinMemberFact at actual plain (typeFactAt types at)))
+  | Just declared <- declaredMemberType context actual member >>= boundMemberFact actual =
+      Just (bind declared False)
+  | isNothing provider, plain == "toText" = Just (bind (intrinsicTextFact actual) True)
+  | otherwise = Nothing
+ where
+  context = lowerContext state
+  types = contextTypes context
+  actual = coreExpressionType value
+  (provider, plain) = selectedMember member
+  unsettled = halt at ("the selected method value '" <> plain <> "' without a settled native signature") state
+  bind fact universal = case formedCoreTypeIn types fact of
+    Nothing -> unsettled
+    Just kind ->
+      let key = (if universal then textMethodPrefix else "$method:") <> member
+            <> ":" <> Text.pack (show actual) <> ":" <> Text.pack (show kind)
+          (ready, registered) = registerMethodValue lower state at receiver member key (Just actual) kind fact
+       in (ready, (\exact -> (CoreExpression at exact (CoreClosure key [value]), exact)) <$> registered)
 
 formedInputCount :: Type -> Int
 formedInputCount (FunctionTypeRequiring _ inputs required _) =
@@ -231,9 +265,10 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
     | unformed actual == unformed receiverType = bind kind fact ordinaryText
     | Just field <- recordFields currentTypes actual >>= lookup plain =
         (current, Just (CoreExpression at field (CoreField plain core), field))
-    | plain == "toText", actual `elem` [CoreCharType, CoreBytesType] =
-        bindText
-    | intrinsic = bind kind fact False
+    | isNothing provider, builtinMember actual plain =
+        case builtinMemberFact at actual plain (Just fact) >>= \selected -> (,) selected <$> formedCoreTypeIn currentTypes selected of
+          Just (selectedFact, selectedKind) -> bind selectedKind selectedFact False
+          Nothing -> halt at ("the selected method value '" <> plain <> "' without a settled native signature") current
     | Just scheme <- declaredMemberType context actual member =
         case boundMemberFact actual scheme >>= \selected -> (,) selected <$> formedCoreTypeIn currentTypes selected of
           Just (selectedFact, selectedKind) -> bind selectedKind selectedFact False
@@ -244,8 +279,6 @@ lowerMethodValue lower state at receiver member = case (receiverFact, typeForSpa
     context = lowerContext current
     currentTypes = contextTypes context
     actual = coreExpressionType core
-    intrinsic = isNothing provider && plain /= "toText"
-      && maybe False (elem plain . builtinMethodNamesFor) (ownerKeyOf actual)
     ordinaryText = plain == "toText" && actual `notElem` [CoreCharType, CoreBytesType]
       && isNothing (declaredMemberType context actual member)
     bindText =

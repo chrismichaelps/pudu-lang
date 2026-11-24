@@ -86,3 +86,7 @@ Resolved Grill Log. A member read selects the held layout and reads
 its field, including fields of a named sum variant. A held field
 takes priority over a declared method. Preserve the actual result
 layout and the receiver's missing-member diagnostic.
+
+Resolved Grill Log. When the held receiver has a builtin member instead
+of a field, use [[Compiler Lower Method Value]] to form the closure from
+the held receiver's signature and layout.

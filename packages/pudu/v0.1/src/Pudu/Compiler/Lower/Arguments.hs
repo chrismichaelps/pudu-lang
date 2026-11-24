@@ -1,6 +1,7 @@
 {-| @Compiler.Lower.Arguments — slot selection after operand evaluation. -}
 module Pudu.Compiler.Lower.Arguments
   ( ArgumentBlame (..), methodArgumentBlame, argumentFailure, argumentFailureWith
+  , builtinMember, builtinArityFailure
   , ArgumentSlot (..), positionSlot, collectArguments, callWithRuntimeArguments, stopped, stops
   , exactPosition, clampedPosition, wrappedPosition, integerComparison
   ) where
@@ -10,8 +11,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
 import Pudu.Compiler.Lower.State (LowerState (..), bindLocal, intType, refused)
+import Pudu.Compiler.Lower.Types (ownerKeyOf)
 import Pudu.Core
 import Pudu.Core.Closure (textMethodPrefix)
+import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax (Expression, Located)
 import Pudu.IntegerLiteral (IntegerKind (..), integerKindBounds)
 import Pudu.Source (Span)
@@ -41,6 +44,24 @@ argumentFailureWith :: ArgumentBlame -> Span -> Text -> Maybe Text -> CoreExpres
 argumentFailureWith blame at code help message = CoreExpression at CoreNeverType $ case blame of
   AtInvocation -> CoreFailText code help message Nothing
   AtCaller -> CoreFailCaller code help message
+
+builtinMember :: CoreType -> Text -> Bool
+builtinMember actual plain =
+  (plain /= "toText" || actual `elem` [CoreCharType, CoreBytesType])
+    && maybe False (elem plain . builtinMethodNamesFor) (ownerKeyOf actual)
+
+builtinArityFailure :: ArgumentBlame -> Span -> CoreType -> Text -> Int -> CoreExpression
+builtinArityFailure blame at kind name count
+  | name == "toText", kind `notElem` [CoreCharType, CoreBytesType] = failure "E7012" "display expects one value"
+  | otherwise = case kind of
+      CoreArrayType{} -> argumentFailureWith blame at "E7003" (Just "check the method's argument count")
+        (CoreExpression at CoreTextType (CoreTextLiteral (name <> " expects " <> Text.pack (show count) <> " argument(s)")))
+      CoreBytesType -> failure "E7003" ("wrong arguments for byte method " <> name)
+      CoreStoreType{} -> failure "E7003" ("wrong arguments for store method " <> name)
+      CoreCharType -> failure "E7012" "wrong arguments for a character method"
+      _ -> failure "E7012" ("wrong arguments for " <> name)
+ where
+  failure = argumentFailure blame at
 
 collectArguments :: (LowerState -> Located Expression -> Lowered) -> LowerState -> [Located Expression]
   -> (LowerState, Maybe [CoreExpression])

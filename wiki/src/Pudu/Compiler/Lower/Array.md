@@ -38,12 +38,19 @@ observe the cleared binding nor transfer before the assignment completes.
 
 ## Resolved Grill Log
 
+Array arity failures share the diagnostic used for a retained array method
+in [[Compiler Lower Arguments]].
+
 - **Q:** Why loops rather than a runtime `map`? **A:** A runtime helper would
   have to call back into the frame engine from C. As a loop, the closure call
   is an ordinary call through a value with depth checks and diagnostics.
 - **Q:** Can taking clear a binding that an argument observes? **A:** No.
-  Only scalar literals and reads of a different local qualify. Every other
-  argument keeps the shared receiver snapshot.
+  Scalar literals and reads of a different local qualify. A compound
+  operand qualifies only when its operations are total on the represented
+  scalar inputs and each of its operands qualifies. Integer remainder needs
+  a nonzero in-range literal divisor. Calls, receiver reads, assignments,
+  transfers, and operations that can report a diagnostic retain the receiver
+  snapshot. The runtime still checks for aliases before updating the buffer.
 - Index failures report at the index (`readIndex`), `get` failures at the call.
 
 ## Dependencies and consumers

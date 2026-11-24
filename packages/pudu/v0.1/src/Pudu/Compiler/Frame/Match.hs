@@ -3,7 +3,10 @@
     to the next arm on any failed test. -}
 module Pudu.Compiler.Frame.Match (MatchLowering (..), lowerMatch) where
 
+import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Data.Text (Text)
 import Pudu.Compiler.Frame.State
   ( Build, BuildState (..), Flow (..), begin, bindLocal, fault, finish, freshLabel
   , getState, moveValue, saveValue, storeValue )
@@ -11,7 +14,7 @@ import Pudu.Core
 import Pudu.Core.Frame
   ( FrameLabel, FrameSlot (..), FrameTerminator (..), FrameValue (..)
   , FrameValueShape (..), scalarOperator )
-import Pudu.IntegerLiteral (IntegerKind (..))
+import Pudu.IntegerLiteral (IntegerKind (..), integerKindWidth)
 import Pudu.Source (Span)
 
 {-| What the body lowering lends this module. -}
@@ -22,7 +25,64 @@ data MatchLowering = MatchLowering
   }
 
 lowerMatch :: MatchLowering -> Span -> CoreType -> CoreExpression -> [CoreArm] -> Build Flow
-lowerMatch lowering at kind subject arms = do
+lowerMatch lowering at kind subject arms
+  | CoreConstruct name written <- coreExpressionShape subject = do
+      layouts <- buildLayouts <$> getState
+      case Map.lookup (coreExpressionType subject) layouts of
+        Just (CoreSumLayout variants)
+          | Just variant <- lookup name [(coreVariantName item, item) | item <- variants]
+          , Just (bindings, body) <- scalarArm name (coreVariantFields variant) written arms
+          , coreExpressionType body `elem` [kind, CoreNeverType] ->
+              direct bindings body [] written
+        _ -> boxedMatch lowering at kind subject arms
+  | otherwise = boxedMatch lowering at kind subject arms
+ where
+  direct bindings body done remaining = case remaining of
+    [] -> do
+      mapM_ (\(label, local) -> case lookup label done of
+        Just payload -> bindLocal at local >>= \target -> moveValue at target (Just payload)
+        Nothing -> fault (Just at) "a variant binding without its constructed field") bindings
+      matchExpression lowering body
+    (label, operand) : rest -> do
+      flow <- matchScalar lowering operand
+      case flow of
+        Stopped -> pure Stopped
+        Completed Nothing -> fault (Just at) "a constructed scalar without a value"
+        Completed (Just payload) -> direct bindings body ((label, payload) : done) rest
+
+{-| Select a branch without boxing only when no reachable test can depend on
+    the payload and no arm needs the whole constructor value. -}
+scalarArm :: Text -> [(Text, CoreType)] -> [(Text, CoreExpression)] -> [CoreArm]
+  -> Maybe ([(Text, CoreLocal)], CoreExpression)
+scalarArm name fields written arms
+  | length fields == length written
+  , all (\(label, kind) -> scalar kind && lookup label operands == Just kind) fields = choose arms
+  | otherwise = Nothing
+ where
+  operands = [(label, coreExpressionType value) | (label, value) <- written]
+  scalar kind = case kind of
+    CoreIntegerType integer -> integer /= ExactIntKind && maybe False (<= 64) (integerKindWidth integer)
+    CoreFloatType{} -> True
+    CoreBoolType -> True
+    CoreCharType -> True
+    CoreUnitType -> True
+    _ -> False
+  choose [] = Nothing
+  choose (CoreArm _ pattern' guard' body : rest) = case pattern' of
+    CoreVariantPattern variant members
+      | variant /= name -> choose rest
+      | Nothing <- guard', length members == length fields -> do
+          bindings <- traverse binding (zip fields members)
+          pure (concat bindings, body)
+    CoreWildcardPattern | Nothing <- guard' -> Just ([], body)
+    _ -> Nothing
+  binding ((label, kind), pattern') = case pattern' of
+    CoreWildcardPattern -> Just []
+    CoreBindPattern local | coreLocalType local == kind -> Just [(label, local)]
+    _ -> Nothing
+
+boxedMatch :: MatchLowering -> Span -> CoreType -> CoreExpression -> [CoreArm] -> Build Flow
+boxedMatch lowering at kind subject arms = do
   held <- matchScalar lowering subject
   case held of
     Stopped -> pure Stopped
@@ -30,7 +90,12 @@ lowerMatch lowering at kind subject arms = do
     Completed (Just source) -> do
       join <- freshLabel
       destination <- matchResult lowering at kind
-      reached <- tryArms source join destination arms
+      layouts <- buildLayouts <$> getState
+      reached <- case Map.lookup (frameSlotType source) layouts of
+        Just (CoreSumLayout variants)
+          | Just (cases, fallback) <- variantCases variants arms ->
+              switchArms source join destination cases fallback
+        _ -> tryArms source join destination arms
       if reached then begin join >> pure (Completed destination) else pure Stopped
  where
   tryArms source join destination remaining = case remaining of
@@ -44,37 +109,75 @@ lowerMatch lowering at kind subject arms = do
         Nothing -> fault (Just at) "text concatenation without an operator"
       finish (FrameFailText at "E7011" (Just "add a case that covers this value") message Nothing)
       pure False
-    CoreArm armSpan pattern' guard' body : rest -> do
+    arm : rest -> do
       next <- freshLabel
-      matches lowering armSpan pattern' source next
-      guarded <- case guard' of
-        Nothing -> pure True
-        Just test -> do
-          verdict <- matchScalar lowering test
-          case verdict of
-            Stopped -> pure False
-            Completed Nothing -> fault (Just armSpan) "a guard without a value"
-            Completed (Just slot) -> do
-              taken <- freshLabel
-              finish (FrameBranch armSpan slot taken next)
-              begin taken
-              pure True
-      bodyReached <- if not guarded then pure False else do
-        flow <- matchExpression lowering body
-        case flow of
-          Stopped -> pure False
-          Completed payload -> do
-            maybe (pure ()) (\target -> moveValue armSpan target payload) destination
-            finish (FrameJump Nothing join)
-            pure True
+      bodyReached <- emitArm False source join destination next arm
       begin next
       laterReached <- tryArms source join destination rest
       pure (bodyReached || laterReached)
+  switchArms source join destination cases fallback = do
+    next <- freshLabel
+    labels <- traverse (const freshLabel) cases
+    finish (FrameSwitchVariant at source (zip (map fst cases) labels) next)
+    reached <- sequence
+      [begin label >> emitArm True source join destination next arm | (label, (_, arm)) <- zip labels cases]
+    begin next
+    defaultReached <- tryArms source join destination fallback
+    pure (or reached || defaultReached)
+  emitArm tagSelected source join destination next (CoreArm armSpan pattern' guard' body) = do
+    matchWithTag tagSelected lowering armSpan pattern' source next
+    guarded <- case guard' of
+      Nothing -> pure True
+      Just test -> do
+        verdict <- matchScalar lowering test
+        case verdict of
+          Stopped -> pure False
+          Completed Nothing -> fault (Just armSpan) "a guard without a value"
+          Completed (Just slot) -> do
+            taken <- freshLabel
+            finish (FrameBranch armSpan slot taken next)
+            begin taken
+            pure True
+    if not guarded then pure False else do
+      flow <- matchExpression lowering body
+      case flow of
+        Stopped -> pure False
+        Completed payload -> do
+          maybe (pure ()) (\target -> moveValue armSpan target payload) destination
+          finish (FrameJump Nothing join)
+          pure True
+
+variantCases :: [CoreVariant] -> [CoreArm] -> Maybe ([(Int, CoreArm)], [CoreArm])
+variantCases variants arms = do
+  let (tagged, fallback) = span isTagged arms
+  cases <- traverse identify tagged
+  case fallback of
+    [] -> distinct cases fallback
+    [arm] | isCatchAll (coreArmPattern arm) -> distinct cases fallback
+    _ -> Nothing
+ where
+  indices = Map.fromList [(coreVariantName variant, index) | (index, variant) <- zip [0 ..] variants]
+  isTagged arm = case coreArmPattern arm of
+    CoreVariantPattern{} -> True
+    _ -> False
+  isCatchAll pattern' = case pattern' of
+    CoreWildcardPattern -> True
+    CoreBindPattern{} -> True
+    _ -> False
+  identify arm = case coreArmPattern arm of
+    CoreVariantPattern name _ -> fmap (\tag -> (tag, arm)) (Map.lookup name indices)
+    _ -> Nothing
+  distinct cases fallback
+    | length cases >= 2, Set.size (Set.fromList (map fst cases)) == length cases = Just (cases, fallback)
+    | otherwise = Nothing
 
 {-| Test one pattern against a slot, jumping to `failed` when it does not
     apply and binding its names when it does. -}
 matches :: MatchLowering -> Span -> CorePattern -> FrameSlot -> FrameLabel -> Build ()
-matches lowering at pattern' source failed = case pattern' of
+matches = matchWithTag False
+
+matchWithTag :: Bool -> MatchLowering -> Span -> CorePattern -> FrameSlot -> FrameLabel -> Build ()
+matchWithTag tagSelected lowering at pattern' source failed = case pattern' of
   CoreWildcardPattern -> pure ()
   CoreBindPattern local -> do
     target <- bound local
@@ -94,8 +197,9 @@ matches lowering at pattern' source failed = case pattern' of
     case Map.lookup (frameSlotType source) layouts of
       Just (CoreSumLayout variants)
         | Just (index, variant) <- lookup name [(coreVariantName v, (i, v)) | (i, v) <- zip [0 ..] variants] -> do
-            holds <- saveValue (FrameValue at CoreBoolType (FrameIsVariant index source))
-            branch holds
+            unless tagSelected $ do
+              holds <- saveValue (FrameValue at CoreBoolType (FrameIsVariant index source))
+              branch holds
             sequence_
               [ member (FramePayload position source) fieldKind inner
               | (position, ((_, fieldKind), inner)) <- zip [0 ..] (zip (coreVariantFields variant) members)

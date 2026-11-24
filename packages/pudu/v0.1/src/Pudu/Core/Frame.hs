@@ -66,6 +66,7 @@ data FrameInstruction
 data FrameTerminator
   = FrameJump !(Maybe Span) !FrameLabel
   | FrameBranch !Span !FrameSlot !FrameLabel !FrameLabel
+  | FrameSwitchVariant !Span !FrameSlot ![(Int, FrameLabel)] !FrameLabel
   | FrameCall !Span !Text ![FrameSlot] !(Maybe FrameSlot) !FrameLabel
   {-| A call through the closure in the first slot, which is also its first argument. -}
   | FrameCallValue !Span !FrameSlot ![FrameSlot] !(Maybe FrameSlot) !FrameLabel

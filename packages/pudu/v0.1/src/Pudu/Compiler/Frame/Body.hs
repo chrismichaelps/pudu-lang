@@ -269,12 +269,22 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
       Just slots -> case slots of
         target : rest -> value (FrameRangeMethod name target rest)
         [] -> fault (Just at) "a range operation without its receiver"
-  CoreIndex container index -> do
-    operands <- lowerOperands [container, index]
-    case operands of
-      Just [array, position] -> value (FrameIndex array position)
-      Just _ -> fault (Just at) "an index without its array"
-      Nothing -> pure Stopped
+  CoreIndex container index
+    | CoreArrayType{} <- coreExpressionType container
+    , CoreReadLocal local <- coreExpressionShape container
+    , simpleIndex index -> do
+        array <- readLocal at local
+        position <- lowerScalar index
+        case position of
+          Completed (Just slot) -> value (FrameIndex array slot)
+          Completed Nothing -> fault (Just at) "an array access without its index"
+          Stopped -> pure Stopped
+    | otherwise -> do
+        operands <- lowerOperands [container, index]
+        case operands of
+          Just [array, position] -> value (FrameIndex array position)
+          Just _ -> fault (Just at) "an index without its array"
+          Nothing -> pure Stopped
   CoreTakeLocal local -> do
     source <- readLocal at local
     target <- freshSlot at "$taken" (coreLocalType local)
@@ -331,6 +341,10 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         Stopped -> pure Stopped
         Completed (Just slot) -> value (FrameUnary operator slot)
         Completed Nothing -> fault (Just (coreExpressionSpan expression)) "a unary operand without a value"
+    simpleIndex operand = case (coreExpressionType operand, coreExpressionShape operand) of
+      (CoreIntegerType{}, CoreIntegerLiteral{}) -> True
+      (CoreIntegerType{}, CoreReadLocal{}) -> True
+      _ -> False
 
 recordLayout :: CoreType -> Build (Maybe [(Text, CoreType)])
 recordLayout kind = do

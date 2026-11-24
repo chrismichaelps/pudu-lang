@@ -8,7 +8,8 @@ aliases: [Native Arrays]
 
 `Array[T]` is a box whose single field points at a growable buffer of cells.
 The box is what slots hold and count; the buffer changes only while the box has
-one owner.
+one owner. Small buffers share the box allocation until they grow beyond its
+initial capacity. Larger buffers have separate storage.
 
 ## Contract
 
@@ -22,7 +23,7 @@ one owner.
   is linear there, and it must stay linear natively. `x = x.push(...)` takes `x`,
   and every store from a finished temporary moves instead of copying
   ([[Compiler Frame State]]). The buffer therefore keeps one owner and grows in
-  place. A million pushes run in about a third of a second.
+  place when the receiver is unique and the operands qualify for taking.
 - **Safety.** Every update checks the box's count. Anything that might still be
   observed is copied first.
 
@@ -41,7 +42,8 @@ checking left unsolved (#557) refuse too.
 
 ## Resolved Grill Log
 
-- A box around a separate buffer, so growing never moves what slots point at.
+- Small buffers grow out of their box into separate storage, so growth never
+  moves what slots point at.
 - Moves for dead temporaries rather than an ownership analysis: the store is
   the last use by construction, and binding a pattern from a match subject
   keeps copying because a failed guard reads the subject again.

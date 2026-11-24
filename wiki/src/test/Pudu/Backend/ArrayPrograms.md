@@ -24,6 +24,12 @@ callback.
 
 Resolved Grill Log (#828): Check same-binding reads, receiver snapshots across reassignment, and receiver-before-callback preparation.
 
+Resolved Grill Log: Use a compound scalar operand in the build loop and
+check a retained alias across compound updates. Use a zero divisor to
+exercise diagnostic parity when receiver taking is unavailable.
+Keep an owned element across a write to its source array, and use an
+index that reassigns the source to check the retained receiver snapshot.
+
 ## Join and unary failures (#956)
 
 Exercise direct and bound joins over empty typed arrays, and fail after both

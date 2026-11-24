@@ -144,6 +144,16 @@ Resolved Grill Log: a missing member fails at the member read. The
 checked signature describes the admitted owner and cannot determine
 the physical signature of a different declaration.
 
+## Held builtin method values
+
+Resolved Grill Log. A held builtin uses the checker's builtin signature
+for its own receiver. This runs after field selection and before declared
+method fallback where builtin lookup has priority. A selected traversal
+can use a checked callback result or accumulator fact to settle its open
+part, while the held element type supplies the receiver-dependent slots.
+An unsettled signature remains an emission refusal. Capture the receiver
+once and register the ordinary lifted call with the selected signature.
+
 [[Native Emission Coverage]] · [[Backend Rendering Callable Programs]]
 
 Resolved Grill Log: reuse [[Type Check Receiver]] for constructor-wide

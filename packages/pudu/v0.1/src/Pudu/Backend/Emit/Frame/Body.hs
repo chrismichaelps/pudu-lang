@@ -59,13 +59,14 @@ emitFrameBodies direct state source = do
 emitFunction :: Callees -> (EmitState, Set Text) -> (Int, FrameFunction)
   -> Either FrameFault (EmitState, Set Text)
 emitFunction callees (state, needs) (identity, function)
+  | not (targets `Set.isSubsetOf` defined) = Left (FrameFault Nothing "an unknown frame block target")
   | Set.member (frameFunctionName function) (calleeDirect callees) = do
       let header =
             [ "static pudu_cell pudu_run_" <> number <> "(pudu_frame *frame) {"
-            , "  size_t pudu_pc = frame->pc;" ]
+            , "  (void)frame;" ]
           before = length (emitOutput state)
-          opened = linesInto state ["  for (;;) {", "    switch (pudu_pc) {"]
-      (emitted, selected) <- foldM (emitBlock Running) (opened, needs) (frameFunctionBlocks function)
+          opened = line state ("  goto " <> localLabel entry <> ";")
+      (emitted, selected) <- foldM (emitBlock Running) (opened, needs) blocks
       -- Unowned slots live in C locals: nothing outside this body reads them,
       -- since unwinding releases only owned slots. Only the slots the body
       -- mentions are declared, and the rewrite touches only its own lines.
@@ -76,7 +77,7 @@ emitFunction callees (state, needs) (identity, function)
           after = emitted{emitOutput = reverse body <> drop fresh (emitOutput emitted)}
       -- The table keeps a body for calls through a value; it forwards here.
       pure (linesInto after
-        [ "    default: abort();", "    }", "  }", "}"
+        [ "}"
         , "static pudu_step pudu_body_" <> number <> "(pudu_frame *frame) {"
         , "  pudu_step pudu_done = {.kind = PUDU_RETURN};"
         , "  pudu_done.result = pudu_run_" <> number <> "(frame);"
@@ -85,12 +86,30 @@ emitFunction callees (state, needs) (identity, function)
   | otherwise = do
       let opened = linesInto state
             [ "static pudu_step pudu_body_" <> number <> "(pudu_frame *frame) {"
-            , "  for (;;) {", "    switch (frame->pc) {" ]
-      (after, selected) <- foldM (emitBlock Suspending) (opened, needs) (frameFunctionBlocks function)
-      pure (linesInto after
-        [ "    default: return (pudu_step){.kind = PUDU_INVALID};", "    }", "  }", "}" ], selected)
+            , "  switch (frame->pc) {" ]
+          resumed = linesInto opened
+            (["    case " <> labelText target <> ": goto " <> localLabel target <> ";" | target <- Set.toList resumes]
+             <> ["    default: return (pudu_step){.kind = PUDU_INVALID};", "  }"])
+      (after, selected) <- foldM (emitBlock Suspending) (resumed, needs) blocks
+      pure (line after "}", selected)
   where
     number = textOfInt identity
+    entry = frameFunctionEntry function
+    blocks = frameFunctionBlocks function
+    defined = Set.fromList (map frameBlockLabel blocks)
+    targets = Set.fromList (entry : concatMap (successors . frameBlockTerminator) blocks)
+    resumes = Set.fromList (entry : concatMap (suspends . frameBlockTerminator) blocks)
+    successors ending = case ending of
+      FrameJump _ target -> [target]
+      FrameBranch _ _ yes no -> [yes, no]
+      FrameSwitchVariant _ _ cases fallback -> fallback : map snd cases
+      FrameCall _ _ _ _ resume -> [resume]
+      FrameCallValue _ _ _ _ resume -> [resume]
+      _ -> []
+    suspends ending = case ending of
+      FrameCall _ name _ _ resume | Set.notMember name (calleeDirect callees) -> [resume]
+      FrameCallValue _ _ _ _ resume -> [resume]
+      _ -> []
     parameters = Set.fromList (map slotIndex (frameFunctionParameters function))
     locals = [slot | slot <- frameFunctionSlots function, not (ownedType (frameSlotType slot))]
     -- A parameter arrives in its frame slot; any other local starts zeroed.
@@ -102,9 +121,12 @@ emitFunction callees (state, needs) (identity, function)
     localize used text = foldl' (\current slot -> Text.replace (slotPlace slot) (localName slot) current) text used
     emitBlock mode current block = do
       let (before, selected) = current
-          opened = line before ("    case " <> labelText (frameBlockLabel block) <> ":")
+          target = frameBlockLabel block
+          labelPrefix = if Set.member target targets then localLabel target <> ": " else ""
+          opened = line before ("  " <> labelPrefix <> "{")
       afterInstructions <- foldM instruction (opened, selected) (frameBlockInstructions block)
-      terminator mode callees function afterInstructions (frameBlockTerminator block)
+      (closed, used) <- terminator mode callees function afterInstructions (frameBlockTerminator block)
+      pure (line closed "  }", used)
 
 instruction :: (EmitState, Set Text) -> FrameInstruction -> Either FrameFault (EmitState, Set Text)
 instruction (state, needs) operation = case operation of
@@ -155,10 +177,20 @@ instruction (state, needs) operation = case operation of
 terminator :: Mode -> Callees -> FrameFunction -> (EmitState, Set Text) -> FrameTerminator
   -> Either FrameFault (EmitState, Set Text)
 terminator mode callees function (state, needs) ending = case ending of
-  FrameJump _ target -> pure (jump state (labelText target), needs)
+  FrameJump _ target -> pure (jump state target, needs)
   FrameBranch _ slot yes no -> do
     predicate <- slotText slot
-    pure (jump state (predicate <> " ? " <> labelText yes <> " : " <> labelText no), needs)
+    pure (line state ("      if (" <> predicate <> ") goto " <> localLabel yes <> "; else goto " <> localLabel no <> ";"), needs)
+  FrameSwitchVariant at subject cases fallback
+    | not (isAggregate (frameSlotType subject)) -> Left (FrameFault (Just at) "a variant switch without an aggregate subject")
+    | Set.size (Set.fromList (map fst cases)) /= length cases || any ((< 0) . fst) cases ->
+        Left (FrameFault (Just at) "an invalid variant switch table")
+    | otherwise -> do
+        held <- slotText subject
+        pure (linesInto state
+          (["      switch (" <> held <> "->fields[0].scalar) {"]
+            <> ["        case " <> textOfInt tag <> ": goto " <> localLabel target <> ";" | (tag, target) <- cases]
+            <> ["        default: goto " <> localLabel fallback <> ";", "      }"]), needs)
   FrameCall at name arguments destination resume -> case (Map.lookup name (calleeIds callees), Map.lookup name (calleeFunctions callees)) of
     (Just callee, Just definition) | Set.member name (calleeDirect callees) -> do
       copies <- traverse copyArgument (zip [0 ..] arguments)
@@ -177,7 +209,7 @@ terminator mode callees function (state, needs) ending = case ending of
              , "        pudu_cell pudu_answer = pudu_direct_" <> textOfInt callee <> "(frame->arguments);" ]
              <> stored
              <> [ "      }", "      pudu_frame_depth -= 1;" ])
-      pure (jump call (labelText resume), Set.union needs (Set.fromList ["site", "colored", "fail"]))
+      pure (jump call resume, Set.union needs (Set.fromList ["site", "colored", "fail"]))
     (Just _, _) | Running <- mode -> Left (FrameFault (Just at) "a direct body calling a function on the heap path")
     (Nothing, _) -> Left (FrameFault (Just at) "an unknown generated frame callee")
     (Just callee, _) -> do
@@ -253,10 +285,7 @@ terminator mode callees function (state, needs) ending = case ending of
           , invalid ]
         , Set.union needs (Set.fromList ["site", "colored", "fail"]))
   where
-    jump current target = linesInto current [counter <> target <> ";", "      continue;"]
-    counter = case mode of
-      Suspending -> "      frame->pc = "
-      Running -> "      pudu_pc = "
+    jump current target = line current ("      goto " <> localLabel target <> ";")
     -- A failure helper does not return; a direct body has no step to report.
     invalid = case mode of
       Suspending -> "      return (pudu_step){.kind = PUDU_INVALID};"
@@ -272,6 +301,9 @@ slotIndex slot = case frameSlotId slot of FrameSlotId identity -> textOfInt iden
 
 labelText :: FrameLabel -> Text
 labelText (FrameLabel identity) = textOfInt identity
+
+localLabel :: FrameLabel -> Text
+localLabel target = "pudu_block_" <> labelText target
 
 linesInto :: EmitState -> [Text] -> EmitState
 linesInto = foldl' line

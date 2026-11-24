@@ -629,10 +629,38 @@ fields from a retained record or named payload. [[Compiler Lower
 Method Value]] handles declared method fallback, and [[Compiler
 Lower Dynamic]] supplies the receiver's diagnostic wording.
 
+## Native performance
+
+Architect → Backend Engineer. [[Compiler Lower Array]] and
+[[Compiler Frame Body]] own receiver reuse and indexed reads.
+[[Backend Runtime Array]] owns small array storage. [[Backend Frame Runtime]]
+owns bounded heap frame reuse, [[Backend Typed Integer Calls]] owns the
+typed floating path, and [[Native JSON Kernels]] owns partial parse cleanup.
+Backend Engineer → Test Engineer. [[Backend Array Programs]] and
+[[Native Frame Runtime Tests]] cover aliases, numerical results, failures,
+and allocation behavior.
+
+Architect → Backend Engineer. [[Backend Frame Program]] and
+[[Backend Frame Runtime]] own fixed startup storage. [[Native Text Runtime]]
+and [[Native Text Methods]] own short text and view lifetimes. [[Backend
+Typed Integer Calls]] owns borrowed products. [[Compiler Lower Multi Map]]
+and [[Backend Emit Keyed]] own single-search defaults.
+Backend Engineer → Test Engineer. [[Native Frame Runtime Tests]],
+[[Native Direct Call Tests]], and [[Backend Store Programs]] cover those
+paths with allocation and ownership regressions.
+
 ## Next action
 
-Derive a retained builtin method value from the held receiver when
-its member was checked as a different field or callable shape.
+Trace an open held `map` or `reduce` member from its capture into
+callable specialization when the checked member supplies no signature.
+
+Architect → Backend Engineer. [[Compiler Lower Method Value]] and
+[[Compiler Lower Record]] select the actual builtin member signature.
+[[Compiler Lower Arguments]] and [[Compiler Lower Default]] own selected
+arity diagnostics. Backend Engineer → Test Engineer. [[Backend Rendering
+Callable Programs]] covers capture, invocation, forwarding, and failure.
+
+Shared `MultiMap.add` path copies remain in [[Native Emission Performance]].
 
 ## Referenced by
 

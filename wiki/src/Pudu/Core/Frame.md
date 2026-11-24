@@ -52,6 +52,12 @@ Resolved Grill Log: `FrameClosure` and `FrameCapture` values, the
 `FrameCallValue` terminator (closure first, then arguments), and the module's
 closure information.
 
+## Variant dispatch
+
+Resolved Grill Log: `FrameSwitchVariant` carries one retained subject slot,
+distinct numeric variant tags with local targets, and a default target.
+The edge selects the tag and leaves payload checks to its target block.
+
 ## Arrays and moves (#556)
 
 Resolved Grill Log: `FrameArray`, `FrameArrayMethod`, `FrameIndex` and the

@@ -67,3 +67,7 @@ while each selected invocation uses only its own final positions.
 Resolved Grill Log: use the possible shape of an exclusive
 return tuple to schedule profile selection. The shape does not
 distinguish an ordinary tuple from a tuple carrying mutable finals.
+
+Resolved Grill Log: retain the builtin family and method name beside the
+selected callable's written count. A count mismatch evaluates every
+supplied operand before reporting the builtin's invocation diagnostic.

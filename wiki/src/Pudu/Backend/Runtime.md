@@ -381,3 +381,15 @@ programs gain host behavior and the thread hook.
 ## Derive notes (#959)
 
 `pudu_site` has a trailing field `notes`, the baked note lines of a span generated from a derive (see [[Backend Emit State]]). `pudu_render_report` prints it after the excerpt and before a dynamic note and the help line.
+
+## Bounded frame storage reuse (revision 24)
+
+Resolved Grill Log: [[Backend Frame Runtime]] may reuse released storage for
+small sequential calls. The runtime revision advances so reused artifacts
+pick up the generated allocator change.
+
+## Fixed startup frames and compact text paths (revision 25)
+
+Resolved Grill Log: generated entries can use proven fixed frame storage.
+Short decimal text and coalesced views keep their existing byte and
+ownership contracts. The runtime revision advances with the emission.

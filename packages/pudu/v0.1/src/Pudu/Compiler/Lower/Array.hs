@@ -10,9 +10,8 @@ import Data.List (mapAccumL)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Arguments
-  ( ArgumentSlot (..), argumentFailure, argumentFailureWith
+  ( ArgumentSlot (..), argumentFailure, builtinArityFailure
   , callWithRuntimeArguments, collectArguments, methodArgumentBlame, stopped, stops, wrappedPosition
   )
 import Pudu.Compiler.Lower.ArrayLoop (arrayMethodWith, joinsHeldText)
@@ -22,6 +21,7 @@ import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, typeFactAt, typeF
 import Pudu.Core
 import Pudu.Compiler.Lower.Dynamic (commonAggregateCarrier, projectRuntimeValue, runtimeCarriers, runtimeResultType, widen)
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
+import Pudu.IntegerLiteral (IntegerKind (ExactIntKind), integerKindFits, integerKindWidth)
 import Pudu.Source (Span)
 import Pudu.Type.Value (NominalId (..), Type (..))
 
@@ -129,8 +129,7 @@ lowerArrayMethod lower lowerCallback state at declaredElement receiver member ar
       first : rest -> wrappedPosition at first : rest
       [] -> []
     _ -> operands
-  wrongArity arity = argumentFailureWith blame at "E7003" (Just "check the method's argument count")
-    (CoreExpression at CoreTextType (CoreTextLiteral (member <> " expects " <> Text.pack (show (arity :: Int)) <> " argument(s)")))
+  wrongArity = builtinArityFailure blame at (coreExpressionType receiver) member
   methodFailure name expected supplied
     | expected /= supplied = wrongArity expected
     | name == ArrayConcatWith = argumentFailure blame at "E7001" "concat expects an array"
@@ -264,7 +263,28 @@ takeReceiver local expression = case coreExpressionShape expression of
     CoreTextLiteral{} -> True
     CoreBytesLiteral{} -> True
     CoreCharLiteral{} -> True
+    CoreNot value -> independent value
+    CoreComplement value -> fixedScalar value && independent value
+    CoreBinary operation left right ->
+      fixedScalar left && fixedScalar right && total operation right
+        && independent left && independent right
     _ -> False
+  fixedScalar operand = case coreExpressionType operand of
+    CoreBoolType -> True
+    CoreCharType -> True
+    CoreIntegerType kind -> kind /= ExactIntKind && maybe False (<= 64) (integerKindWidth kind)
+    _ -> False
+  total operation right = case operation of
+    CoreRemainder -> case coreExpressionShape right of
+      CoreIntegerLiteral kind divisor -> divisor /= 0 && integerKindFits kind divisor
+      _ -> False
+    _ -> operation `elem`
+      [ CoreBitAnd, CoreBitOr, CoreBitXor
+      , CoreWrapAdd, CoreWrapSubtract, CoreWrapMultiply
+      , CoreSaturateAdd, CoreSaturateSubtract, CoreSaturateMultiply
+      , CoreLess, CoreLessOrEqual, CoreGreater, CoreGreaterOrEqual, CoreEqual, CoreNotEqual
+      , CoreAnd, CoreOr
+      ]
 
 collect :: LowerExpression -> LowerState -> [Located Expression] -> (LowerState, Maybe [CoreExpression])
 collect lower = go []

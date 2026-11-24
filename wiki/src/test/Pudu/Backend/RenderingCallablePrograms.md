@@ -289,3 +289,10 @@ variants through a record-checked binder. Compare ordered output for
 different successful field carriers, guard execution only after match,
 and fallthrough. A nested sequence binding must also preserve the held
 sum diagnostic for a variant missing the field. [[Compiler Lower Match]]
+
+## Retained builtin members
+
+Resolved Grill Log. Render a field-checked member that holds a builtin,
+invoke a held builtin with a different result carrier, and keep the
+selected receiver through later assignment. Check absent members and
+caller-site diagnostics separately.

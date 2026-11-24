@@ -19,6 +19,11 @@ A failure on a started thread runs the cleanup hook before the long jump, so sta
 
 A started thread's failure ends that thread, not the program. Threads take turns through the run gate.
 
+The gate counts live worker threads from registration until successful or
+failed completion. Both exits retire the count before leaving the gate, so
+the main thread skips scheduler clock checks after the last worker exits
+when no external callback gate has been enabled.
+
 ## Mutex close (#935)
 
 Close retires an available mutex immediately. Closing an owned mutex stops

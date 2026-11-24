@@ -6,7 +6,7 @@ import Data.List (mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.MethodValue (lowerHeldDeclaredMember)
+import Pudu.Compiler.Lower.MethodValue (lowerHeldMethodValue)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Sum (constructVariant)
 import Pudu.Compiler.Lower.Types (LowerTypes, nativeValueType, recordFields, selectedMember, sumVariants, typeForSpan)
@@ -151,7 +151,7 @@ lowerField lower state at receiver member = case lower state receiver of
   plain = snd (selectedMember member)
   reading local = CoreExpression at (coreLocalType local) (CoreReadLocal local)
   fallback current value failure =
-    maybe (current, Just failure) (fmap (fmap fst)) (lowerHeldDeclaredMember lower current at receiver member value)
+    maybe (current, Just failure) (fmap (fmap fst)) (lowerHeldMethodValue lower current at receiver member value)
   variantMember held owner current variant
     | isDynamic (coreExpressionType held), [(_, payload)] <- members =
         let (bound, local) = bindLocal current "" payload
