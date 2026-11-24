@@ -4,6 +4,7 @@ module Pudu.Compiler.Lower.For (lowerFor) where
 
 import Data.List (mapAccumL)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Arguments (ArgumentBlame (AtInvocation), argumentFailureWith, collectArguments, exactPosition)
 import Pudu.Compiler.Lower.Control (droppedTail, popLoop, pushLoop)
@@ -233,27 +234,102 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
   -- `begin` runs once; each turn asks `advance` for the next state and item.
   walkSequence current core kind begin advance =
     let (withSequence, sequenceLocal) = hidden current kind
+        source = statement (CoreDeclare sequenceLocal core)
      in case callInstance withSequence at begin Nothing [reading sequenceLocal] of
           (afterBegin, Nothing) -> refused afterBegin
+          (afterBegin, Just (started, CoreNeverType)) ->
+            (afterBegin, Just (expression CoreNeverType (CoreBlockValue (CoreBlock [source] (Just started))), CoreNeverType))
           (afterBegin, Just (started, stateKind)) ->
-            let (withState, stateLocal) = hidden afterBegin stateKind
-             in case callInstance withState at advance Nothing [reading sequenceLocal, reading stateLocal] of
-                  (afterAdvance, Nothing) -> refused afterAdvance
-                  (afterAdvance, Just (stepped, CoreSumType "Option" [CoreTupleType [nextKind, itemKind]]))
-                    | nextKind == stateKind ->
-                        let (withNext, nextLocal) = hidden afterAdvance nextKind
-                            (withItem, itemLocal) = hidden withNext itemKind
-                            prefix = [statement (CoreDeclare sequenceLocal core), statement (CoreDeclare stateLocal started)]
-                            turn pushed identity = case element pushed itemLocal of
-                              (after, Nothing) -> (after, Nothing)
-                              (after, Just matched) ->
-                                let taken = expression CoreUnitType (CoreBlockValue (CoreBlock
-                                      [statement (CoreAssign stateLocal (reading nextLocal)), matched] Nothing))
-                                    finished = expression CoreNeverType (CoreBlockValue (CoreBlock [statement (CoreBreak identity Nothing)] Nothing))
-                                 in (after, Just
-                                      [ statement (CoreEvaluate (expression CoreUnitType (CoreMatch stepped
-                                          [ CoreArm at (CoreVariantPattern "Some" [CoreTuplePattern [CoreBindPattern nextLocal, CoreBindPattern itemLocal]]) Nothing taken
-                                          , CoreArm at (CoreVariantPattern "None" []) Nothing finished ]))) ])
-                         in looped withItem prefix turn
-                  (afterAdvance, Just (_, other)) -> halt at ("advance answering " <> coreTypeName other) afterAdvance
+            prepareSequence afterBegin source (reading sequenceLocal) advance started stateKind
+
+  prepareSequence current source receiver advance started stateKind =
+    let (withState, stateLocal) = hidden current stateKind
+        callStep prior held
+          | Just selected <- mapRuntimeChoice prior at CoreNeverType held
+              (\ready payload -> fmap (fmap fst) (callStep ready payload)) = selected
+          | otherwise = callInstance prior at advance Nothing [receiver, held]
+     in case callStep withState (reading stateLocal) of
+          (afterAdvance, Nothing) -> refused afterAdvance
+          (afterAdvance, Just (stepped, stepKind))
+            | let types = contextTypes (lowerContext afterAdvance)
+                  known = runtimeCarriers stateKind
+                  returned = nextStateCarriers types stepKind
+            , not (returned `Set.isSubsetOf` known) ->
+                prepareSequence (current{lowerContext = lowerContext afterAdvance}) source receiver advance started
+                  (runtimeResultType (coreExpressionType started) (known <> returned))
+            | otherwise ->
+                let types = contextTypes (lowerContext afterAdvance)
+                    (ready, seed) = projectRuntimeValue types afterAdvance stateKind started
+                    prefix = [source, statement (CoreDeclare stateLocal seed)]
+                    turn pushed identity =
+                      fmap (fmap (\value -> [statement (CoreEvaluate value)])) (decodeStep pushed identity stateLocal stepped)
+                 in if coreExpressionType seed == stateKind
+                      then looped ready prefix turn
+                      else halt at "a sequence with incompatible initial state layouts" ready
+
+  nextStateCarriers types stepKind = Set.unions
+    [ runtimeCarriers nextKind
+    | held <- Set.toList (runtimeCarriers stepKind)
+    , variant <- variantsFor types held "Some"
+    , [(_, payload)] <- [coreVariantFields variant]
+    , CoreTupleType [nextKind, _] <- Set.toList (runtimeCarriers payload)
+    ]
+
+  variantsFor types kind tag =
+    [ variant
+    | variant <- maybe [] id (sumVariants types kind)
+    , not (coreVariantRecord variant)
+    , coreVariantName variant == tag
+    ]
+
+  decodeStep current identity stateLocal value
+    | stops value = (current, Just value)
+    | Just selected <- mapRuntimeChoice current at CoreUnitType value
+        (\ready held -> decodeStep ready identity stateLocal held) = fmap (fmap fst) selected
+    | otherwise =
+        let kind = coreExpressionType value
+            types = contextTypes (lowerContext current)
+            (withResult, resultLocal) = hidden current kind
+            held = reading resultLocal
+            finish = expression CoreNeverType (CoreBlockValue (CoreBlock [statement (CoreBreak identity Nothing)] Nothing))
+            none =
+              [ CoreArm at (CoreVariantPattern "None" (map (const CoreWildcardPattern) (coreVariantFields variant))) Nothing finish
+              | variant <- variantsFor types kind "None"
+              ]
+            some = [payload | variant <- variantsFor types kind "Some", [(_, payload)] <- [coreVariantFields variant]]
+            malformed = CoreArm at CoreWildcardPattern Nothing (advanceFailure held)
+            select arms = expression CoreUnitType (CoreBlockValue (CoreBlock
+              [statement (CoreDeclare resultLocal value)] (Just (expression CoreUnitType (CoreMatch held (none <> arms <> [malformed]))))))
+         in case some of
+              payload : _ ->
+                let (withPair, pairLocal) = hidden withResult payload
+                    pattern' = CoreVariantPattern "Some" [CoreBindPattern pairLocal]
+                    (ready, answer) = decodePair withPair stateLocal held (reading pairLocal)
+                 in (ready, (\taken -> select [CoreArm at pattern' Nothing taken]) <$> answer)
+              [] | null none -> (current, Just (advanceFailure value))
+                 | otherwise -> (withResult, Just (select []))
+
+  decodePair current stateLocal result pair
+    | Just selected <- mapRuntimeChoice current at CoreUnitType pair
+        (\ready held -> decodePair ready stateLocal result held) = fmap (fmap fst) selected
+    | CoreTupleType [nextKind, itemKind] <- coreExpressionType pair =
+        let (withNext, nextLocal) = hidden current nextKind
+            (withItem, itemLocal) = hidden withNext itemKind
+            types = contextTypes (lowerContext withItem)
+            (projected, next) = projectRuntimeValue types withItem (coreLocalType stateLocal) (reading nextLocal)
+         in if coreExpressionType next /= coreLocalType stateLocal
+              then halt at "a sequence with incompatible next state layouts" projected
+              else case element projected itemLocal of
+                (ready, Nothing) -> refused ready
+                (ready, Just matched) ->
+                  let taken = expression CoreUnitType (CoreBlockValue (CoreBlock
+                        [statement (CoreAssign stateLocal next), matched] Nothing))
+                      pattern' = CoreTuplePattern [CoreBindPattern nextLocal, CoreBindPattern itemLocal]
+                   in (ready, Just (expression CoreUnitType (CoreMatch pair [CoreArm at pattern' Nothing taken])))
+    | otherwise = (current, Just (advanceFailure result))
+
+  advanceFailure held = argumentFailureWith AtInvocation at "E7001" Nothing
+    (binary CoreAdd CoreTextType
+      (expression CoreTextType (CoreTextLiteral "advance must answer Option[(State, Item)], not a "))
+      (expression CoreTextType (CoreRuntimeKind held)))
 

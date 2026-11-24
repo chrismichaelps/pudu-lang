@@ -27,3 +27,10 @@ scalar, a negative, an emoji and NUL (which `show` writes raw).
 ## Referenced by
 
 [[Backend Module Programs]] · [[Backend Text Leak Tests]]
+
+## Held sequence state and results
+
+Resolved Grill Log. Cover a changed state carrier passed to the next
+advance after a binder skip. Compare the complete runtime diagnostic
+for an advance result with a malformed payload, and preserve effects
+before a transfer from a sequence method. [[Compiler Lower For]]

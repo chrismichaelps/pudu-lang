@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-23 — Held sequence state and results (#956)
+
+- Preserve changes to cursor layout between calls and check the held
+  advance result before binding a loop item. [[Compiler Lower For]] ·
+  [[Backend For Programs]]
+
 ## 2026-11-23 — Native lowering compilation (#956)
 
 - Correct the held equality guard and disambiguate local names in

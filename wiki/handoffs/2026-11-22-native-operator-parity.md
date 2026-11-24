@@ -528,10 +528,17 @@ Backend Engineer. Restore compilation of the existing equality,
 destructuring and text-position paths in [[Compiler Lower Scalar]],
 [[Compiler Lower Tuple]] and [[Compiler Lower Text]].
 
+## Held sequence state and results
+
+Architect → Backend Engineer. [[Compiler Lower For]] discovers reachable
+cursor layouts and selects the retained step before binder execution.
+[[Backend For Programs]] covers a state transition across a binder skip,
+a malformed step, and a transfer.
+
 ## Next action
 
-Preserve the held state and result when a declared sequence's advance
-method returns a different native layout.
+Audit canonical owner checks on ordinary constructor and named-record
+patterns against held values from another declaration.
 
 ## Referenced by
 

@@ -117,3 +117,17 @@ Resolved Grill Log. The lowered value already carries the representation
 that the loop must read. Dispatch before building a cursor. A binder proved
 impossible by [[Compiler Lower Match]] skips its body and leaves the cursor
 advance intact. [[Backend Rendering Callable Programs]]
+
+## Held sequence state and results
+
+Settle the cursor from the initial state and every reachable next-state
+layout in the advance results. Select the current state before calling
+the advance body. Decode the returned variant and its pair independently
+of the signature's original layout. Publish the next state before
+testing the binder, including when the binder will skip the item.
+
+Resolved Grill Log. Carrier discovery grows the set of reachable state
+layouts and restarts lowering when a new one appears. A malformed step
+fails at the loop after that call's effects, using its held variant or
+value kind. A transfer from either method passes through the loop.
+[[Backend For Programs]]
