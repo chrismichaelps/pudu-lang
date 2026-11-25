@@ -20,7 +20,7 @@ export fn page(
       H.a().class("skip").href("#content").says("Skip to content"),
       masthead(path),
       H.main().id("content").class("shell").holds(content),
-      footer()
+      H.nothing().raw(FOOTER_MARKUP)
     ])
 }
 
@@ -161,6 +161,10 @@ fn navigationLink(target: Str, label: Str, current: Bool) -> H.Node {
   let linked = H.a().href(target).says(label)
   if current { linked.at("aria-current", "page") } else { linked }
 }
+
+/// The footer is the same on every page, so it is rendered once, while the
+/// site is compiled, and each page carries the finished markup.
+const FOOTER_MARKUP: Str = Html.render(&footer().html())
 
 fn footer() -> H.Node {
   H.footer().class("footer").holding([
