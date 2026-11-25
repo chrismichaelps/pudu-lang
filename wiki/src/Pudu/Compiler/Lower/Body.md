@@ -93,6 +93,10 @@ inference, semantic rechecking and C emission are outside this module.
 Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower Signature]], [[Frontend Syntax]],
 [[Pudu Core]], and [[Integer Literal]]. Consumed by [[Compiler Lower]].
 
+## Always-fitting conversions (#1004)
+
+- A call that resolves to `Std.Option.unwrapOr` first offers itself to `lowerFittingUnwrap`; only a call it declines goes through the ordinary function call path.
+
 ## Grill Log
 
 - **Q:** Where do `if let` and `while let` go? **A:** To [[Compiler Lower Match]]; an `if let` statement drops its value even with an `else`, as a match statement does (#540).

@@ -239,6 +239,24 @@ kernelLibraryPrograms =
         , "  0"
         , "}" ]
       , "0x0000000000f9ffffffffffffff\ntrue\ntrue\ntrue\nErr(\"the bytes end inside a node\")\nErr(\"1 bytes follow the root node\")\nErr(\"text that is not UTF-8\")\nErr(\"the bytes end inside a node\")\n" )
+  , ("always-fitting conversions widen directly, and unwrapOr over one keeps its order", program
+      [ "import Std.Option as Option"
+      , "import Std.Option {unwrapOr}"
+      , "fn noisy(label: Str, value: Int) -> Int {", "  print(label)", "  value", "}"
+      , "fn byte(value: Int) -> UInt8 { Option.unwrapOr(convertInteger[UInt8](value), 0u8) }"
+      , "fn main() -> Int {"
+      , "  let octets = bytesOf([0u8, 7u8, 255u8]).toArray()"
+      , "  var total = 0"
+      , "  for octet in octets { total = total + Option.unwrapOr(convertInteger[Int](octet), noisy(\"fallback\", 99)) }"
+      , "  print(display(total))"
+      , "  let wide: UInt64 = unwrapOr(convertInteger[UInt64](4294967295u32), 1u64)"
+      , "  let signed: Int64 = Option.unwrapOr(convertInteger[Int64](-128i8), 0i64)"
+      , "  let big: BigInt = Option.unwrapOr(convertInteger[BigInt](9223372036854775807), 0)"
+      , "  print(display(wide) + \" \" + display(signed) + \" \" + display(big))"
+      , "  print(show(convertInteger[Int16](200u8)) + \" \" + show(convertInteger[UInt8](-1i8)) + \" \" + show(convertInteger[Int8](200u8)))"
+      , "  print(display(byte(300)) + \" \" + display(byte(42)) + \" \" + display(Option.unwrapOr(convertInteger[UInt8](-5), 9u8)))"
+      , "  0", "}" ]
+    , "fallback\nfallback\nfallback\n262\n4294967295 -128 9223372036854775807\nSome(200) None None\n0 42 9\n")
   ]
 
 kernelRefusalPrograms :: [(String, Text)]
