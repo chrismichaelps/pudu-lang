@@ -350,7 +350,7 @@ fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
 }
 
 /// The punctuation a header name may hold beside letters and digits.
-const TOKEN_PUNCTUATION: Set[Str] = setOf(["!", "#", "$", "%", "&", "'", "*", "+", "-", ".", "^", "_", "`", "|", "~"])
+const TOKEN_PUNCTUATION: Set[Char] = setOf(['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'])
 
 /// Whether a name is a token: at least one character, each a letter, a digit,
 /// or one of the punctuation marks a name may hold.
@@ -359,7 +359,7 @@ fn isToken(name: Str) -> Bool {
   for character in name.chars() {
     let alphanumeric = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
       || (character >= '0' && character <= '9')
-    if !alphanumeric && !TOKEN_PUNCTUATION.contains(character.toText()) { return false }
+    if !alphanumeric && !TOKEN_PUNCTUATION.contains(character) { return false }
   }
   true
 }
