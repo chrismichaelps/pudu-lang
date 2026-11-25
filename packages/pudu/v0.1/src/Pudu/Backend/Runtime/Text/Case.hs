@@ -36,10 +36,22 @@ textCaseRuntimeParts =
       , "  }"
       , "  return NULL;"
       , "}"
-      , "static pudu_text pudu_text_case(pudu_text text, const pudu_case_row *rows, size_t count) {"
+      , "/* An all-ASCII text maps byte for byte through the ASCII table, and one"
+      , "   the mapping leaves unchanged is the same text; any other text maps"
+      , "   scalar by scalar through the case table. */"
+      , "static pudu_text pudu_text_case(pudu_text text, const unsigned char *ascii, const pudu_case_row *rows, size_t count) {"
       , "  unsigned char scratch[4], *bytes;"
       , "  size_t size = 0, offset = 0;"
+      , "  int changed = 0;"
       , "  pudu_text mapped;"
+      , "  while (offset < text.length && text.bytes[offset] < 0x80) { changed |= ascii[text.bytes[offset]] != text.bytes[offset]; ++offset; }"
+      , "  if (offset == text.length) {"
+      , "    if (!changed) return pudu_text_retain(text);"
+      , "    mapped = pudu_text_allocate(text.length, &bytes);"
+      , "    for (offset = 0; offset < text.length; ++offset) bytes[offset] = ascii[text.bytes[offset]];"
+      , "    return mapped;"
+      , "  }"
+      , "  offset = 0;"
       , "  while (offset < text.length) {"
       , "    size_t start = offset;"
       , "    const uint32_t *into = pudu_case_find(rows, count, pudu_text_decode(text.bytes, &offset));"
@@ -59,13 +71,13 @@ textCaseRuntimeParts =
       , "  return mapped;"
       , "}"
       ])
-  , ("text_to_upper", table "pudu_case_upper" upperRows
+  , ("text_to_upper", table "pudu_case_upper" upperRows <> asciiTable "pudu_ascii_upper" Text.toUpper
       <> [ "static pudu_text pudu_text_to_upper(pudu_text text) {"
-         , "  return pudu_text_case(text, pudu_case_upper, sizeof pudu_case_upper / sizeof pudu_case_upper[0]);"
+         , "  return pudu_text_case(text, pudu_ascii_upper, pudu_case_upper, sizeof pudu_case_upper / sizeof pudu_case_upper[0]);"
          , "}" ])
-  , ("text_to_lower", table "pudu_case_lower" lowerRows
+  , ("text_to_lower", table "pudu_case_lower" lowerRows <> asciiTable "pudu_ascii_lower" Text.toLower
       <> [ "static pudu_text pudu_text_to_lower(pudu_text text) {"
-         , "  return pudu_text_case(text, pudu_case_lower, sizeof pudu_case_lower / sizeof pudu_case_lower[0]);"
+         , "  return pudu_text_case(text, pudu_ascii_lower, pudu_case_lower, sizeof pudu_case_lower / sizeof pudu_case_lower[0]);"
          , "}" ])
   , ("text_trim",
       [ "/* Data.Char.isSpace over every scalar, as Text.strip uses it. */"
@@ -96,7 +108,7 @@ textCaseRuntimeParts =
 textCaseRuntimeDependencies :: Text -> [Text]
 textCaseRuntimeDependencies name = maybe [] id (lookup name
   [ ("text_encode", [])
-  , ("text_case_map", ["text_decode", "text_encode", "text_allocate"])
+  , ("text_case_map", ["text_decode", "text_encode", "text_allocate", "text_retain"])
   , ("text_to_upper", ["text_case_map"])
   , ("text_to_lower", ["text_case_map"])
   , ("text_trim", ["text_decode", "text_view"])
@@ -122,6 +134,19 @@ table name rows =
     <> ["};"]
  where
   row (scalar, into) = "{" <> Text.pack (show scalar) <> ", {" <> joined (map (Text.pack . show) (take caseWidth (into <> repeat 0))) <> "}}"
+
+{-| Each ASCII byte's image under the mapping. Every ASCII scalar maps to
+    exactly one ASCII scalar; a library where one did not would fail here at
+    build time instead of writing a wrong table. -}
+asciiTable :: Text -> (Text -> Text) -> [Text]
+asciiTable name convert =
+  ["static const unsigned char " <> name <> "[128] = {"]
+    <> [ "  " <> joined (map (Text.pack . show . image) chunk) <> "," | chunk <- chunksOf 16 [0 .. 127] ]
+    <> ["};"]
+ where
+  image code = case Text.unpack (convert (Text.singleton (chr code))) of
+    [single] | ord single < 128 -> ord single
+    _ -> error ("an ASCII scalar whose case image is not one ASCII scalar: " <> show code)
 
 {-| The longest expansion either table needs; rows are padded to it. -}
 caseWidth :: Int
