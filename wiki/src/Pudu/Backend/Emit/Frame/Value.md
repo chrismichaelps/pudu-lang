@@ -259,3 +259,9 @@ Resolved Grill Log: an identity guard from callable discovery
 can refer to a copy eliminated by later layout settlement. Such
 a guard is false because emitted values cannot hold that key.
 A closure construction still requires its emitted body.
+
+## Kept constants (#999)
+
+- `FrameConstantReady`, `FrameConstantRead` and `FrameConstantKeep` emit the ready check, the kept read and the keep store. Read and keep retain by the value's kind, so the cell keeps one reference for the whole run.
+
+Resolved Grill Log (#999): **Q:** Does a kept read transfer ownership? **A:** No; it retains, and any in-place update copies the kept value first, so the cell's reference is never consumed. _Rejected:_ moving the value out of the cell on read.

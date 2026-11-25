@@ -52,6 +52,7 @@ expression later current = case coreExpressionShape current of
   CoreTextLiteral{} -> (current, later)
   CoreBytesLiteral{} -> (current, later)
   CoreCharLiteral{} -> (current, later)
+  CoreConstant{} -> (current, later)
   CoreCall name arguments -> rebuilt (CoreCall name) (operands later arguments)
   CoreTuple items -> rebuilt CoreTuple (operands later items)
   CoreArray items -> rebuilt CoreArray (operands later items)

@@ -226,6 +226,28 @@ constantPrograms =
       , "  print(display(STEP(41)) + \" \" + display(TABLE[0](5)) + \" \" + display(TABLE[1](5)) + \" \" + display(STEP(STEP(0))))"
       , "  0", "}" ]
     , "42 10 4 2\n")
+  , ("a kept aggregate constant is the same value at every read, and updates copy it", program
+      [ "type Point = { x: Int, y: Int }"
+      , "const SQUARES: Array[Int] = [1, 4, 9]"
+      , "const NAMES: Map[Str, Int] = mapOf([(\"a\", 1), (\"b\", 2)])"
+      , "const MARKS: Set[Str] = setOf([\"!\", \"#\"])"
+      , "const ORIGIN: Point = Point{x: 1, y: 2}"
+      , "const PAIR: (Str, Array[Int]) = (\"p\", [7])"
+      , "fn grown(round: Int) -> Array[Int] { SQUARES.push(round) }"
+      , "fn main() -> Int {"
+      , "  var total = 0"
+      , "  for round in 0..3 {"
+      , "    var local = SQUARES"
+      , "    local = local.push(round)"
+      , "    let names = NAMES.insert(\"c\", round)"
+      , "    let marks = MARKS.insert(\"x\")"
+      , "    let moved = Point{x: ORIGIN.x + round, y: ORIGIN.y}"
+      , "    total = total + local.length() + names.size() + marks.size() + moved.x + grown(round).length()"
+      , "    print(show(local) + \" \" + show(SQUARES) + \" \" + show(names) + \" \" + show(NAMES) + \" \" + show(marks) + \" \" + show(MARKS) + \" \" + show(ORIGIN) + \" \" + show(PAIR))"
+      , "  }"
+      , "  print(display(total) + \" \" + display(MARKS.contains(\"#\")) + \" \" + display(MARKS.contains(\"x\")))"
+      , "  0", "}" ]
+    , "[1, 4, 9, 0] [1, 4, 9] {\"a\": 1, \"b\": 2, \"c\": 0} {\"a\": 1, \"b\": 2} #{\"!\", \"#\", \"x\"} #{\"!\", \"#\"} Point{x: 1, y: 2} (\"p\", [7])\n[1, 4, 9, 1] [1, 4, 9] {\"a\": 1, \"b\": 2, \"c\": 1} {\"a\": 1, \"b\": 2} #{\"!\", \"#\", \"x\"} #{\"!\", \"#\"} Point{x: 1, y: 2} (\"p\", [7])\n[1, 4, 9, 2] [1, 4, 9] {\"a\": 1, \"b\": 2, \"c\": 2} {\"a\": 1, \"b\": 2} #{\"!\", \"#\", \"x\"} #{\"!\", \"#\"} Point{x: 1, y: 2} (\"p\", [7])\n48 true false\n")
   , ("folded constants read inside interpolation holes", program
       [ "comptime fn powerOfTwo(n: Int) -> Int { if n == 0 { 1 } else { 2 * powerOfTwo(n - 1) } }"
       , "type Point = { x: Int, y: Int }"
