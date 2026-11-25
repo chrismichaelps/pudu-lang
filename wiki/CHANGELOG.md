@@ -8,6 +8,9 @@ tags: [changelog]
 ## 2026-11-25 — Borrowed local operands
 
 - Native operations that only read an operand read a local in its own slot instead of a retained copy. refs #1008
+## 2026-11-25 — Kept HTML fragments
+
+- `Std.Html.Memo` keeps rendered fragments by key in a shared cache, so page chrome that is the same on every request is built and rendered once; a page with a 24-link footer renders 9× faster natively. refs #1013
 
 ## 2026-11-25 — ASCII text case
 

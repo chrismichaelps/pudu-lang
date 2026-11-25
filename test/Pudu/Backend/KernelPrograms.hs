@@ -257,6 +257,26 @@ kernelLibraryPrograms =
       , "  print(display(byte(300)) + \" \" + display(byte(42)) + \" \" + display(Option.unwrapOr(convertInteger[UInt8](-5), 9u8)))"
       , "  0", "}" ]
     , "fallback\nfallback\nfallback\n262\n4294967295 -128 9223372036854775807\nSome(200) None None\n0 42 9\n")
+  , ("kept HTML fragments render once, match a direct render, and stop keeping when full", program
+      [ "import Std.Html as Html"
+      , "import Std.Html.Memo as Memo"
+      , "fn footer(label: Str) -> Html.Html {"
+      , "  print(\"built \" + label)"
+      , "  Html.element(\"footer\", &[(\"class\", \"site & co\")], &[Html.text(\"<\" + label + \">\")])"
+      , "}"
+      , "fn main() -> Int {"
+      , "  let memo = Memo.cache(2)"
+      , "  let direct = Html.render(&footer(\"a\"))"
+      , "  let first = Html.render(&Memo.fragment(&memo, \"a\", fn() -> Html.Html { footer(\"a\") }))"
+      , "  let second = Html.render(&Memo.fragment(&memo, \"a\", fn() -> Html.Html { footer(\"a\") }))"
+      , "  print(display(first == direct) + \" \" + display(second == direct) + \" \" + display(Memo.size(&memo)))"
+      , "  let b = Memo.kept(&memo, \"b\", fn() -> Str { \"bee\" })"
+      , "  let c = Memo.kept(&memo, \"c\", fn() -> Str { \"sea\" })"
+      , "  let c2 = Memo.kept(&memo, \"c\", fn() -> Str { \"sea again\" })"
+      , "  print(b + \" \" + c + \" \" + c2 + \" \" + display(Memo.size(&memo)))"
+      , "  print(Html.document(&Html.element(\"body\", &[], &[Memo.fragment(&memo, \"a\", fn() -> Html.Html { footer(\"never\") })])))"
+      , "  0", "}" ]
+    , "built a\nbuilt a\ntrue true 1\nbee sea sea again 2\n<!DOCTYPE html>\n<body><footer class=\"site &amp; co\">&lt;a&gt;</footer></body>\n")
   ]
 
 kernelRefusalPrograms :: [(String, Text)]

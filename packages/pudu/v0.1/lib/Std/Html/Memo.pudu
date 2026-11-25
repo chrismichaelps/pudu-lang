@@ -1,0 +1,55 @@
+module Std.Html.Memo
+
+import Std.Html as Html
+import Std.Sync as Sync
+
+/// Rendered fragments kept by key, so a fragment that is the same on every
+/// page — a header, a navigation bar, a footer — is built and rendered once.
+///
+/// Markup is immutable, so a fragment built from the same inputs renders to
+/// the same text every time; a key names those inputs. A view runs only when
+/// its key is not kept, so markup that depends on anything but its key needs
+/// that thing in the key.
+///
+/// A cache is a shared cell: create it once, at the start of a server, and
+/// hand it to every request and thread. It keeps at most `limit` fragments; a
+/// fragment rendered once it is full is used but not kept. Two threads that
+/// miss the same key at once both render it, and either one may be kept.
+export type Memo = { held: Sync.Cell[Map[Str, Str]], limit: Int }
+
+/// An empty cache that keeps at most `limit` fragments.
+export fn cache(limit: Int) -> Memo { Memo{held: Sync.cell(mapOf([])), limit: limit} }
+
+/// The text kept under `key`, rendered by `render` and kept the first time.
+export fn kept(memo: &Memo, key: Str, render: fn() -> Str) -> Str {
+  let held: Map[Str, Str] = match Sync.get(&memo.held) {
+    case Ok(found) => found
+    case Err(_) => mapOf([])
+  }
+  match held.get(key) {
+    case Some(markup) => markup
+    case None => {
+      let markup = render()
+      if held.size() < memo.limit {
+        match Sync.set(&memo.held, held.insert(key, markup)) {
+          case Ok(_) => ()
+          case Err(_) => ()
+        }
+      }
+      markup
+    }
+  }
+}
+
+/// The markup `view` builds, rendered once and kept under `key`.
+export fn fragment(memo: &Memo, key: Str, view: fn() -> Html.Html) -> Html.Html {
+  Html.trusted(kept(memo, key, fn() -> Str { Html.render(&view()) }))
+}
+
+/// How many fragments the cache keeps now.
+export fn size(memo: &Memo) -> Int {
+  match Sync.get(&memo.held) {
+    case Ok(found) => found.size()
+    case Err(_) => 0
+  }
+}

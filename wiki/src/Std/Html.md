@@ -173,3 +173,8 @@ Resolved Grill Log:
   and promises output and exact length, not identical chunk grouping.
 
 Resolved Grill Log: `render` and `document` call the `htmlRender` builtin, which renders natively in one pass; `renderChunks` keeps its pieces for the server rendering and build modules, and joining them gives the same text.
+
+## Related
+
+- [[Std Html Memo]] — rendered fragments kept by key in a shared cache, for chrome that is the same
+  on every page.
