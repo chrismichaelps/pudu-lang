@@ -342,3 +342,5 @@ Retain the derived selector and native class alias alongside the checked foreign
 ## Resolved Grill Log for Objective-C delegates
 
 `installDelegate` installs a delegate's members through `qualifyCallbackSignature` and `qualifiedGroupMembers`, the helpers group callbacks already use, so callback members get one qualification path.
+
+Resolved Grill Log: `htmlRender` is bound to [[Eval Html Render]].

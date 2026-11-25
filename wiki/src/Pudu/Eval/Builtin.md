@@ -252,3 +252,5 @@ shape/arity retains E7001/E7003 at the call span.
 Resolved Grill Log: scalar boundaries constrain text slices, not byte reads;
 return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
+
+Resolved Grill Log: `htmlRender` dispatches to [[Eval Html Render]] and is pure, so constants fold through it.

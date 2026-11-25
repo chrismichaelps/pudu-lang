@@ -27,3 +27,5 @@ unused static function is written.
 the codecs and every earlier family. Resolved Grill Log: each family
 follows its prerequisites. [[Native Binary Kernels]] follow the host families
 because the binary reader uses their result channel.
+
+Resolved Grill Log: the HTML family follows the text families it calls. [[Native HTML Kernel]]

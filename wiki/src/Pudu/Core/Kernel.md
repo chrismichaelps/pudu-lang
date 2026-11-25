@@ -34,3 +34,5 @@ failed, nothing there or ended), and `KernelHostMessage` reads its one-shot
 failure text. Resolved Grill Log: one name per runtime function keeps emission
 total; the host's state is asked separately from its answer so no answer
 carrier grows a status field.
+
+Resolved Grill Log: `KernelHtmlRender` takes the `Std.Html.Html` variants' indexes: Element, Text, Fragment, Trusted.

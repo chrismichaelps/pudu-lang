@@ -39,3 +39,5 @@ that operand's type; one that answers held data (`cell_get`, `channel_pull`,
 `channel_pull_within`, `scope_stashed`) names the drop helper of its value.
 Resolved Grill Log: the box is released as its own type through the standard
 drop helper, so the host never guesses a carrier.
+
+Resolved Grill Log: `KernelHtmlRender` calls `pudu_html_render` from [[Native HTML Kernel]].
