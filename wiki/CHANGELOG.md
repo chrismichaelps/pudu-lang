@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Kept HTML fragments
+
+- `Std.Html.Memo` keeps rendered fragments by key in a shared cache, so page chrome that is the same on every request is built and rendered once; a page with a 24-link footer renders 9× faster natively. refs #1013
+
 ## 2026-11-25 — ASCII text case
 
 - Native `toUpper` / `toLower` map ASCII text through a 128-entry table and return unchanged ASCII text without allocating; a loop of ASCII case calls went from 1.58 s to 0.19 s. refs #1001

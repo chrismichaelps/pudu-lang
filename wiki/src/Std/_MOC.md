@@ -97,6 +97,7 @@ tags: [moc, module, stdlib]
 - [[Std App]] — the program as a value: what starts it, and what stops it.
 - [[Std Html]] — a page as a value, with typed eager or deferred conditional construction.
 - [[Std Html Bounded]] — iterative HTML rendering that stops at an exact UTF-8 output budget.
+- [[Std Html Memo]] — rendered fragments kept by key in a shared cache, built and rendered once.
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui Theme]] — color roles, spacing, type scale, light and dark, and contrast audits.
