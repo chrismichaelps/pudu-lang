@@ -376,3 +376,5 @@ Resolved Grill Log: Observe the ordinary result of a loaned body separately from
 ## Mutable slot layout discovery (#956)
 
 Resolved Grill Log: Replay lowering when a mutable binding demands a new layout. Each replay retains the known demands for later writes.
+
+Resolved Grill Log: every lowered function passes through [[Compiler Lower Tail Move]] before the module is assembled.

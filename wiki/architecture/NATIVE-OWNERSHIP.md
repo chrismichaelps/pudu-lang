@@ -40,8 +40,7 @@ Only counted aggregates move: arrays, maps, sets, stores and records. A typed fa
 
 ## Later steps
 
-Last-use moves for locals, and taking record fields and map values out of
-uniquely held storage in the MultiMap primitives, follow once transfer lands.
+[[Compiler Lower Tail Move]] moves the final read of a counted local in a function's tail. [[Backend Emit Multi Map]] updates a MultiMap record held once in place: it takes the key's array out of an exclusive tree path, appends to it, and inserts into exclusive trees.
 
 ## Measurement
 

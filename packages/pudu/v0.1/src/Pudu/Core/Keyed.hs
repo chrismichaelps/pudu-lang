@@ -12,6 +12,8 @@ data CoreKeyedMethodName
   | KeyedInsert
   {-| Insert whose key replaces the spelling of an equal held key. -}
   | KeyedPut
+  {-| A value added under a key of a MultiMap record; the receiver is the record. -}
+  | KeyedMultiMapAdd
   | KeyedRemove
   | KeyedKeys
   | KeyedValues

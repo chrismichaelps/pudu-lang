@@ -70,6 +70,8 @@ typed call can only pass that object or its borrowed descendants to other
 typed calls. Integer projections keep the ordinary frame path because the
 aggregate can carry a deferred integer magnitude that needs range handling.
 
+Resolved Grill Log: a move between typed slots is a plain copy; typed slots carry no counts. [[NATIVE-OWNERSHIP]]
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Backend Frame Direct]] · [[Native Direct Call Tests]] · [[CHANGELOG]]

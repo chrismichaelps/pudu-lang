@@ -22,6 +22,10 @@ multiMapBody blame name signature state at arguments = case signature of
     | map coreExpressionType arguments == [record, key, value]
     , recordFields types record == Just [("groups", groupsOf key value), ("occurrences", countsOf key value)] ->
         case name of
+          "multiMapAdd" | result == record, [owner, keyed, added] <- arguments
+                        , not (mayHoldFunction types key || mayHoldFunction types (CoreTupleType [key, value])) ->
+              -- One helper over the record updates in place what the program holds alone.
+              (state, Just (expression record (CoreKeyedMethod KeyedMultiMapAdd owner [keyed, added]), record))
           "multiMapAdd" | result == record -> adding record key value
           "multiMapContains" | result == CoreBoolType -> containing record key value
           _ -> wrong

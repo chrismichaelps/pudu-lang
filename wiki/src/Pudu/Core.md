@@ -556,3 +556,5 @@ Resolved Grill Log: A sum keeps its canonical owner and declared type arguments.
 
 Resolved Grill Log: distinguish exact endpoint access from presence.
 Length and sum keep their checked Int result and overflow diagnostics.
+
+Resolved Grill Log: `KeyedMultiMapAdd` is the keyed operation adding a value under a key of a MultiMap record; its receiver is the record.

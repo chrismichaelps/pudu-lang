@@ -27,6 +27,7 @@ import Pudu.Backend.Emit.Cell
 import Pudu.Backend.Emit.Array (arrayHelpers)
 import Pudu.Backend.Emit.CrossComparison (Comparison (..), crossHelpers, differentLayoutCall, payloadRank)
 import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers, storeHelpers)
+import Pudu.Backend.Emit.MultiMap (multiMapHelpers)
 import Pudu.Backend.Emit.Range (rangeHelpers)
 import Pudu.Backend.Emit.Bytes (bytesHelpers)
 import Pudu.Backend.Emit.Handle (handleHelpers)
@@ -116,7 +117,7 @@ differentMethodCaptures entries =
 helpers :: Map Text Int -> Layouts -> CoreType -> [(Text, ([Text], [Text]))]
 helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> helpersOf kind (zip (map (Text.pack . show) [0 :: Int ..]) members) Nothing
-  (CoreRecordType name _, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
+  (CoreRecordType name _, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name)) <> multiMapHelpers kind fields
   (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
   (CoreArrayType element, _) -> arrayHelpers kind element
   (CoreMapType key value, _) -> mapHelpers kind key value
