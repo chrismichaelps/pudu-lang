@@ -198,3 +198,8 @@ owns any returned element and uses the same bounds and diagnostic path.
 
 Resolved Grill Log: a call argument lowered from a local move is a transferred
 argument; its slot is the moved temporary. [[NATIVE-OWNERSHIP]]
+## Kept constants (#999)
+
+- `CoreConstant` lowers to a branch on whether the constant is built: the hit path reads the kept value; the miss path builds the initializer, keeps it, then joins.
+
+Resolved Grill Log (#999): **Q:** Where is the build placed relative to the join? **A:** Only the miss path builds, so the initializer runs at most once per run and both paths join with the same value. _Rejected:_ building unconditionally before the branch.

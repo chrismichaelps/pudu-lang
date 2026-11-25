@@ -9,7 +9,9 @@ import Std.Text as Text
 import Domain.Entry as Domain
 import Error as SiteError
 
-export type Catalog = { languageVersion: Str, entries: Array[Domain.Entry], modules: Array[Str] }
+/// `byModule` holds each module's entries in catalogue order, built once when
+/// the catalogue is made so a module page does not scan every entry.
+export type Catalog = { languageVersion: Str, entries: Array[Domain.Entry], modules: Array[Str], byModule: Map[Str, Array[Domain.Entry]] }
 
 export fn load(path: Str) -> Result[Catalog, SiteError.SiteError] {
   let source = match Io.read(path) {
@@ -52,7 +54,7 @@ export fn parse(source: Str) -> Result[Catalog, SiteError.SiteError] {
     })
   let entries = List.flatten(&groups)
   if entries.length() == 0 { return Err(SiteError.CatalogueEmpty) }
-  Ok(Catalog{languageVersion: version, entries: entries, modules: moduleNames(&entries)})
+  Ok(Catalog{languageVersion: version, entries: entries, modules: moduleNames(&entries), byModule: grouped(&entries)})
 }
 
 /// A catalogue of entries gathered some other way than the compiler's export,
@@ -60,7 +62,7 @@ export fn parse(source: Str) -> Result[Catalog, SiteError.SiteError] {
 /// never shows an empty reference as if it were one.
 export fn fromEntries(languageVersion: Str, entries: Array[Domain.Entry]) -> Option[Catalog] {
   if entries.isEmpty() { return None }
-  Some(Catalog{languageVersion: languageVersion, entries: entries, modules: moduleNames(&entries)})
+  Some(Catalog{languageVersion: languageVersion, entries: entries, modules: moduleNames(&entries), byModule: grouped(&entries)})
 }
 
 /// Read the compact catalogue used by dynamic search.
@@ -129,11 +131,11 @@ export fn readSearchIndex(source: Str) -> Result[Catalog, SiteError.SiteError] {
     index = index + 1
   }
   if at != source.length() { return Err(SiteError.CatalogueInvalid) }
-  Ok(Catalog{languageVersion: version, entries: entries, modules: []})
+  Ok(Catalog{languageVersion: version, entries: entries, modules: [], byModule: grouped(&entries)})
 }
 
 export fn moduleEntries(catalog: &Catalog, moduleName: Str) -> Array[Domain.Entry] {
-  List.filter(&catalog.entries, fn(entry: Domain.Entry) -> Bool { entry.moduleName == moduleName })
+  Option.unwrapOr(catalog.byModule.get(moduleName), [])
 }
 
 export fn findAll(catalog: &Catalog, moduleName: Str, kind: Str, name: Str) -> Array[Domain.Entry] {
@@ -172,6 +174,16 @@ fn textList(value: &Json.Json) -> Array[Str] {
     if let Some(text) = Json.asText(&member) { out = out.push(text) }
   }
   out
+}
+
+/// Each module's entries, in the order the catalogue lists them.
+fn grouped(entries: &Array[Domain.Entry]) -> Map[Str, Array[Domain.Entry]] {
+  var groups: Map[Str, Array[Domain.Entry]] = mapOf([])
+  for entry in entries {
+    let held = Option.unwrapOr(groups.get(entry.moduleName), [])
+    groups = groups.insert(entry.moduleName, held.push(entry))
+  }
+  groups
 }
 
 fn moduleNames(entries: &Array[Domain.Entry]) -> Array[Str] {

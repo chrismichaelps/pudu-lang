@@ -31,8 +31,8 @@ existing order after constant lookup has declined the name.
 ## Representation boundary
 
 [[Compiler Lower Constant]] projects the thawed plain data against the settled
-Core type at the complete reference span. Existing Core carriers preserve
-integer kind and exact magnitude, raw Float32/Float64 bits, text, Char, Bool,
+Core type at the complete reference span. Boxed products are built once and
+kept; see Kept constants below. Existing Core carriers preserve integer kind and exact magnitude, raw Float32/Float64 bits, text, Char, Bool,
 unit, tuples, declaration-ordered records and sum tags with ordered payloads,
 arrays, maps, sets and range values.
 Canonical checked types choose aggregate identity and layout; a display name
@@ -53,6 +53,40 @@ Resolved Grill Log (#808): a malformed nested element or unrepresentable
 range endpoint refuses at the constant use. No initializer is rerun and no
 runtime resource or closure is manufactured from frozen display data.
 [[Native Frozen Collection Delivery]] owns the continuation and evidence.
+
+## Kept constants (#999)
+
+Boxed folded products (array, map, set, store, tuple, record, sum) are no
+longer projected into Core at every read. [[Compiler Lower Constant]] wraps
+each one as `CoreConstant name initial`, where `name` is
+`<owner module>.<constant> : <type>`. The initializer is the folded product
+that the compiler already produced; the kept build projects that value and
+does not re-evaluate the initializer. Scalars and text are still written
+where read.
+
+The first read builds the value and keeps it in a file-scope cell from the
+`emitConstants` registry; every later read of the same name takes the hit
+path and reads that cell. The cell holds one reference for the whole run, so
+a kept value is never handed out as an owned copy, and any in-place update
+copies it first. Threads take turns through the run gate, so each cell is
+written once and never raced. Interpreter semantics are unchanged.
+
+Measured evidence: parsing a typical browser request head natively
+(`Std.Http.Message.parseRequest`) went from 21.6 µs to 8.8 µs, because
+`isToken`, `parseRequestLine` and `Std.Http.methodFrom` no longer rebuild
+their punctuation, version and method tables on each call. The parity test
+"a kept aggregate constant is the same value at every read, and updates copy
+it" in `test/Pudu/Backend/ModulePrograms.hs` covers the same-value and copy
+rules, and an address and undefined-behavior sanitizer run was clean.
+
+Resolved Grill Log (#999): **Q:** Why build a boxed constant once instead of
+projecting it per read? **A:** Per-read projection rebuilt every aggregate
+table on each call. The kept build reuses the already folded value, so no
+initializer runs at runtime. _Rejected:_ re-evaluating the initializer
+behind a cache, which would repeat compile-time work the folding already
+settled.
+
+Each kept cell holds its reference until the program ends. The first keep registers `pudu_constants_release` with `atexit` once, through `pudu_constants_arrange`, and that function releases every built cell by its type, so a kept value is never counted as memory the program lost and the allocation-balance tests stay exact. `emitConstants` records each cell's name and type, and `FrameConstantReady` carries the constant's type, so whichever read registers a cell first records the type its release needs. `constantRelease` in `Backend/Emit/Frame.hs` is rendered after the aggregate helpers because it calls their drop helpers. The full property suite passes 903 of 903.
 
 ## Validation
 
