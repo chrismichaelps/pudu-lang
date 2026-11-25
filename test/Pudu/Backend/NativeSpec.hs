@@ -153,7 +153,6 @@ backendNativeProperties =
       conjoin <$> mapM (uncurry conformance) objectiveCRefusalPrograms)
   , ("native optional handles cross as the interpreter's do", conjoin <$> mapM
       (uncurry (conformanceLinking optionalHandleLibrary)) optionalHandlePrograms)
-  , ("native database programs answer as the interpreter does", conjoin <$> mapM fixtureConformance databaseFixtures)
   , ("native host services, tasks and scopes match the interpreter's own answers", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) hostSuccessPrograms)
   , ("native endpoints, secured connections, compression, child programs and time match the interpreter's own answers", conjoin <$> mapM
@@ -201,6 +200,9 @@ backendNativeProperties =
   , ("a compiler that rejects the C is E6005", testToolchainRejected)
   , ("an output that cannot be published is E6006", testToolchainPublish)
   ]
+  -- One property per database fixture, so the parallel runner spreads them.
+  <> [ ("native database program " <> path <> " answers as the interpreter does", fixtureConformance path)
+     | path <- databaseFixtures ]
 
 programWith :: [Text] -> Text
 programWith body =

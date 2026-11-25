@@ -229,3 +229,9 @@ every label in exactly one shard` checks the partition.
 Register `backendTargetProperties` from [[Backend Native Target Tests]] in the
 backend outcome list. Resolved Grill Log: its environment-changing checks run
 sequentially like the toolchain checks; no new runner option.
+
+Resolved Grill Log: `PUDU_TEST_LIST` prints every property label without running any; `PUDU_TEST_LABEL`
+runs only the property with exactly that label; each run property reports its seconds on a `[done]`
+line, which [[Test Parallel Runner]] uses to order the next run.
+
+Resolved Grill Log: database fixture conformance and standard library program evaluation register one property per fixture or program family, so no single property holds a parallel run.

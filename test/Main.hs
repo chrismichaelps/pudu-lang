@@ -1,5 +1,6 @@
 module Main (main) where
 
+import GHC.Clock (getMonotonicTime)
 import Control.Monad (unless, when)
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import Data.Text (Text)
@@ -198,19 +199,29 @@ runTests = do
   unless (and (sourceOutcomes <> generatedOutcomes <> decimalOutcomes <> coreOutcomes <> versionOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> backendOutcomes <> literalsOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserDeriveOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> frontierOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
 {-| Runs one property, or skips it when `PUDU_TEST_MATCH` is set and the label
     does not contain it: a focused run of the few properties a change touches,
-    without building a second suite. -}
+    without building a second suite. `PUDU_TEST_LIST` prints every label and
+    runs nothing; `PUDU_TEST_LABEL` runs exactly the property with that label.
+    Each run reports its seconds, which the parallel runner uses to start the
+    longest properties first. -}
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
+  listing <- lookupEnv "PUDU_TEST_LIST"
+  only <- lookupEnv "PUDU_TEST_LABEL"
   wanted <- lookupEnv "PUDU_TEST_MATCH"
   shard <- lookupEnv "PUDU_TEST_SHARD"
-  case wanted of
-    Just fragment | not (fragment `isInfixOf` label) -> pure True
-    _ | not (inShard shard label) -> pure True
-    _ -> do
-      putStrLn ("[test] " <> label)
-      propertyValue <- loadProperty
-      result <- quickCheckResult (withMaxSuccess 200 propertyValue)
-      pure (isSuccess result)
+  case () of
+    _ | Just _ <- listing -> putStrLn label >> pure True
+      | Just exact <- only, exact /= label -> pure True
+      | Just fragment <- wanted, not (fragment `isInfixOf` label) -> pure True
+      | not (inShard shard label) -> pure True
+      | otherwise -> do
+          putStrLn ("[test] " <> label)
+          started <- getMonotonicTime
+          propertyValue <- loadProperty
+          result <- quickCheckResult (withMaxSuccess 200 propertyValue)
+          finished <- getMonotonicTime
+          putStrLn ("[done] " <> show (round (finished - started) :: Int) <> " " <> label)
+          pure (isSuccess result)
 {-| Whether a property belongs to the shard `PUDU_TEST_SHARD=k/n` names: its
     label's stable hash modulo n is k. Every label lands in exactly one shard,
     whatever order the properties run in; an absent or unreadable selector
