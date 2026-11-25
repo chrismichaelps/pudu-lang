@@ -38,9 +38,12 @@ textMethodSuccessPrograms =
   , printing "trim and case mapping"
       [ "\"  \\t hi there \\n\".trim()", "\"\\u{3000}x\\u{a0}\".trim()", "\"\\u{2028}x\".trim()", "\"\".trim()", "\"   \".trim()"
       , "\"Stra\\u{df}e \\u{fb01}\".toUpper()", "\"\\u{130}\".toLower()", "\"\\u{391}\\u{3a3}\".toLower()"
-      , "\"\\u{1c5}\".toUpper()", "\"\\u{1c5}\".toLower()", "\"\\u{390}\".toUpper()", "\"Hello World\".toLower()", "\"abc\".toUpper()" ]
+      , "\"\\u{1c5}\".toUpper()", "\"\\u{1c5}\".toLower()", "\"\\u{390}\".toUpper()", "\"Hello World\".toLower()", "\"abc\".toUpper()"
+      , "\"GET\".toUpper()", "\"get\".toLower()", "\"\".toUpper()", "\"MiXeD 123 !@#\".toLower()", "\"MiXeD 123 !@#\".toUpper()"
+      , "\"ascii \\u{e9}\".toUpper()", "(\"Built\" + \"Text\").toUpper()", "(\"UP\" + \"PER\").toUpper()", "(\"lo\" + \"wer\").toLower()" ]
       [ "hi there", "x", "\8232x", "", "", "STRASSE FI", "i\775", "\945\963"
-      , "\452", "\454", "\921\776\769", "hello world", "ABC" ]
+      , "\452", "\454", "\921\776\769", "hello world", "ABC"
+      , "GET", "get", "", "mixed 123 !@#", "MIXED 123 !@#", "ASCII \201", "BUILTTEXT", "UPPER", "lower" ]
   , ("views outlive the text they came from", program
       [ "fn tail(text: Str) -> Str { text.drop(2) }"
       , "fn main() -> Int {"
