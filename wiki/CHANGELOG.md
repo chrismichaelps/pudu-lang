@@ -11,6 +11,9 @@ tags: [changelog]
 ## 2026-11-25 — Kept HTML fragments
 
 - `Std.Html.Memo` keeps rendered fragments by key in a shared cache, so page chrome that is the same on every request is built and rendered once; a page with a 24-link footer renders 9× faster natively. refs #1013
+## 2026-11-25 — Parallel C units
+
+- Large native programs compile as concurrent C units linked with ThinLTO; the website's native build went from about 92–104 s to about 50 s with identical pages. refs #1003
 
 ## 2026-11-25 — ASCII text case
 

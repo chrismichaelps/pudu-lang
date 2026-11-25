@@ -37,6 +37,7 @@ aliases: [Backend Module Map]
   exit-status clamping.
 
 - [[Backend Toolchain Cache]] — compiled native executables reused by content; a miss stores through a rename, at most 256 entries.
+- [[Toolchain Split]] — divides one generated C unit into a shared header, a data unit and concurrent function units (#1003).
 
 - [[Backend Toolchain]] — discovery, invocation, bounded capture, timeout, and
   atomic publication of the native [[Compilation Artifact]]; the only place a

@@ -14,9 +14,12 @@ module Pudu.Backend.Toolchain
   , compilerFlags
   ) where
 
+import Control.Concurrent (forkFinally)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (finally, mask)
 import Control.Monad (void)
 import qualified Data.ByteString as ByteString
+import Data.List (isPrefixOf)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
@@ -26,10 +29,13 @@ import Pudu.Backend.Runtime.Host.Tls (tlsLibraryMarker)
 import Pudu.Backend.Toolchain.Cache (nativeKey, restoreNative, storeNative)
 import Pudu.Backend.Toolchain.HostSources (withHostSourceArguments)
 import Pudu.Backend.Toolchain.Process (ToolchainFailure (..), cleanup, problemText, runTool, timeoutSeconds, tryIO)
-import System.Directory (findExecutable, renameFile)
+import Pudu.Backend.Toolchain.Split (SplitUnits (..), splitUnits)
+import GHC.Conc (getNumProcessors)
+import System.Directory (createDirectory, findExecutable, removeDirectoryRecursive, renameFile)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
-import System.FilePath (takeDirectory, takeFileName)
+import System.FilePath (takeDirectory, takeFileName, (</>))
+import Text.Read (readMaybe)
 import System.IO (hClose, openTempFile)
 import System.Info (os)
 import System.Process (readProcessWithExitCode)
@@ -91,11 +97,84 @@ compileNative request = do
       Left problem -> pure (Left (ToolchainPublishFailed (problemText problem)))
       Right () -> do
         seconds <- timeoutSeconds
-        invoked <- tryIO $ withHostSourceArguments (toolchainSource request) $ \hostArguments ->
-          runTool executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags <> libraries <> hostArguments) seconds
+        plan <- unitPlan executable (toolchainSource request)
+        invoked <- tryIO $ withHostSourceArguments (toolchainSource request) $ \hostArguments -> case plan of
+          Just (count, optimizing) | null hostArguments ->
+            compileUnits executable libraries seconds count optimizing sourcePath executablePath
+          _ -> runTool executable (compilerFlags <> ["-o", executablePath, sourcePath] <> linkerFlags <> libraries <> hostArguments) seconds
         pure $ case invoked of
           Left problem -> Left (ToolchainInvocation (problemText problem))
           Right result -> result
+
+  -- The units compile at the same time beside the source, then link; the
+  -- compilers' output is returned in unit order.
+  compileUnits executable libraries seconds count optimizing sourcePath executablePath = do
+    let directory = sourcePath <> ".units"
+        units = splitUnits count (toolchainSource request)
+        sources = ("unit_data.c", splitData units) : zip ["unit_" <> show index <> ".c" | index <- [0 :: Int ..]] (splitFunctions units)
+        objects = [directory </> name <> ".o" | (name, _) <- sources]
+        -- A library's header search flags reach every unit; its link flags
+        -- reach only the link.
+        searched = [flag | flag <- libraries, any (`isPrefixOf` flag) ["-I", "-D", "-isystem"]]
+    (do
+       createDirectory directory
+       ByteString.writeFile (directory </> "unit.h") (Encoding.encodeUtf8 (splitHeader units))
+       mapM_ (\(name, text) -> ByteString.writeFile (directory </> name) (Encoding.encodeUtf8 text)) sources
+       compiled <- concurrently
+         [ either (Left . ToolchainInvocation . problemText) id <$> tryIO
+             (runTool executable (compilerFlags <> optimizing <> searched <> ["-c", directory </> name, "-o", object]) seconds)
+         | ((name, _), object) <- zip sources objects ]
+       case sequence compiled of
+         Left failure -> pure (Left failure)
+         Right outputs -> do
+           linked <- runTool executable (["-O2"] <> optimizing <> ["-o", executablePath] <> objects <> linkerFlags <> libraries) seconds
+           pure (fmap (Text.concat outputs <>) linked))
+      `finally` void (tryIO (removeDirectoryRecursive directory))
+
+{-| How many units a source compiles as, and the flags that let the link
+    optimize across them; nothing for one unit. `PUDU_C_UNITS` sets the count
+    for any source; otherwise a source past `splitThreshold` bytes splits one
+    unit per processor when the compiler is one whose link optimizes across
+    units, and a smaller source stays whole, where a split costs more than it
+    saves. -}
+unitPlan :: FilePath -> Text -> IO (Maybe (Int, [String]))
+unitPlan executable source = do
+  configured <- lookupEnv "PUDU_C_UNITS"
+  -- A program that looks its own symbols up as it runs keeps one unit: the
+  -- link would drop a function only such a lookup reaches.
+  case configured >>= readMaybe of
+    _ | foreignLoaderMarker `Text.isInfixOf` source -> pure Nothing
+    Just count | count > 1 -> (\across -> Just (count, ["-flto=thin" | across])) <$> linkOptimizes executable
+    Just _ -> pure Nothing
+    Nothing
+      | os == "mingw32" || Text.length source < splitThreshold -> pure Nothing
+      | otherwise -> do
+          across <- linkOptimizes executable
+          processors <- getNumProcessors
+          pure (if across && processors > 1 then Just (min 8 processors, ["-flto=thin"]) else Nothing)
+
+{-| The source size, in characters, past which a compile splits. -}
+splitThreshold :: Int
+splitThreshold = 4000000
+
+{-| Whether the compiler reports itself as clang, whose link optimizes across
+    units with `-flto=thin`. -}
+linkOptimizes :: FilePath -> IO Bool
+linkOptimizes executable = do
+  described <- tryIO (runTool executable ["--version"] 5)
+  pure $ case described of
+    Right (Right banner) -> "clang" `Text.isInfixOf` Text.toLower banner
+    _ -> False
+
+{-| Every compile at once, each answer in its place; a compile that stops
+    with an exception answers it as a failed invocation. -}
+concurrently :: [IO (Either ToolchainFailure Text)] -> IO [Either ToolchainFailure Text]
+concurrently actions = do
+  slots <- mapM (\action -> do
+    slot <- newEmptyMVar
+    _ <- forkFinally action (putMVar slot . either (Left . ToolchainInvocation . Text.pack . show) id)
+    pure slot) actions
+  mapM takeMVar slots
 
 {-| `PUDU_CC` used as given when set, otherwise `cc` found on `PATH`. -}
 discoverCompiler :: IO (Either ToolchainFailure FilePath)
