@@ -168,3 +168,27 @@ executable publication, and re-exports the failure type.
 
 Resolved Grill Log: the caller supplies structural arguments; extracting the
 runner preserves the host executable's process and publication contracts.
+
+## Parallel C units (#1003)
+
+- `unitPlan` decides the unit count. `PUDU_C_UNITS` sets it for any source.
+  Otherwise a source of at least 4,000,000 characters splits one unit per
+  processor (at most 8) when the compiler reports itself as clang, whose link
+  optimizes across units with `-flto=thin`.
+- Windows, smaller sources, a gcc-like compiler, programs with host sources,
+  and programs that use the foreign loader keep one unit. The foreign loader
+  looks the program's own symbols up as it runs, and a whole-program link would
+  drop such functions.
+- The compiler is probed with `--version` only when a split is planned, bounded
+  to 5 seconds.
+- Units compile concurrently with `forkFinally`, so a compile that throws still
+  answers. A library's `-I`, `-D` and `-isystem` flags reach every unit, and its
+  link flags reach only the link. The units' directory is removed afterwards.
+- Resolved Grill Log: **Q:** Why link with ThinLTO instead of keeping one unit?
+  **A:** The website's 25 MB unit took 70 s at `-O2` on one core; eight units with
+  `-flto=thin` take 28 s and serve the same pages at the same or better speed
+  (module page 424 to 445–470 requests a second, home page about 1,430 to
+  1,370–1,455), while eight plain units lose about 4%. The whole website build
+  went from about 92–104 s to 50 s.
+
+The unit pass itself is [[Toolchain Split]].

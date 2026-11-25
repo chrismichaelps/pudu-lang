@@ -2,7 +2,7 @@
 date: 2026-11-25
 topic: parallel-c-units
 to_role: Implementer
-status: READY
+status: DONE
 tags: [handoff, native, toolchain]
 ---
 
@@ -40,3 +40,10 @@ The optimizer's cost is spread over about 4,000 functions; no single function do
 ## Exact next action
 
 Add an emitter-level item type that tags every top-level C item the frame emitter and runtime parts produce as declaration, inline helper, definition, or data, and render today's single unit from it with byte-identical output, proven by diffing the website's generated C before and after.
+
+## Outcome
+
+- Implemented in `Backend/Toolchain/Split.hs` and `Backend/Toolchain.hs`.
+- Full property suite 903/903, both by default and with `PUDU_C_UNITS=3`
+  forcing every program to split.
+- Website native build about 50 s.

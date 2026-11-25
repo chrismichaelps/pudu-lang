@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Parallel C units
+
+- Large native programs compile as concurrent C units linked with ThinLTO; the website's native build went from about 92–104 s to about 50 s with identical pages. refs #1003
+
 ## 2026-11-25 — Always-fitting conversions
 
 - Native `convertInteger` into a kind that holds every value of the operand's kind widens directly, and `Option.unwrapOr` over such a conversion builds no option and makes no call. refs #1004

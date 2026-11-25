@@ -274,6 +274,7 @@ library
     Pudu.Backend.Toolchain.App
     Pudu.Backend.Toolchain.Assets
     Pudu.Backend.Toolchain.Process
+    Pudu.Backend.Toolchain.Split
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache
