@@ -20,7 +20,7 @@ import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWith)
 import Pudu.Compiler.Lower.Array (lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Slice (lowerBracketIndex)
-import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger)
+import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger, lowerFittingUnwrap)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
 import Pudu.Compiler.Lower.Bytes (lowerBytesOf)
@@ -439,6 +439,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (NameExpression (name :| []))) arguments
+    | Just "Std.Option.unwrapOr" <- resolveFunction state [name]
+    , Just lowered <- lowerFittingUnwrap lowerExpression state spanValue arguments -> lowered
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [name] arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
@@ -455,6 +457,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located _ (MemberExpression receiver (Located _ "unregister"))) arguments
     | Just lowered <- lowerCallbackUnregister lowerExpression clean spanValue receiver arguments -> lowered
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
+    | isModuleQualifier state owner, Just "Std.Option.unwrapOr" <- resolveFunction state [owner, member]
+    , Just lowered <- lowerFittingUnwrap lowerExpression state spanValue arguments -> lowered
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [owner, member] arguments -> lowered
     | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
