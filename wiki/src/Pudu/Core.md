@@ -558,3 +558,8 @@ Resolved Grill Log: distinguish exact endpoint access from presence.
 Length and sum keep their checked Int result and overflow diagnostics.
 
 Resolved Grill Log: `KeyedMultiMapAdd` is the keyed operation adding a value under a key of a MultiMap record; its receiver is the record.
+## Kept constants (#999)
+
+- `CoreConstant name initial` wraps a folded constant whose type is boxed (array, map, set, store, tuple, record, sum). `name` is `<owner module>.<constant> : <type>`; `initial` is the already folded expression, built on the first read and kept for the rest of the run.
+
+Resolved Grill Log (#999): **Q:** Why a named node instead of re-inlining the folded value at each read? **A:** A name keys one run-wide kept value, so every read of a boxed constant is the same value and is not rebuilt. _Rejected:_ projecting the initializer at each read, which rebuilt aggregates per read.

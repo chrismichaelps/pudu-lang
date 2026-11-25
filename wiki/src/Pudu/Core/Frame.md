@@ -183,3 +183,11 @@ into the frame module, where [[Backend Emit Export]] reads them.
 ## Stored callable dispatch (#956)
 
 Resolved Grill Log: A closure-target test reads its closure slot and names a linked body. Its result slot is Bool.
+
+## Kept constants (#999)
+
+- Value shapes `FrameConstantReady name`, `FrameConstantRead name` and `FrameConstantKeep name slot` read a kept constant: ready-check, read the kept value, or build and keep it into a slot.
+
+Resolved Grill Log (#999): **Q:** Why separate ready, read and keep shapes? **A:** The hit path needs only the read, while the miss path builds and stores the value, so the lowering branches on readiness instead of rebuilding. _Rejected:_ one shape that always rebuilds.
+
+Each kept cell holds its reference until the program ends. The first keep registers `pudu_constants_release` with `atexit` once, through `pudu_constants_arrange`, and that function releases every built cell by its type, so a kept value is never counted as memory the program lost and the allocation-balance tests stay exact. `emitConstants` records each cell's name and type, and `FrameConstantReady` carries the constant's type, so whichever read registers a cell first records the type its release needs. `constantRelease` in `Backend/Emit/Frame.hs` is rendered after the aggregate helpers because it calls their drop helpers. The full property suite passes 903 of 903.
