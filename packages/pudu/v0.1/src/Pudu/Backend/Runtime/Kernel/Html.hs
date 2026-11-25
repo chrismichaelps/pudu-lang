@@ -66,7 +66,7 @@ htmlKernelParts =
       , "/* The void elements, grouped by length: the names of length n sit"
       , "   back to back in voids[n]. */"
       , "static int pudu_html_void(pudu_text text) {"
-      , "  static const char *const voids[] = {\"\", \"\", \"brhr\", \"colimgwbr\", \"arealinkmeta\", \"embedinputtrack\", \"source\"};"
+      , "  static const char *const voids[] = {\"\", \"\", \"brhr\", \"colimgwbr\", \"areabaselinkmeta\", \"embedinputtrack\", \"source\"};"
       , "  const char *names;"
       , "  if (text.length < 2 || text.length > 6) return 0;"
       , "  for (names = voids[text.length]; *names != '\\0'; names += text.length)"

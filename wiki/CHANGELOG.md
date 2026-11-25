@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Void base element
+
+- Native HTML rendering treats `base` as a void element, as the interpreter does; a new parity program covers every void element, lists and a wide set of attributes. refs #1014
+
 ## 2026-11-25 — ASCII text case
 
 - Native `toUpper` / `toLower` map ASCII text through a 128-entry table and return unchanged ASCII text without allocating; a loop of ASCII case calls went from 1.58 s to 0.19 s. refs #1001
