@@ -156,6 +156,7 @@ tags: [moc, module]
 - [[Eval Csv]] — native separated-record scan behind `Std.Csv`.
 - [[Eval Json]] — native JSON decoder and encoder behind `Std.Json`.
 - [[Eval Html Render]] — native page rendering behind `Std.Html.render` and `document`.
+- [[Eval Url Encode]] — percent-encoding behind `Std.Url.encodeComponent` through the `urlEncodeComponent` builtin.
 - [[Eval Xml]] — native XML reader behind `Std.Xml`.
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.

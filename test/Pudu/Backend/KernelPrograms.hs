@@ -277,6 +277,16 @@ kernelLibraryPrograms =
       , "  print(Html.document(&Html.element(\"body\", &[], &[Memo.fragment(&memo, \"a\", fn() -> Html.Html { footer(\"never\") })])))"
       , "  0", "}" ]
     , "built a\nbuilt a\ntrue true 1\nbee sea sea again 2\n<!DOCTYPE html>\n<body><footer class=\"site &amp; co\">&lt;a&gt;</footer></body>\n")
+  , ("URL components percent-encode in one pass, unchanged text included", program
+      [ "import Std.Url as Url"
+      , "fn main() -> Int {"
+      , "  let samples = [\"Std.Http\", \"\", \"a b&c=d/e?f#g\", \"~tilde_ok-1.2\", \"caf\233\&\", \"\128512\&!\", \"100%\", \"+plus+\"]"
+      , "  for sample in samples { print(\"[\" + Url.encodeComponent(sample) + \"]\") }"
+      , "  let encode = urlEncodeComponent"
+      , "  print(encode(\"x y\") + \" \" + display(encode(\"same\") == \"same\"))"
+      , "  print(Url.renderQuery(&[(\"q\", \"pudu lang\"), (\"page\", \"2&3\")]))"
+      , "  0", "}" ]
+    , "[Std.Http]\n[]\n[a%20b%26c%3Dd%2Fe%3Ff%23g]\n[~tilde_ok-1.2]\n[caf%C3%A9]\n[%F0%9F%98%80%21]\n[100%25]\n[%2Bplus%2B]\nx%20y true\nq=pudu%20lang&page=2%263\n")
   ]
 
 kernelRefusalPrograms :: [(String, Text)]

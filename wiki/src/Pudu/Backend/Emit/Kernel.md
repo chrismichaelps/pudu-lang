@@ -19,6 +19,8 @@ The table is total over CoreKernelName, so a new kernel cannot be emitted
 without a runtime function. Operand and result carriers are those the frame
 already holds; nothing is converted here.
 
+Resolved Grill Log: `pudu_url_encode` (issue #1007) is emitted for `KernelUrlEncode` in the total kernel table, so the builtin cannot be emitted without its runtime function.
+
 ## Binary codec (#935)
 
 The binary reader takes type-specific tree operations and a map constructor

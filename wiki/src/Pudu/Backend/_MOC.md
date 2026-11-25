@@ -8,6 +8,7 @@ aliases: [Backend Module Map]
 
 - [[Native Binary Kernels]] · [[Backend Kernel Programs]] — C11 encoding and decoding for `Std.Binary` (#935).
 - [[Native HTML Kernel]] — one-pass C11 page rendering into one buffer, with an explicit stack of child-list frames.
+- [[Native URL Kernel]] — one-pass percent-encoding into one buffer, returning the input unchanged when no byte needs escaping.
 
 - [[Backend Emit Entry]] · [[Backend Native Target]] · [[Backend Toolchain Library]] · [[Backend Toolchain Process]] · [[Backend Native Target Tests]] · [[iOS Simulator Run]] · [[iOS Foreign Apps Test]] · [[Swift Entry Points Test]] · [[Swift Counter Fixture]] — embedded mobile builds (#878) and Swift entry points (#881).
 

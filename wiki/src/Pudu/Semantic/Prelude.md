@@ -81,6 +81,8 @@ DEPTH 0.30 (SHALLOW by intent). It is a single normative list; deepening it befo
 - **Q:** Are wired-in and prelude names one list or two? **A:** Two, in separate scope layers. _Rationale:_ splitting wired-in types from the prelude module is what makes the prelude replaceable while keeping primitives inviolable, and Pudu wants both properties. _Rejected:_ one flat builtin list, which would make `Int` shadowable and `Drop` unremovable — precisely backwards.
 - **Q:** How is the implicit import disabled? **A:** By importing the prelude explicitly. _Rationale:_ it reuses syntax the language already has instead of adding a pragma or compiler flag. _Rejected:_ a `NoImplicitPrelude`-style flag before the language has any flags.
 
+Resolved Grill Log: `urlEncodeComponent` (issue #1007) is a discoverable primitive name, and its signature and execution stay in the checker and evaluator.
+
 ## Cryptographic primitive names
 
 The pure value vocabulary includes `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`,

@@ -14,6 +14,9 @@ tags: [changelog]
 ## 2026-11-25 — Parallel C units
 
 - Large native programs compile as concurrent C units linked with ThinLTO; the website's native build went from about 92–104 s to about 50 s with identical pages. refs #1003
+## 2026-11-25 — URL component kernel
+
+- `Std.Url.encodeComponent` percent-encodes through the `urlEncodeComponent` kernel in one pass and returns unchanged text without allocating; a million encodes went from 1.83 s to 0.06 s natively. refs #1007
 
 ## 2026-11-25 — ASCII text case
 

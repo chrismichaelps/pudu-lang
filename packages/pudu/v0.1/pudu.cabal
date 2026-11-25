@@ -202,6 +202,7 @@ library
     Pudu.Backend.Runtime.Kernel.Csv
     Pudu.Backend.Runtime.Kernel.Html
     Pudu.Backend.Runtime.Kernel.Json
+    Pudu.Backend.Runtime.Kernel.Url
     Pudu.Backend.Runtime.Kernel.Mac
     Pudu.Backend.Runtime.Kernel.Natural
     Pudu.Backend.Runtime.Kernel.Seal
@@ -376,6 +377,7 @@ library
     Pudu.Eval.Csv
     Pudu.Eval.HtmlRender
     Pudu.Eval.Json
+    Pudu.Eval.UrlEncode
     Pudu.Eval.Binary
     Pudu.Eval.Xml
     Pudu.Eval.Call.Argument
