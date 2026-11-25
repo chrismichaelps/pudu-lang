@@ -221,3 +221,5 @@ variant or a callable's actual kind.
 ## Exact Int layout
 
 Resolved Grill Log: Exact Int has its own ownership discriminator so both integer layouts release through their matching cell.
+
+Resolved Grill Log: a record laid out as a MultiMap also receives the add helper from [[Backend Emit Multi Map]].

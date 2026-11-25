@@ -212,6 +212,10 @@ frameValue state value = case frameValueShape value of
         _ -> refused "a keyed default lookup without matching key and result carriers"
       KeyedInsert -> keyed "insert"
       KeyedPut -> keyed "put"
+      KeyedMultiMapAdd ->
+        let (after, number) = overflowSite state at PlatformSigned CheckedAdd
+         in Right (after, aggregateHelper "multimap_add" kind <> "(" <> Text.intercalate ", " (target : operands)
+              <> ", &pudu_sites[" <> textOfInt number <> "])", Set.fromList [aggregateNeed "multimap_add" kind])
       KeyedRemove -> keyed "remove"
       KeyedKeys -> keyed "keys"
       KeyedValues -> keyed "values"

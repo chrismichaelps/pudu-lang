@@ -195,3 +195,6 @@ Resolved Grill Log: An integer literal or local integer read cannot modify
 the array owner. Read a local array's frame slot directly for that index.
 An effectful index keeps the ordinary receiver snapshot. The lookup still
 owns any returned element and uses the same bounds and diagnostic path.
+
+Resolved Grill Log: a call argument lowered from a local move is a transferred
+argument; its slot is the moved temporary. [[NATIVE-OWNERSHIP]]

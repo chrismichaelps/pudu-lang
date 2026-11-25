@@ -28,6 +28,12 @@ site, so a refusal through a value names the call made through it.
 An existing group remains owned by its original map. Appending a value has
 the same copy-on-write boundary as any other array update.
 
+Resolved Grill Log: an add whose key and pair cannot hold a function lowers to
+one keyed MultiMap add over the record, key and value, in that order.
+[[Backend Emit Multi Map]] updates in place what the program holds alone. A key
+or pair that may hold a function keeps the step-by-step form, which checks
+orderability first.
+
 ## Referenced by
 
 [[Compiler Lower Store]] · [[Native Indexed Stores]]

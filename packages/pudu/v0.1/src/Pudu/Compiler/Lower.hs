@@ -50,6 +50,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), ForeignTarget (..), Instance (..), LowerContext (..), LowerState (..), ModuleScope (..)
   , callableTemplateLayout, emptyContext, inModule, startFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
+import Pudu.Compiler.Lower.TailMove (moveTailReads)
 import Pudu.Core
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -498,7 +499,7 @@ lowerRooted library entryName programModules@(rootModule : _)
                 , functionBody <- lowered
                 , coreFunctionName functionBody == key
                 , CoreFunctionType [] answer <- [coreFunctionResult functionBody] ]
-              functions = sortOn tableIndex (function : lowered <> Map.elems wrappers)
+              functions = map moveTailReads (sortOn tableIndex (function : lowered <> Map.elems wrappers))
            in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))

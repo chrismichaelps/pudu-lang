@@ -4,7 +4,7 @@ module Pudu.Compiler.ProgramSpec
   ) where
 
 import Pudu.Compiler.Program.AttributeSpec (testDeclaredAttributes)
-import Pudu.Compiler.Program.EvalSpec (testLinkedNames, testProgramEvaluation)
+import Pudu.Compiler.Program.EvalSpec (programEvaluationProperties, testLinkedNames)
 import Pudu.Compiler.Program.ForeignSpec
   ( testForeignHandles
   , testForeignOwnershipStore
@@ -83,7 +83,6 @@ programProperties = reflectionProgramProperties <> viewProperties <>
   , ("a type named like a built-in keeps its methods apart from the built-in's", testBuiltinOwnerNames)
   , ("an implementation inherits the defaults of a trait it imports", testImportedDefaults)
   , ("ranges, slices, and destructuring refuse what they cannot mean", testLanguageRefusals)
-  , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("linking publishes what a module declared, not what it imported", testLinkedNames)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
   , ("a type-only name cannot masquerade as a runtime value", testTypeNamesAreNotValues)
@@ -92,3 +91,4 @@ programProperties = reflectionProgramProperties <> viewProperties <>
   , ("foreign teardown ends even while a native call is inside", testForeignTeardownEnds)
   , ("every attribute names a declaration of its kinds", testDeclaredAttributes)
   ]
+  <> programEvaluationProperties

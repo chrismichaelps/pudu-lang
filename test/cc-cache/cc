@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Content-addressed compiler cache for the test suite. Installed first on
+# PATH as cc, clang and gcc, it runs the real compiler of the same name once
+# per distinct compile and links the stored output for every repeat. A
+# repeat therefore also skips the first-launch scan macOS gives a new binary.
+#
+# The key is the compiler, its arguments, and the contents of every input
+# file and local include directory; the replay carries the compiler's exit
+# status, stdout and stderr exactly, since tests reject any diagnostic.
+set -u
+
+name=$(basename "$0")
+shim_dir=$(cd "$(dirname "$0")" && pwd)
+
+# The real compiler of this name: the first one on PATH outside this directory.
+real=""
+IFS=: read -r -a entries <<< "${PATH}"
+for entry in "${entries[@]}"; do
+  [ -z "$entry" ] && continue
+  [ "$(cd "$entry" 2>/dev/null && pwd)" = "$shim_dir" ] && continue
+  if [ -x "$entry/$name" ]; then real="$entry/$name"; break; fi
+done
+if [ -z "$real" ]; then
+  echo "cc-cache: no $name found on PATH" >&2
+  exit 127
+fi
+
+# Only a compile that writes an output file is cached.
+output=""
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "-o" ]; then output="$argument"; fi
+  previous="$argument"
+done
+if [ -z "$output" ]; then exec "$real" "$@"; fi
+
+if command -v sha256sum >/dev/null 2>&1; then digest() { sha256sum | cut -d' ' -f1; }
+else digest() { shasum -a 256 | cut -d' ' -f1; }; fi
+
+cache="${PUDU_CC_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/pudu-test-cc}"
+mkdir -p "$cache"
+
+key=$(
+  {
+    printf 'compiler %s %s\n' "$real" "$(stat -f %m "$real" 2>/dev/null || stat -c %Y "$real" 2>/dev/null)"
+    previous=""
+    for argument in "$@"; do
+      if [ "$previous" = "-o" ]; then printf 'output\n'
+      elif [ "$previous" = "-I" ] && [ -d "$argument" ]; then
+        printf 'include\n'
+        find "$argument" -maxdepth 1 -type f -name '*.h' -print0 | sort -z | xargs -0 cat 2>/dev/null | digest
+      elif [ -f "$argument" ]; then
+        printf 'file %s\n' "$(digest < "$argument")"
+        # Headers beside a source file are included without -I.
+        if [[ "$argument" == *.c || "$argument" == *.m ]]; then
+          find "$(dirname "$argument")" -maxdepth 1 -type f -name '*.h' -print0 | sort -z | xargs -0 cat 2>/dev/null | digest
+        fi
+      else printf 'arg %s\n' "$argument"
+      fi
+      previous="$argument"
+    done
+  } | digest
+)
+entry="$cache/$key"
+
+if [ -f "$entry/status" ]; then
+  status=$(cat "$entry/status")
+  if [ "$status" = 0 ] && [ -f "$entry/output" ]; then
+    rm -f "$output"
+    ln "$entry/output" "$output" 2>/dev/null || cp -p "$entry/output" "$output"
+  fi
+  cat "$entry/stdout"
+  cat "$entry/stderr" >&2
+  exit "$status"
+fi
+
+work=$(mktemp -d "$cache/.work.XXXXXX")
+"$real" "$@" > "$work/stdout" 2> "$work/stderr"
+status=$?
+echo "$status" > "$work/status"
+if [ "$status" = 0 ] && [ -f "$output" ]; then cp -p "$output" "$work/output"; fi
+# Another run may have stored the same compile meanwhile; either copy serves.
+mv "$work" "$entry" 2>/dev/null || rm -rf "$work"
+if [ "$status" = 0 ] && [ -f "$entry/output" ]; then
+  rm -f "$output"
+  ln "$entry/output" "$output" 2>/dev/null || cp -p "$entry/output" "$output"
+fi
+cat "$entry/stdout" 2>/dev/null || cat "$work/stdout"
+cat "$entry/stderr" >&2 2>/dev/null || cat "$work/stderr" >&2
+exit "$status"

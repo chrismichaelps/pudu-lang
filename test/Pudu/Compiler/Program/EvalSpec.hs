@@ -1,6 +1,7 @@
 {-| @Test.Compiler.Program.EvalSpec — standard library program evaluation orchestrator -}
 module Pudu.Compiler.Program.EvalSpec
   ( evalProperties
+  , programEvaluationProperties
   , testLinkedNames
   , testProgramEvaluation
   ) where
@@ -24,6 +25,16 @@ evalProperties =
 {-| A program's imports are linked before its entry point runs, so a call into
     an imported module finds the function it named — including one in the
     standard library, and including a helper that module keeps private. -}
+{-| The same evaluations as separate properties, so a parallel run spreads them. -}
+programEvaluationProperties :: [(String, IO Property)]
+programEvaluationProperties =
+  [ ("an imported module is linked into evaluation: data programs", testDataEvaluation)
+  , ("an imported module is linked into evaluation: protocol programs", testProtocolEvaluation)
+  , ("an imported module is linked into evaluation: service programs", testServiceEvaluation)
+  , ("an imported module is linked into evaluation: runtime programs", testRuntimeEvaluation)
+  , ("an imported module is linked into evaluation: compiled agreement", testCompiledAgreement)
+  ]
+
 testProgramEvaluation :: IO Property
 testProgramEvaluation = do
   dataProp <- testDataEvaluation

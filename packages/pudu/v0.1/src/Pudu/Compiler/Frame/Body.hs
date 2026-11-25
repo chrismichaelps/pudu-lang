@@ -15,7 +15,7 @@ import Pudu.Core
 import Data.Text (Text)
 import Pudu.Core.Frame
   ( FrameInstruction (..), FrameSlot, FrameSlot (frameSlotType), FrameTerminator (..)
-  , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..), scalarOperator )
+  , FrameUnaryOperator (..), FrameValue (..), FrameValueShape (..), scalarOperator, takenSlotName )
 import Pudu.Source (Span)
 
 lowerBlock :: CoreBlock -> Build Flow
@@ -287,7 +287,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
           Nothing -> pure Stopped
   CoreTakeLocal local -> do
     source <- readLocal at local
-    target <- freshSlot at "$taken" (coreLocalType local)
+    target <- freshSlot at takenSlotName (coreLocalType local)
     emit (FrameMove target source)
     pure (Completed (Just target))
   CoreOperatorFailure message operands -> do

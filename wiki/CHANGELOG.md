@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-24 — Native ownership
+
+- Run the property suite on every core with a content-addressed compile cache.
+  [[Test Parallel Runner]] · [[Test Compile Cache]]
+- Record the caller move and argument transfer design.
+  [[NATIVE-OWNERSHIP]]
+- Move the final read of a counted local in a function's tail.
+  [[Compiler Lower Tail Move]]
+- Add to a MultiMap held once in place.
+  [[Backend Emit Multi Map]] · [[Compiler Lower Multi Map]]
+
 ## 2026-11-24 — Native dispatch and lowering parity
 
 - Keep checked trait members with their trait on held receivers.

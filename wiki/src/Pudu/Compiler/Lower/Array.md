@@ -208,3 +208,7 @@ and callback before traversal.
 Resolved Grill Log: [[Compiler Lower Slice]] owns bracket key dispatch,
 including scalar reads. Array methods continue to use their own
 position semantics.
+
+Resolved Grill Log: the replacement receiver move also covers a function call
+that borrows the assigned local, when no other operand reads it; the call
+receives the local by move. [[NATIVE-OWNERSHIP]]

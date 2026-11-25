@@ -72,6 +72,8 @@ fastFunctions direct source = Set.intersection called (settle (Set.fromList (Map
   simple block = all instruction (frameBlockInstructions block) && terminatorShape (frameBlockTerminator block)
   instruction operation = case operation of
     FrameStore target value -> frameSlotType target == frameValueType value && valueShape value
+    -- Typed slots carry no counts, so a move is a plain copy.
+    FrameMove target moved -> frameSlotType target == frameSlotType moved && typedSlot (frameSlotType moved)
     _ -> False
   terminatorShape ending = case ending of
     FrameJump _ _ -> True
@@ -277,6 +279,8 @@ body identities state identity function = do
     FrameStore target value -> do
       (after, text) <- expression current value
       pure (line after ("  " <> storeInto (Just target) <> text <> ";"))
+    FrameMove target source ->
+      instruction current (FrameStore target (FrameValue (frameSlotSpan target) (frameSlotType source) (FrameRead source)))
     _ -> Left (FrameFault Nothing "an instruction outside the fast form")
   terminator current ending = case ending of
     FrameJump _ target -> pure (line current ("  goto " <> label target <> ";"))
@@ -303,7 +307,8 @@ body identities state identity function = do
 
 readInBlock :: FrameBlock -> [FrameSlot]
 readInBlock (FrameBlock _ operations ending) =
-  concat [operands (frameValueShape value) | FrameStore _ value <- operations] <> case ending of
+  concat [operands (frameValueShape value) | FrameStore _ value <- operations]
+    <> [source | FrameMove _ source <- operations] <> case ending of
     FrameBranch _ slot _ _ -> [slot]
     FrameReturn _ payload -> maybe [] pure payload
     FrameCall _ _ arguments _ _ -> arguments

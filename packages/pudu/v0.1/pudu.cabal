@@ -173,6 +173,7 @@ library
     Pudu.Backend.Emit.Export.Crossing
     Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Keyed
+    Pudu.Backend.Emit.MultiMap
     Pudu.Backend.Emit.Kernel
     Pudu.Backend.Emit.Range
     Pudu.Backend.Emit.Bytes
@@ -309,6 +310,7 @@ library
     Pudu.Compiler.Lower.Array
     Pudu.Compiler.Lower.ArrayLoop
     Pudu.Compiler.Lower.Sort
+    Pudu.Compiler.Lower.TailMove
     Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Convert
     Pudu.Compiler.Lower.Decimal
