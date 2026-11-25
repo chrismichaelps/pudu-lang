@@ -117,33 +117,66 @@ export fn banner(variant: Str, label: Str, title: Str, lead: Str, extra: Array[H
     ].concat(extra))
 }
 
-fn masthead(path: Str) -> H.Node {
+/// The masthead differs between pages only in which section is current, so
+/// each of its forms is rendered once, while the site is compiled.
+fn masthead(path: Str) -> H.Node { H.nothing().raw(MASTHEADS[section(path)]) }
+
+/// The masthead for each section, indexed as `section` answers: none, then
+/// each link of the navigation in order.
+const MASTHEADS: Array[Str] = mastheads()
+
+fn mastheads() -> Array[Str] {
+  var forms: Array[Str] = []
+  var current = 0
+  while current <= 7 {
+    forms = forms.push(Html.render(&mastheadFor(current).html()))
+    current = current + 1
+  }
+  forms
+}
+
+fn mastheadFor(current: Int) -> H.Node {
   H.header().class("masthead").holding([
       H.div().class("masthead-inner").holding([
           H.a().class("brand").href("/").holding([
               H.img().src(Constants.LOGO_PATH).alt("Pudu programming language").at("width", "168").at("height", "56")
             ]),
-          navigation(path, "top-nav desktop-nav"),
+          navigation(current, "top-nav desktop-nav"),
           H.tag("details").class("mobile-nav").holding([
               H.tag("summary").class("menu-toggle").at("aria-label", "Navigation menu").holding([
                   H.span().class("menu-icon").at("aria-hidden", "true").says("☰"),
                   H.span().class("skip").says("Menu")
                 ]),
-              navigation(path, "top-nav mobile-nav-links")
+              navigation(current, "top-nav mobile-nav-links")
             ])
         ])
     ])
 }
 
-fn navigation(path: Str, classes: Str) -> H.Node {
+/// Which navigation link a path belongs under, counted from 1, or 0 for none.
+fn section(path: Str) -> Int {
+  if isDocumentation(path) { return 1 }
+  if isSymbol(path) { return 2 }
+  if let Some(found) = SECTION_PATHS.get(path) { return found }
+  for entry in SECTION_PREFIXES { if path.startsWith(entry[0]) { return entry[1] } }
+  0
+}
+
+/// The paths that are a section's own page.
+const SECTION_PATHS: Map[Str, Int] = mapOf([("/modules", 2), ("/playground", 3), ("/packages", 4), ("/download", 5), ("/about", 6), ("/donate", 7)])
+
+/// The prefixes whose pages sit under a section.
+const SECTION_PREFIXES: Array[(Str, Int)] = [("/module/", 2), ("/playground/", 3), ("/packages/", 4), ("/@", 4)]
+
+fn navigation(current: Int, classes: Str) -> H.Node {
   H.nav().class(classes).label("Main navigation").holding([
-      navigationLink("/docs", "Docs", isDocumentation(path)),
-      navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || isSymbol(path)),
-      navigationLink("/playground", "Playground", path == "/playground" || path.startsWith("/playground/")),
-      navigationLink("/packages", "Packages", path == "/packages" || path.startsWith("/packages/") || path.startsWith("/@")),
-      navigationLink("/download", "Download", path == "/download"),
-      navigationLink("/about", "About", path == "/about"),
-      navigationLink("/donate", "Donate", path == "/donate")
+      navigationLink("/docs", "Docs", current == 1),
+      navigationLink("/modules", "API", current == 2),
+      navigationLink("/playground", "Playground", current == 3),
+      navigationLink("/packages", "Packages", current == 4),
+      navigationLink("/download", "Download", current == 5),
+      navigationLink("/about", "About", current == 6),
+      navigationLink("/donate", "Donate", current == 7)
     ])
 }
 
