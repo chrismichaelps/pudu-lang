@@ -354,7 +354,7 @@ export fn explainUnsafe(problem: &Unsafe) -> Str {
 /// The only thing here that produces text. It reads nothing outside the value
 /// it was given, so two renders of equal views are equal and a page can be
 /// compared in a test rather than matched against a pattern.
-export fn render(view: &Html) -> Str { renderChunks(view).join("") }
+export fn render(view: &Html) -> Str { htmlRender(view, false) }
 
 /// Buffered output fragments, in document order, without joining child subtrees.
 export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
@@ -434,7 +434,7 @@ fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
 }
 
 /// A whole document, with the declaration that says which one it is.
-export fn document(view: &Html) -> Str { appendRendered(view, ["<!DOCTYPE html>\n"]).join("") }
+export fn document(view: &Html) -> Str { htmlRender(view, true) }
 
 /// Text with the characters that would otherwise start markup written as
 /// themselves.

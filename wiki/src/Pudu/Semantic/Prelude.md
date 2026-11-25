@@ -263,3 +263,5 @@ synchronized. Existing text primitives and packed identities are unchanged.
 ## Joined scope retirement (#480)
 
 Register mutexClose as an ordinary primitive value name. Resolved Grill Log: naming owns neither signature nor lifecycle policy.
+
+Resolved Grill Log: `htmlRender` is a prelude name.

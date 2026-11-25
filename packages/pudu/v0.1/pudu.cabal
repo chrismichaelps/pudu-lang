@@ -200,6 +200,7 @@ library
     Pudu.Backend.Runtime.Kernel.Checksum
     Pudu.Backend.Runtime.Kernel.Column
     Pudu.Backend.Runtime.Kernel.Csv
+    Pudu.Backend.Runtime.Kernel.Html
     Pudu.Backend.Runtime.Kernel.Json
     Pudu.Backend.Runtime.Kernel.Mac
     Pudu.Backend.Runtime.Kernel.Natural
@@ -372,6 +373,7 @@ library
     Pudu.Eval.Call
     Pudu.Eval.Capture
     Pudu.Eval.Csv
+    Pudu.Eval.HtmlRender
     Pudu.Eval.Json
     Pudu.Eval.Binary
     Pudu.Eval.Xml

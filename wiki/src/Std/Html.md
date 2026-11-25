@@ -171,3 +171,5 @@ Resolved Grill Log:
 - **Q:** Change `renderChunks` fragment boundaries to share the bounded implementation? **A:** No;
   those boundaries are public and consumed by preparation. `Std.Html.Bounded.render` is additive
   and promises output and exact length, not identical chunk grouping.
+
+Resolved Grill Log: `render` and `document` call the `htmlRender` builtin, which renders natively in one pass; `renderChunks` keeps its pieces for the server rendering and build modules, and joining them gives the same text.

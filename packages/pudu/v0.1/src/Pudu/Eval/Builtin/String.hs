@@ -7,6 +7,7 @@ module Pudu.Eval.Builtin.String
   , drop1Text
   , prepareStringMethodFast
   , dropText
+  , escapeHtmlText
   , indexOfText
   ) where
 

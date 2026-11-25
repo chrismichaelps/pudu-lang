@@ -14,6 +14,12 @@ tags: [changelog]
   `isToken`, `parseRequestLine` and `Std.Http.methodFrom` no longer rebuild their tables.
   [[Backend Emit Frame Value]] refs #999
 - Add a parity test that a kept aggregate constant is the same at every read and that updates copy it. refs #999
+## 2026-11-25 — Native HTML rendering
+
+- Render a page in one native pass with escaping fused into the copy.
+  [[Native HTML Kernel]] · [[Eval Html Render]]
+- Std.Html render and document call the htmlRender kernel; the RenderBench workload (2000 medium + 100 heavy pages) dropped from 28.4 s to 0.07 s natively, with output identical to the interpreter.
+- The HTML kernel writes into the text it returns and sizes its buffer from the last render on the thread; RenderBench 0.07 s → 0.05 s.
 
 ## 2026-11-24 — Native ownership
 

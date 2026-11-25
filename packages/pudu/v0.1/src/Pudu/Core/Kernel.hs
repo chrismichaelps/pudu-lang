@@ -75,6 +75,9 @@ data CoreKernelName
       Fractional, Text, List, Object. -}
   | KernelJsonDecode
   | KernelJsonEncode
+  {-| The integers are the `Std.Html.Html` variants' indexes: Element, Text,
+      Fragment, Trusted. -}
+  | KernelHtmlRender
   {-| The integers are the `Std.Binary.Node` variants' indexes: Whole, Real,
       Flag, Text, Raw, Reals, Items, Absent, Present, Fields, Choice, Record,
       Picked. -}

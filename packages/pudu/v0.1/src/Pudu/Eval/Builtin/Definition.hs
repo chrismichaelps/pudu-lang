@@ -223,6 +223,7 @@ data Builtin
   | CsvRecordsBuiltin
   | JsonDecodeBuiltin
   | JsonEncodeBuiltin
+  | HtmlRenderBuiltin
   | BinaryEncodeBuiltin
   | BinaryDecodeBuiltin
   | XmlDecodeBuiltin
@@ -462,6 +463,7 @@ builtinName value = case value of
   CsvRecordsBuiltin -> "csvRecords"
   JsonDecodeBuiltin -> "jsonDecode"
   JsonEncodeBuiltin -> "jsonEncode"
+  HtmlRenderBuiltin -> "htmlRender"
   BinaryEncodeBuiltin -> "binaryEncode"
   BinaryDecodeBuiltin -> "binaryDecode"
   XmlDecodeBuiltin -> "xmlDecode"

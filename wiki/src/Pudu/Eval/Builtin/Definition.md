@@ -234,3 +234,5 @@ synchronized. Existing text primitives and packed identities are unchanged.
 ## Joined scope retirement (#480)
 
 Append MutexCloseBuiltin after all existing tags with the single source name mutexClose. Resolved Grill Log: preserve packed tag identities and keep lifecycle execution in the concurrency coordinator.
+
+Resolved Grill Log: `HtmlRenderBuiltin` is named `htmlRender`.

@@ -48,3 +48,5 @@ The kernel's host primitives are split into [[Compiler Lower Kernel Host]]
 `KernelHost` answers direct calls through the same validated signature
 machinery as the other kernels. Resolved Grill Log: the split keeps each
 module focused; no host name is claimed by another family.
+
+Resolved Grill Log: `htmlRender` resolves the program's own `Std.Html.Html` layout; a page type with other variants is not lowered.

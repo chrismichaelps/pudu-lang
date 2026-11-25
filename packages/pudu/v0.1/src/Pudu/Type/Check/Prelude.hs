@@ -351,6 +351,15 @@ declareBuiltinConstructors = do
             (NominalType "Str" [])
         )
     )
+  {-| A `Std.Html` page as text, a document's with its doctype line; see
+      `Pudu.Eval.HtmlRender`. -}
+  bindName "htmlRender"
+    ( monotype
+        ( FunctionTypeValue False
+            [ReferenceTypeValue False (NominalType stdHtmlId []), boolType]
+            (NominalType "Str" [])
+        )
+    )
   {-| A `Std.Binary` node tree as bytes; see `Pudu.Eval.Binary`. -}
   bindName "binaryEncode"
     (monotype (FunctionTypeValue False [ReferenceTypeValue False (NominalType stdBinaryNodeId [])] (NominalType "Bytes" [])))
@@ -384,6 +393,7 @@ declareBuiltinConstructors = do
   stdMultiMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["MultiMap"]))) "MultiMap"
   multiMapType = NominalType stdMultiMapId [RigidType "K", RigidType "V"]
   stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
+  stdHtmlId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Html"]))) "Html"
   stdBinaryNodeId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Binary"]))) "Node"
   stdXmlTagId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Xml"]))) "Tag"
   flatMapType v = NominalType stdFlatMapId [v]
