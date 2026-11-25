@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Native HTML rendering
+
+- Render a page in one native pass with escaping fused into the copy.
+  [[Native HTML Kernel]] · [[Eval Html Render]]
+- Std.Html render and document call the htmlRender kernel; the RenderBench workload (2000 medium + 100 heavy pages) dropped from 28.4 s to 0.07 s natively, with output identical to the interpreter.
+
 ## 2026-11-24 — Native ownership
 
 - Run the property suite on every core with a content-addressed compile cache.

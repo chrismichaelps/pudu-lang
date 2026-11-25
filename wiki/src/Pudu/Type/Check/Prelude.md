@@ -316,3 +316,5 @@ synchronized. Existing text primitives and packed identities are unchanged.
 ## Joined scope retirement (#480)
 
 Declare mutexClose(Int) -> Result[(), Str] alongside synchronization effects. Resolved Grill Log: preserve existing schemes; the closed signature table has a bounded exception at 514 lines with no lifecycle logic.
+
+Resolved Grill Log: `htmlRender` takes a reference to a `Std.Html.Html` page and a Bool, and answers Str.

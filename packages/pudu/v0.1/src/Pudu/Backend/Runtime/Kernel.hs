@@ -13,6 +13,7 @@ import Pudu.Backend.Runtime.Kernel.Bytes (bytesKernelParts)
 import Pudu.Backend.Runtime.Kernel.Checksum (checksumKernelParts)
 import Pudu.Backend.Runtime.Kernel.Column (columnKernelParts)
 import Pudu.Backend.Runtime.Kernel.Csv (csvKernelParts)
+import Pudu.Backend.Runtime.Kernel.Html (htmlKernelParts)
 import Pudu.Backend.Runtime.Kernel.Json (jsonKernelParts)
 import Pudu.Backend.Runtime.Kernel.Mac (macKernelParts)
 import Pudu.Backend.Runtime.Kernel.Natural (naturalKernelParts)
@@ -30,7 +31,7 @@ families :: [(Text, [Text], [Text])]
 families = bytesKernelParts <> bufferKernelParts <> columnKernelParts <> sortKernelParts <> swissKernelParts
   <> sha2KernelParts <> sha3KernelParts <> blake2KernelParts <> macKernelParts <> checksumKernelParts
   <> sealKernelParts <> naturalKernelParts <> verifyKernelParts <> audioKernelParts
-  <> jsonKernelParts <> xmlKernelParts <> csvKernelParts <> hostRuntimeParts <> binaryKernelParts
+  <> jsonKernelParts <> htmlKernelParts <> xmlKernelParts <> csvKernelParts <> hostRuntimeParts <> binaryKernelParts
 
 kernelRuntimeParts :: [(Text, [Text])]
 kernelRuntimeParts = [(name, body) | (name, _, body) <- families]

@@ -31,6 +31,7 @@ import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Eval.Csv as Csv
 import qualified Pudu.Eval.Binary as Binary
+import Pudu.Eval.HtmlRender (callHtmlRender)
 import qualified Pudu.Eval.Json as Json
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
 import qualified Pudu.Eval.Xml as Xml
@@ -269,6 +270,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (CsvRecordsBuiltin, values) -> Csv.callCsvRecords spanValue values
   (JsonDecodeBuiltin, values) -> Json.callJsonDecode spanValue values
   (JsonEncodeBuiltin, values) -> Json.callJsonEncode spanValue values
+  (HtmlRenderBuiltin, values) -> callHtmlRender spanValue values
   (BinaryEncodeBuiltin, values) -> Binary.callBinaryEncode spanValue values
   (BinaryDecodeBuiltin, values) -> Binary.callBinaryDecode spanValue values
   (XmlDecodeBuiltin, values) -> Xml.callXmlDecode spanValue values
@@ -364,6 +366,7 @@ isHashingBuiltin builtin = case builtin of
   CsvRecordsBuiltin -> True
   JsonDecodeBuiltin -> True
   JsonEncodeBuiltin -> True
+  HtmlRenderBuiltin -> True
   BinaryEncodeBuiltin -> True
   BinaryDecodeBuiltin -> True
   XmlDecodeBuiltin -> True

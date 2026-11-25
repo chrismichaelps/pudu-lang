@@ -132,6 +132,7 @@ kernelPrimitive :: LowerTypes -> Text -> Maybe Primitive
 kernelPrimitive types name = case name of
   "jsonDecode" -> (\tags -> Primitive [CoreTextType] (option json) [] (Boxed (Call KernelJsonDecode tags [0]))) <$> jsonTags
   "jsonEncode" -> (\tags -> Primitive [json, CoreBoolType] CoreTextType [] (Plain (Call KernelJsonEncode tags [0, 1]))) <$> jsonTags
+  "htmlRender" -> (\tags -> Primitive [html, CoreBoolType] CoreTextType [] (Plain (Call KernelHtmlRender tags [0, 1]))) <$> htmlTags
   "xmlDecode" -> (\places -> Primitive [CoreTextType] (option tag) [] (Boxed (Call KernelXmlDecode places [0]))) <$> xmlPlaces
   "binaryEncode" -> (\tags -> Primitive [binary] CoreBytesType []
     (Required (Call KernelBinaryEncode tags [0]) "E7001" "binaryEncode expects a Std.Binary node")) <$> binaryTags
@@ -147,6 +148,10 @@ kernelPrimitive types name = case name of
     , ("Raw", [CoreBytesType]), ("Reals", [CoreBytesType]), ("Items", [CoreArrayType binary]), ("Absent", []), ("Present", [binary])
     , ("Fields", [named]), ("Choice", [CoreTextType, named]), ("Record", [keyed]), ("Picked", [CoreTextType, keyed]) ]
   json = CoreSumType "Std.Json.Json" []
+  html = CoreSumType "Std.Html.Html" []
+  htmlTags = sumVariants types html >>= indexes
+    [ ("Element", [CoreTextType, pairs, CoreArrayType html]), ("Text", [CoreTextType])
+    , ("Fragment", [CoreArrayType html]), ("Trusted", [CoreTextType]) ]
   tag = CoreRecordType "Std.Xml.Tag" []
   node = CoreSumType "Std.Xml.Node" []
   pairs = CoreArrayType (CoreTupleType [CoreTextType, CoreTextType])
