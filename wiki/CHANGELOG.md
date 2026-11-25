@@ -9,6 +9,9 @@ tags: [changelog]
 
 - Large native programs compile as concurrent C units linked with ThinLTO; the website's native build went from about 92–104 s to about 50 s with identical pages. refs #1003
 
+## 2026-11-25 — ASCII text case
+
+- Native `toUpper` / `toLower` map ASCII text through a 128-entry table and return unchanged ASCII text without allocating; a loop of ASCII case calls went from 1.58 s to 0.19 s. refs #1001
 ## 2026-11-25 — Always-fitting conversions
 
 - Native `convertInteger` into a kind that holds every value of the operand's kind widens directly, and `Option.unwrapOr` over such a conversion builds no option and makes no call. refs #1004
