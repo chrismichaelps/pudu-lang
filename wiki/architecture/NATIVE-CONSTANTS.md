@@ -86,6 +86,8 @@ initializer runs at runtime. _Rejected:_ re-evaluating the initializer
 behind a cache, which would repeat compile-time work the folding already
 settled.
 
+Each kept cell holds its reference until the program ends. The first keep registers `pudu_constants_release` with `atexit` once, through `pudu_constants_arrange`, and that function releases every built cell by its type, so a kept value is never counted as memory the program lost and the allocation-balance tests stay exact. `emitConstants` records each cell's name and type, and `FrameConstantReady` carries the constant's type, so whichever read registers a cell first records the type its release needs. `constantRelease` in `Backend/Emit/Frame.hs` is rendered after the aggregate helpers because it calls their drop helpers. The full property suite passes 903 of 903.
+
 ## Validation
 
 Use real compiled products, including imported constants, aliases, prior

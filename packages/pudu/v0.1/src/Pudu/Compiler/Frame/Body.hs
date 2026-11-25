@@ -157,7 +157,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreConstant name initial -> do
     ready <- freshSlot at "$constant" CoreBoolType
-    emit (FrameStore ready (FrameValue at CoreBoolType (FrameConstantReady name)))
+    emit (FrameStore ready (FrameValue at CoreBoolType (FrameConstantReady name kind)))
     hit <- freshLabel
     miss <- freshLabel
     join <- freshLabel

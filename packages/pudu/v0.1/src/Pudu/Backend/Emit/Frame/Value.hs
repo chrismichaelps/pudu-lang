@@ -97,20 +97,20 @@ frameValue state value = case frameValueShape value of
         (Big, Big) -> plain ("pudu_big_normal(" <> source <> ")") ["big_normal"]
       _ -> refused "a conversion from a value that is not an integer"
   FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
-  FrameConstantReady name ->
-    let (after, index) = constantCell name state
+  FrameConstantReady name kind ->
+    let (after, index) = constantCell name kind state
      in Right (after, "pudu_constants_ready[" <> textOfInt index <> "]", Set.empty)
   FrameConstantRead name -> do
     member <- maybe (refused "a kept constant without a cell layout") Right (cellMember (frameValueType value))
-    let (after, index) = constantCell name state
+    let (after, index) = constantCell name (frameValueType value) state
         (code, parts) = retained (frameValueType value) ("pudu_constants[" <> textOfInt index <> "]." <> member)
     Right (after, code, Set.fromList parts)
   FrameConstantKeep name source -> do
     text <- slotText source
-    let (after, index) = constantCell name state
+    let (after, index) = constantCell name (frameSlotType source) state
         (code, parts) = retained (frameSlotType source) text
         cell = "pudu_constants[" <> textOfInt index <> "]"
-    Right (after, "(" <> cell <> "." <> cellName (frameSlotType source) <> " = " <> code <> ", pudu_constants_ready[" <> textOfInt index <> "] = 1, 0)", Set.fromList parts)
+    Right (after, "(" <> cell <> "." <> cellName (frameSlotType source) <> " = " <> code <> ", pudu_constants_ready[" <> textOfInt index <> "] = 1, pudu_constants_arrange(), 0)", Set.fromList ("memory_failure" : parts))
   FrameAggregate members -> do
     operands <- traverse slotText members
     let kind = frameValueType value

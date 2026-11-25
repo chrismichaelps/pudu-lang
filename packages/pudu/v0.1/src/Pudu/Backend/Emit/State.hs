@@ -56,8 +56,9 @@ data EmitState = EmitState
   , emitFunctionIds :: !(Map.Map Text Int)
   {-| Each byte literal's data, newest first; its index names its table. -}
   , emitByteData :: ![ByteString.ByteString]
-  {-| Each kept module constant's name, newest first; its index names its cell. -}
-  , emitConstants :: ![Text]
+  {-| Each kept module constant's name and type, newest first; its index
+      names its cell. -}
+  , emitConstants :: ![(Text, CoreType)]
   }
 
 emptyEmitState :: [Source] -> EmitState
@@ -228,24 +229,31 @@ byteData bytes state = case List.elemIndex bytes oldest of
     portable length limit; an empty literal keeps one unread byte because C
     has no empty arrays. -}
 {-| The cell a kept constant lives in, the same for every read of its name. -}
-constantCell :: Text -> EmitState -> (EmitState, Int)
-constantCell name state = case List.elemIndex name oldest of
+constantCell :: Text -> CoreType -> EmitState -> (EmitState, Int)
+constantCell name kind state = case List.elemIndex name (map fst oldest) of
   Just index -> (state, index)
-  Nothing -> (state{emitConstants = name : emitConstants state}, length oldest)
+  Nothing -> (state{emitConstants = (name, kind) : emitConstants state}, length oldest)
  where
   oldest = reverse (emitConstants state)
 
 {-| The kept constants' cells and whether each is built. A cell holds one
-    reference for the rest of the run, so its value is never held once and
-    an update in place copies it first. Threads take turns through the run
-    gate, so a cell is written once and never raced. -}
-renderConstantCells :: [Text] -> [Text]
+    reference until the program ends, so its value is never held once and an
+    update in place copies it first. Threads take turns through the run gate,
+    so a cell is written once and never raced. -}
+renderConstantCells :: [(Text, CoreType)] -> [Text]
 renderConstantCells [] = []
-renderConstantCells names =
+renderConstantCells cells =
   [ "static pudu_cell pudu_constants[" <> count <> "];"
-  , "static unsigned char pudu_constants_ready[" <> count <> "];" ]
+  , "static unsigned char pudu_constants_ready[" <> count <> "];"
+  , "static void pudu_constants_release(void);"
+  , "/* The first keep arranges for every kept cell to be released at exit. */"
+  , "static void pudu_constants_arrange(void) {"
+  , "  static unsigned char arranged;"
+  , "  if (!arranged && atexit(pudu_constants_release) != 0) pudu_memory_failure();"
+  , "  arranged = 1;"
+  , "}" ]
  where
-  count = Text.pack (show (length names))
+  count = Text.pack (show (length cells))
 
 renderByteData :: [ByteString.ByteString] -> [Text]
 renderByteData tables = concat (zipWith table [0 :: Int ..] tables)

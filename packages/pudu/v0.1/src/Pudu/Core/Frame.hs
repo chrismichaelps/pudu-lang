@@ -140,8 +140,8 @@ data FrameValueShape
   {-| The array's item at the index, or E7004 at the value's span. -}
   | FrameIndex !FrameSlot !FrameSlot
   | FrameRead !FrameSlot
-  {-| Whether the kept constant of this name is built yet. -}
-  | FrameConstantReady !Text
+  {-| Whether the kept constant of this name and type is built yet. -}
+  | FrameConstantReady !Text !CoreType
   {-| The kept constant of this name, once it is built. -}
   | FrameConstantRead !Text
   {-| Keeps the slot's value as the constant of this name; the slot keeps it too. -}

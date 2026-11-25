@@ -99,3 +99,5 @@ overlong literal.
 - `emitConstants` registry: `constantCell` gives the same index for every read of a name; `renderConstantCells` writes file-scope `pudu_constants[]` cells and `pudu_constants_ready[]` flags.
 
 Resolved Grill Log (#999): **Q:** Why key cells by name rather than by read site? **A:** Every read of one constant must reach the same cell so it holds one value for the run. _Rejected:_ a cell per read site, which would build and hold a separate copy at each.
+
+Each kept cell holds its reference until the program ends. The first keep registers `pudu_constants_release` with `atexit` once, through `pudu_constants_arrange`, and that function releases every built cell by its type, so a kept value is never counted as memory the program lost and the allocation-balance tests stay exact. `emitConstants` records each cell's name and type, and `FrameConstantReady` carries the constant's type, so whichever read registers a cell first records the type its release needs. `constantRelease` in `Backend/Emit/Frame.hs` is rendered after the aggregate helpers because it calls their drop helpers. The full property suite passes 903 of 903.

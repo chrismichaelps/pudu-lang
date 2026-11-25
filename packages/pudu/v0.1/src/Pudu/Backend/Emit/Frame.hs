@@ -180,7 +180,7 @@ emitFrameUnit form version sources logical = do
   pure $ EmittedUnit
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> renderConstantCells (reverse (emitConstants emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
+    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> renderConstantCells (reverse (emitConstants emitted)) <> aggregates <> ownership <> constantRelease (reverse (emitConstants emitted)) <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) (startupCells entry)
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
@@ -328,3 +328,13 @@ ownershipSwitch text big decimal kinds =
   present (CoreIntegerType integer) = big && isBigInteger integer
   present CoreDecimalType = decimal
   present _ = True
+
+{-| Releases each kept constant that was built; registered at its first keep
+    so a kept value is not mistaken for one the program lost. -}
+constantRelease :: [(Text, CoreType)] -> [Text]
+constantRelease [] = []
+constantRelease cells =
+  ["static void pudu_constants_release(void) {"]
+    <> [ "  if (pudu_constants_ready[" <> textOfInt index <> "]) { " <> released kind ("pudu_constants[" <> textOfInt index <> "]." <> cellName kind) <> " pudu_constants_ready[" <> textOfInt index <> "] = 0; }"
+       | (index, (_, kind)) <- zip [0 :: Int ..] cells ]
+    <> ["}", ""]
