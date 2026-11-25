@@ -1,18 +1,19 @@
 {-| @Pudu.Compiler.Lower.Convert — `convertInteger[T](value)`. The value runs
     into a local, then a fit test picks `Some` of the converted value or
     `None`, as `callConvertInteger` answers. -}
-module Pudu.Compiler.Lower.Convert (lowerConvertInteger, lowerCharFromCode, charFromCodeArguments) where
+module Pudu.Compiler.Lower.Convert (lowerConvertInteger, lowerFittingUnwrap, lowerCharFromCode, charFromCodeArguments) where
 
 import Pudu.Compiler.Lower.Arguments
   ( ArgumentBlame (..), ArgumentSlot (IntegerSlot), argumentFailure, argumentFailureWith
   , callWithRuntimeArguments, clampedPosition, collectArguments
   )
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
-import Pudu.IntegerLiteral (IntegerKind (..))
+import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, lookupLocal, refused, resolveFunction)
+import Pudu.IntegerLiteral (IntegerKind (..), integerKindBounds)
 import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
-import Pudu.Frontend.Syntax (Expression, Located (..))
+import Pudu.Frontend.Syntax (Expression (..), Located (..))
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -30,6 +31,8 @@ lowerConvertInteger lower state at arguments = case (typeForSpan (contextTypes (
   select option target kind current core
     | Just chosen <- mapRuntimeChoice current at option core
         (\ready held -> fmap (fmap fst) (select option target kind ready held)) = chosen
+    | CoreIntegerType source <- coreExpressionType core, fitsWithin source kind =
+        (current, Just (expression option (CoreConstruct "Some" [("0", expression target (CoreIntegerConvert kind core))]), option))
     | CoreIntegerType _ <- coreExpressionType core =
         let (withHeld, held) = bindLocal current "" (coreExpressionType core)
             value = expression (coreExpressionType core) (CoreReadLocal held)
@@ -44,6 +47,40 @@ lowerConvertInteger lower state at arguments = case (typeForSpan (contextTypes (
               (expression CoreTextType (CoreRuntimeKind core)))
             failed = argumentFailureWith AtInvocation at "E7012" Nothing message
          in (current, Just (failed, CoreNeverType))
+
+{-| Whether every value of the first kind is a value of the second. An exact
+    integer is held without a bound, so it is never known to fit. -}
+fitsWithin :: IntegerKind -> IntegerKind -> Bool
+fitsWithin ExactIntKind _ = False
+fitsWithin source target = case (integerKindBounds source, integerKindBounds target) of
+  (_, Nothing) -> True
+  (Nothing, Just _) -> False
+  (Just (low, high), Just (floor', ceiling')) -> low >= floor' && high <= ceiling'
+
+{-| `Option.unwrapOr(convertInteger[T](value), fallback)` where every value
+    of the operand's kind is a `T`: the operand, then the fallback, run in
+    order, and the answer is the widened operand, with no option between. -}
+lowerFittingUnwrap :: LowerExpression -> LowerState -> Span -> [Located Expression] -> Maybe (LowerState, Maybe (CoreExpression, CoreType))
+lowerFittingUnwrap lower state at arguments = case arguments of
+  [Located _ (CallExpression (Located _ (TypeApplication (Located _ (NameExpression ("convertInteger" :| []))) _)) [operand@(Located operandAt _)]), fallback]
+    | Nothing <- lookupLocal state "convertInteger"
+    , Nothing <- resolveFunction state ["convertInteger"]
+    , Just target@(CoreIntegerType kind) <- typeForSpan types at
+    , Just (CoreIntegerType source) <- typeForSpan types operandAt
+    , fitsWithin source kind -> Just $ case lower state operand of
+        (after, Nothing) -> refused after
+        (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+        (after, Just (core, kind')) -> case lower after fallback of
+          (afterFallback, Nothing) -> refused afterFallback
+          (afterFallback, Just (fallbackCore, _)) ->
+            let (withHeld, held) = bindLocal afterFallback "" kind'
+                value = CoreExpression at kind' (CoreReadLocal held)
+                widened = CoreExpression at target (CoreIntegerConvert kind value)
+             in (withHeld, Just (CoreExpression at target (CoreBlockValue (CoreBlock
+                  [CoreStatement at (CoreDeclare held core), CoreStatement at (CoreEvaluate fallbackCore)] (Just widened))), target))
+  _ -> Nothing
+ where
+  types = contextTypes (lowerContext state)
 
 {-| The scalar range check is shared by direct and stored calls. -}
 lowerCharFromCode :: LowerExpression -> LowerState -> Span -> [Located Expression] -> (LowerState, Maybe (CoreExpression, CoreType))
