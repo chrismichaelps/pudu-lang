@@ -30,6 +30,12 @@ No committed generated tables and no Unicode data files: the oracle is the
 library the interpreter runs. No locale and no libc `towupper`. No context
 rules, because text 2.1.4 has none for these functions.
 
+## ASCII fast path (#1001)
+
+- `pudu_text_case` first scans the text for an all-ASCII run. An all-ASCII text maps byte for byte through a 128-entry table (`pudu_ascii_upper` / `pudu_ascii_lower`), and one the mapping leaves unchanged is returned as the same text with its owner retained, so no allocation is made. Any other text keeps the scalar-by-scalar case table path.
+- `asciiTable` builds the 128-entry tables from the same linked text library the interpreter calls, and stops the build if any ASCII scalar's image is not exactly one ASCII scalar.
+- `text_case_map` now also needs `text_retain`.
+
 ## Grill Log
 
 - **Q:** Why not generate from a Unicode release? **A:** The interpreter uses
@@ -45,6 +51,8 @@ rules, because text 2.1.4 has none for these functions.
   [[Backend Text Case Tests]] checks this on the linked library with every
   scalar in one string plus final-sigma and dotted-I samples, and checks the
   native tables against Data.Text for every scalar.
+
+**Q:** Why not search the case table for ASCII? **A:** Methods and header names are ASCII and usually already in the asked case; two table searches per byte and an allocation per call made case mapping the largest piece of program code in the server profile. The table path is unchanged for everything else, so output stays identical to the interpreter. A loop of ASCII toUpper/toLower calls went from 1.58 s to 0.19 s.
 
 ## Referenced by
 
