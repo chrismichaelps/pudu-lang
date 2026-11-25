@@ -258,6 +258,10 @@ data CoreExpressionShape
   {-| Operands finish in order before E7001; this expression never returns. -}
   | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
+  {-| A module constant's folded value, built the first time it is read and
+      kept for the rest of the run. The text names the constant and its type;
+      every read of one name is the same value. -}
+  | CoreConstant !Text !CoreExpression
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
   | CoreLoopValue !CoreLoopId !CoreBlock

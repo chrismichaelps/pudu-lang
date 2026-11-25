@@ -72,5 +72,8 @@ valueSlots slot value = (\shape -> value{frameValueShape = shape}) <$> case fram
   FrameArrayMethod method receiver arguments -> FrameArrayMethod method <$> slot receiver <*> traverse slot arguments
   FrameIndex source index -> FrameIndex <$> slot source <*> slot index
   FrameRead source -> FrameRead <$> slot source
+  FrameConstantReady name -> pure (FrameConstantReady name)
+  FrameConstantRead name -> pure (FrameConstantRead name)
+  FrameConstantKeep name source -> FrameConstantKeep name <$> slot source
   FrameUnary operator source -> FrameUnary operator <$> slot source
   FrameBinary operator left right -> FrameBinary operator <$> slot left <*> slot right

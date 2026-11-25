@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Kept native constants
+
+- Build boxed folded constants once per run and keep them in a shared cell,
+  so every read of one constant is the same value and is not rebuilt.
+  [[Compiler Lower Constant]] · [[Compiler Frame Body]] · [[Backend Emit State]] refs #999
+- Cut a typical browser request-head parse from 21.6 µs to 8.8 µs natively, as
+  `isToken`, `parseRequestLine` and `Std.Http.methodFrom` no longer rebuild their tables.
+  [[Backend Emit Frame Value]] refs #999
+- Add a parity test that a kept aggregate constant is the same at every read and that updates copy it. refs #999
+
 ## 2026-11-24 — Native ownership
 
 - Run the property suite on every core with a content-addressed compile cache.
@@ -15,7 +25,6 @@ tags: [changelog]
   [[Compiler Lower Tail Move]]
 - Add to a MultiMap held once in place.
   [[Backend Emit Multi Map]] · [[Compiler Lower Multi Map]]
-
 ## 2026-11-24 — Native dispatch and lowering parity
 
 - Keep checked trait members with their trait on held receivers.

@@ -9,7 +9,7 @@ import qualified Data.Text as Text
 import Numeric (showHex)
 import qualified Data.Map.Strict as Map
 import Pudu.Backend.Emit.State
-  ( EmitState (..), byteData, cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
+  ( EmitState (..), byteData, constantCell, cString, cStringBytes, divideByZeroSite, failureSite, helpedFailureSite, operatorFailureSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Cell (callbackTokenText, isDynamicBox, memberDisplay, memberRuntimeKind)
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
@@ -97,6 +97,20 @@ frameValue state value = case frameValueShape value of
         (Big, Big) -> plain ("pudu_big_normal(" <> source <> ")") ["big_normal"]
       _ -> refused "a conversion from a value that is not an integer"
   FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
+  FrameConstantReady name ->
+    let (after, index) = constantCell name state
+     in Right (after, "pudu_constants_ready[" <> textOfInt index <> "]", Set.empty)
+  FrameConstantRead name -> do
+    member <- maybe (refused "a kept constant without a cell layout") Right (cellMember (frameValueType value))
+    let (after, index) = constantCell name state
+        (code, parts) = retained (frameValueType value) ("pudu_constants[" <> textOfInt index <> "]." <> member)
+    Right (after, code, Set.fromList parts)
+  FrameConstantKeep name source -> do
+    text <- slotText source
+    let (after, index) = constantCell name state
+        (code, parts) = retained (frameSlotType source) text
+        cell = "pudu_constants[" <> textOfInt index <> "]"
+    Right (after, "(" <> cell <> "." <> cellName (frameSlotType source) <> " = " <> code <> ", pudu_constants_ready[" <> textOfInt index <> "] = 1, 0)", Set.fromList parts)
   FrameAggregate members -> do
     operands <- traverse slotText members
     let kind = frameValueType value

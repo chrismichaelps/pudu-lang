@@ -2,7 +2,7 @@
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
   ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt, profileLabel
-  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, helpedFailureSite, textFailureSite, renderSites, byteData, renderByteData, cString, cStringBytes
+  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, helpedFailureSite, textFailureSite, renderSites, byteData, renderByteData, constantCell, renderConstantCells, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
@@ -56,6 +56,8 @@ data EmitState = EmitState
   , emitFunctionIds :: !(Map.Map Text Int)
   {-| Each byte literal's data, newest first; its index names its table. -}
   , emitByteData :: ![ByteString.ByteString]
+  {-| Each kept module constant's name, newest first; its index names its cell. -}
+  , emitConstants :: ![Text]
   }
 
 emptyEmitState :: [Source] -> EmitState
@@ -73,6 +75,7 @@ emptyEmitState sources =
     , emitContinueTargets = Set.empty
     , emitFunctionIds = Map.empty
     , emitByteData = []
+    , emitConstants = []
     }
 
 line :: EmitState -> Text -> EmitState
@@ -224,6 +227,26 @@ byteData bytes state = case List.elemIndex bytes oldest of
     is an array initializer rather than a string literal, which has no
     portable length limit; an empty literal keeps one unread byte because C
     has no empty arrays. -}
+{-| The cell a kept constant lives in, the same for every read of its name. -}
+constantCell :: Text -> EmitState -> (EmitState, Int)
+constantCell name state = case List.elemIndex name oldest of
+  Just index -> (state, index)
+  Nothing -> (state{emitConstants = name : emitConstants state}, length oldest)
+ where
+  oldest = reverse (emitConstants state)
+
+{-| The kept constants' cells and whether each is built. A cell holds one
+    reference for the rest of the run, so its value is never held once and
+    an update in place copies it first. Threads take turns through the run
+    gate, so a cell is written once and never raced. -}
+renderConstantCells :: [Text] -> [Text]
+renderConstantCells [] = []
+renderConstantCells names =
+  [ "static pudu_cell pudu_constants[" <> count <> "];"
+  , "static unsigned char pudu_constants_ready[" <> count <> "];" ]
+ where
+  count = Text.pack (show (length names))
+
 renderByteData :: [ByteString.ByteString] -> [Text]
 renderByteData tables = concat (zipWith table [0 :: Int ..] tables)
  where

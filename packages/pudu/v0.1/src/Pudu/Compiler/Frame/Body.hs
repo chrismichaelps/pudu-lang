@@ -155,6 +155,28 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         | otherwise -> fault (Just at) "a field read with an incompatible result layout"
       Nothing -> fault (Just at) "a field read outside a record"
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
+  CoreConstant name initial -> do
+    ready <- freshSlot at "$constant" CoreBoolType
+    emit (FrameStore ready (FrameValue at CoreBoolType (FrameConstantReady name)))
+    hit <- freshLabel
+    miss <- freshLabel
+    join <- freshLabel
+    destination <- freshSlot at "$constant" kind
+    finish (FrameBranch at ready hit miss)
+    begin hit
+    emit (FrameStore destination (FrameValue at kind (FrameConstantRead name)))
+    finish (FrameJump Nothing join)
+    begin miss
+    built <- lowerExpression initial
+    case built of
+      Stopped -> pure ()
+      Completed payload -> do
+        moveValue at destination payload
+        keep <- freshSlot at "$constant" CoreUnitType
+        emit (FrameStore keep (FrameValue at CoreUnitType (FrameConstantKeep name destination)))
+        finish (FrameJump Nothing join)
+    begin join
+    pure (Completed (Just destination))
   CoreNegate operand -> unary FrameNegate operand
   CoreComplement operand -> unary FrameComplement operand
   CoreNot operand -> unary FrameNot operand

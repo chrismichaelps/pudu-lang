@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.State
   , CoreSignature (..), ForeignTarget (..), Head (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , MutableSite (MutableParameterSite, MutableReceiverSite), mutableSite, bindMutable, observeMutableLayout
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupDelegate, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
+  , resolveFunction, lookupConstant, constantOwner, lookupForeign, lookupQualifiedForeign, lookupCallback, lookupCallbackGroup, lookupDelegate, lookupInitializer, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)

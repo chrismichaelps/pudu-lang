@@ -93,3 +93,9 @@ overlong literal.
 ## Derive notes (#959)
 
 `siteAt` renders the notes of a span generated from a derive, read from `spanOrigin`: `derive definition (file:line:column)` then `derive requested here (file:line:column)`, as the interpreter's diagnostic prints them. `renderSites` emits them as one `notes` string of `   = note: ...` lines, or `NULL`. Resolved Grill Log: render at emit time, where the sources are; the C runtime prints the baked text.
+
+## Kept constants (#999)
+
+- `emitConstants` registry: `constantCell` gives the same index for every read of a name; `renderConstantCells` writes file-scope `pudu_constants[]` cells and `pudu_constants_ready[]` flags.
+
+Resolved Grill Log (#999): **Q:** Why key cells by name rather than by read site? **A:** Every read of one constant must reach the same cell so it holds one value for the run. _Rejected:_ a cell per read site, which would build and hold a separate copy at each.

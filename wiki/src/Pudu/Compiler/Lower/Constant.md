@@ -123,3 +123,9 @@ value's exact bytes, including NUL and every value above 127.
 
 Resolved Grill Log: project arbitrary folded endpoint values into the
 same exact integer inputs used for ordinary range construction.
+
+## Kept constants (#999)
+
+- A folded constant of boxed type is wrapped as `CoreConstant name initial` with the name `<owner module>.<constant> : <type>`. Scalars and text are still written where read. The initializer is the folded product, never re-evaluated.
+
+Resolved Grill Log (#999): **Q:** Why wrap only boxed types? **A:** Scalars and text are cheap to write at each read, while aggregates are costly to rebuild and need one shared value. _Rejected:_ wrapping every constant, which adds branches to scalar reads for no gain.

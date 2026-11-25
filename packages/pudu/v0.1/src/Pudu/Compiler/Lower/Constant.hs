@@ -7,8 +7,9 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import GHC.Float (castDoubleToWord64)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), halt, inModule, lookupConstant, lookupInitializer)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), constantOwner, halt, inModule, lookupConstant, lookupInitializer)
 import Pudu.Frontend.Syntax (Expression, Located)
 import Pudu.Compiler.Lower.Types (LowerTypes, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
@@ -43,8 +44,23 @@ lowerConstant lowerExpression state at path = lower <$> lookupConstant state pat
   lower (Just frozen) = case typeForSpan types at of
     Nothing -> halt at "a constant without represented solved native type facts" state
     Just kind -> case project types at kind (thaw frozen) of
-      Just core -> (state, Just (core, kind))
+      Just core -> (state, Just (kept kind core, kind))
       Nothing -> halt at "a constant without matching native value data" state
+  -- A boxed value is built once and shared after; a scalar costs nothing to
+  -- write where it is read.
+  kept kind core = case constantOwner state path of
+    Just (owner, name) | boxed kind ->
+      CoreExpression at kind (CoreConstant (owner <> "." <> name <> " : " <> Text.pack (show kind)) core)
+    _ -> core
+  boxed kind = case kind of
+    CoreArrayType _ -> True
+    CoreMapType _ _ -> True
+    CoreSetType _ -> True
+    CoreStoreType _ -> True
+    CoreTupleType _ -> True
+    CoreRecordType _ _ -> True
+    CoreSumType _ _ -> True
+    _ -> False
 
 {-| Solved types choose identity and layout. Frozen display names only verify
     the selected shape; they never choose a different module's nominal type. -}

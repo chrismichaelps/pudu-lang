@@ -250,3 +250,9 @@ Direct reporting and rendering from a cell share one canonical owner spelling.
 
 Resolved Grill Log: range layouts require the exact integer cell even
 when no source function itself declares an exact integer.
+
+## Kept constants (#999)
+
+- The program renders the registered constant cells and ready flags at file scope, beside the byte tables and before any function that reads them.
+
+Resolved Grill Log (#999): **Q:** Why file scope instead of function-local storage? **A:** A kept value must outlive a single frame and be shared by every function that reads it. _Rejected:_ static locals per function, which would hold one copy per reader.

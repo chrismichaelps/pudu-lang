@@ -18,7 +18,7 @@ import Pudu.Backend.Emit.Frame.Slots (compactFrameSlots)
 import Pudu.Backend.Emit.Frame.Fast (emitFastFunctions, fastEntry, fastFunctions)
 import Pudu.Backend.Emit.Frame.Direct (argumentCount, directFunctions, enteredDirect, frameCells)
 import Pudu.Backend.Emit.Support (integerHelper, isBigInteger, isWideInteger)
-import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderSites, textOfInt)
+import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderByteData, renderConstantCells, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameCallbackEngine, frameTypes, frameEngine)
 import Pudu.Backend.Runtime.Host.Callback (callbackRuntime)
@@ -180,7 +180,7 @@ emitFrameUnit form version sources logical = do
   pure $ EmittedUnit
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
-    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
+    <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> renderConstantCells (reverse (emitConstants emitted)) <> aggregates <> ownership <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) (startupCells entry)
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]

@@ -183,3 +183,9 @@ into the frame module, where [[Backend Emit Export]] reads them.
 ## Stored callable dispatch (#956)
 
 Resolved Grill Log: A closure-target test reads its closure slot and names a linked body. Its result slot is Bool.
+
+## Kept constants (#999)
+
+- Value shapes `FrameConstantReady name`, `FrameConstantRead name` and `FrameConstantKeep name slot` read a kept constant: ready-check, read the kept value, or build and keep it into a slot.
+
+Resolved Grill Log (#999): **Q:** Why separate ready, read and keep shapes? **A:** The hit path needs only the read, while the miss path builds and stores the value, so the lowering branches on readiness instead of rebuilding. _Rejected:_ one shape that always rebuilds.

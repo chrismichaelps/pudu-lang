@@ -37,3 +37,9 @@ Foreign loan settlement refers to no frame slots.
 ## Stored callable dispatch (#956)
 
 Resolved Grill Log: The closure-target test refers to its closure slot. Linked body identity is independent of slot allocation.
+
+## Kept constants (#999)
+
+- The traversal rewrites the keep slot of `FrameConstantKeep` during physical slot compaction. The constant name refers to no frame slot.
+
+Resolved Grill Log (#999): **Q:** Does a constant name need slot rewriting? **A:** No; only the slot that receives the built value is a frame reference. _Rejected:_ rewriting names, which are independent of allocation.
