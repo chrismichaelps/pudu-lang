@@ -129,7 +129,7 @@ export fn github() -> Array[(Str, Str)] {
 export fn edge(packages: &Packages.Packages, overlay: &LivePackages.Live) -> DynamicApp.App {
   DynamicApp.quiet(&Edge.Edge {
       siteUrl: "https://pudu.example",
-      catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: []},
+      catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: [], byModule: mapOf([])},
       search: Search.index(&[]),
       packages: *packages,
       live: *overlay,
