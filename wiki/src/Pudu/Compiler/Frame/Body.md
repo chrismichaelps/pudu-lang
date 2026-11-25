@@ -36,11 +36,19 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 - **Q:** Can a later argument re-read an earlier mutable operand? **A:** No; local reads produce snapshots before subsequent effects.
 - **Q:** What does a Never path return? **A:** No payload and no continuation; subsequent instructions are not emitted.
 - **Q:** Does pure control lowering choose memory-exhaustion behavior? **A:** No; that runtime boundary is resolved separately before allocator implementation.
+- **Q:** Why borrow at the operation instead of eliminating copies afterwards? **A:** The copy exists only because lowering asked for a fresh slot; an operation that never keeps its operand can read the local's own slot, and the ordering rule makes that sound without an analysis pass. A builder loop of five attribute sets per node went from 0.77 s to 0.71 s.
 
 ## Dependencies and consumers
 
 [[Pudu Core]] · [[Core Frame IR]] · [[Compiler Frame Lowering]] ·
 [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Execution Frames]]
+
+## Borrowed operands (#1008)
+
+- `lowerBorrowed`: an operand an operation only reads, such as a field or tuple read, a conversion, a unary operator, or a rendered value, is a local read in its own slot, with no copy to retain and release. Any other operand, and a unit-typed local, lowers as before.
+- `lowerOperandsBorrowing`: binary operators (other than the short-circuit ones) and a text method's receiver and arguments read a local operand in place only when every operand after it is a literal or a local read, so nothing evaluated later can assign it first. This is the rule array indexing already follows.
+- Calls keep copying, since a call argument held in a `$taken` slot is transferred to the callee.
+
 
 ## Grill Log
 

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Borrowed local operands
+
+- Native operations that only read an operand read a local in its own slot instead of a retained copy. refs #1008
+
 ## 2026-11-25 — ASCII text case
 
 - Native `toUpper` / `toLower` map ASCII text through a 128-entry table and return unchanged ASCII text without allocating; a loop of ASCII case calls went from 1.58 s to 0.19 s. refs #1001
