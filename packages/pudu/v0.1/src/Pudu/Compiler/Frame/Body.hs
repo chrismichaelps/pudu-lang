@@ -183,7 +183,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreBinary operator left right
     | operator == CoreAnd || operator == CoreOr -> logical at operator left right
     | otherwise -> do
-        operands <- lowerOperands [left, right]
+        operands <- lowerOperandsBorrowing [left, right]
         case operands of
           Nothing -> pure Stopped
           Just [lhs, rhs] -> case scalarOperator operator of
@@ -195,7 +195,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
     | otherwise -> rendered FrameDisplay operand
   CoreShow operand -> rendered FrameShow operand
   CoreTextMethod name receiver arguments -> do
-    operands <- lowerOperands (receiver : arguments)
+    operands <- lowerOperandsBorrowing (receiver : arguments)
     case operands of
       Nothing -> pure Stopped
       Just slots -> case slots of
@@ -352,13 +352,13 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   where
     value node = Completed . Just <$> saveValue (FrameValue at kind node)
     rendered shapeOf operand = do
-      result <- lowerScalar operand
+      result <- lowerBorrowed operand
       case result of
         Stopped -> pure Stopped
         Completed (Just slot) -> value (shapeOf slot)
         Completed Nothing -> fault (Just at) "a rendered operand without a value"
     unary operator operand = do
-      result <- lowerScalar operand
+      result <- lowerBorrowed operand
       case result of
         Stopped -> pure Stopped
         Completed (Just slot) -> value (FrameUnary operator slot)
@@ -390,6 +390,37 @@ lowerScalar expression = do
       Completed . Just <$> saveValue (FrameValue (coreExpressionSpan expression) CoreUnitType FrameUnitLiteral)
     Completed Nothing -> fault (Just (coreExpressionSpan expression)) "a scalar operand without a value"
     _ -> pure result
+
+{-| An operand an operation only reads: a local is read in its own slot, with
+    no copy to retain and release; anything else is lowered as usual. -}
+lowerBorrowed :: CoreExpression -> Build Flow
+lowerBorrowed operand = case coreExpressionShape operand of
+  CoreReadLocal local | coreExpressionType operand /= CoreUnitType ->
+    Completed . Just <$> readLocal (coreExpressionSpan operand) local
+  _ -> lowerScalar operand
+
+{-| Operands an operation only reads, in order. A local operand is read in its
+    own slot only when every operand after it is a literal or a local read, so
+    nothing evaluated later can assign it first. -}
+lowerOperandsBorrowing :: [CoreExpression] -> Build (Maybe [FrameSlot])
+lowerOperandsBorrowing = go []
+  where
+    go slots [] = pure (Just (reverse slots))
+    go slots (expression : rest) = do
+      result <- if all settled rest then lowerBorrowed expression else lowerScalar expression
+      case result of
+        Stopped -> pure Nothing
+        Completed (Just slot) -> go (slot : slots) rest
+        Completed Nothing -> fault (Just (coreExpressionSpan expression)) "an operand without a value"
+    settled operand = case coreExpressionShape operand of
+      CoreReadLocal{} -> True
+      CoreIntegerLiteral{} -> True
+      CoreFloatLiteral{} -> True
+      CoreDecimalLiteral{} -> True
+      CoreBoolLiteral{} -> True
+      CoreTextLiteral{} -> True
+      CoreCharLiteral{} -> True
+      _ -> False
 
 lowerOperands :: [CoreExpression] -> Build (Maybe [FrameSlot])
 lowerOperands = go []

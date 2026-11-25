@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — Borrowed local operands
+
+- Native operations that only read an operand read a local in its own slot instead of a retained copy. refs #1008
+
 ## 2026-11-25 — Always-fitting conversions
 
 - Native `convertInteger` into a kind that holds every value of the operand's kind widens directly, and `Option.unwrapOr` over such a conversion builds no option and makes no call. refs #1004
