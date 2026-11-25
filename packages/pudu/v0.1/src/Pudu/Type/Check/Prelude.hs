@@ -360,6 +360,8 @@ declareBuiltinConstructors = do
             (NominalType "Str" [])
         )
     )
+  {-| A URL component percent-encoded; see `Pudu.Eval.UrlEncode`. -}
+  bindName "urlEncodeComponent" (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Str" [])))
   {-| A `Std.Binary` node tree as bytes; see `Pudu.Eval.Binary`. -}
   bindName "binaryEncode"
     (monotype (FunctionTypeValue False [ReferenceTypeValue False (NominalType stdBinaryNodeId [])] (NominalType "Bytes" [])))

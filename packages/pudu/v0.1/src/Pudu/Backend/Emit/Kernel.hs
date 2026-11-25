@@ -113,6 +113,7 @@ kernelEntry name = case name of
   KernelJsonDecode -> plain "pudu_json_decode"
   KernelJsonEncode -> plain "pudu_json_encode"
   KernelHtmlRender -> plain "pudu_html_render"
+  KernelUrlEncode -> plain "pudu_url_encode"
   KernelBinaryEncode -> plain "pudu_binary_encode"
   KernelBinaryDecode -> plain "pudu_binary_decode"
   KernelXmlDecode -> plain "pudu_xml_decode"

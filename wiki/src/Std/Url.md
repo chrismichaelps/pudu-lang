@@ -25,5 +25,7 @@ User information before the authority's last `@` is not part of the host and is 
   `decodeComponent` itself, which callers use for form fields.
 - **Q:** Export a path-segment decoder? **A:** Yes, `decodeSegment`. _Rationale:_ [[Std Http Server Route]]
   needs a decoder that keeps `+`, and `decodeComponent` keeps its documented form reading.
+- **Q:** Why does `encodeComponent` call a builtin now? **A:** `urlEncodeComponent` (issue #1007) escapes in one pass and returns unchanged text without allocating, and the `COMPONENT_BYTES` table, `componentBytes` and `isUnreserved` are removed. _Rationale:_ the old version built one escape text per byte and joined them.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

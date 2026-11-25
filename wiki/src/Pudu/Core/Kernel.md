@@ -22,6 +22,8 @@ One closed name per runtime function keeps lowering and emission exhaustive
 without target text in Core. Rejected: a free-form function name in Core,
 and one expression shape per family.
 
+Resolved Grill Log: the `KernelUrlEncode` name is one closed kernel, so lowering and emission stay exhaustive for `urlEncodeComponent` (issue #1007).
+
 ## Referenced by
 
 [[Core IR]] · [[Core Frame IR]] · [[Compiler Lower Kernel]] · [[Backend Emit Kernel]] · [[Native Builtin Kernels]]

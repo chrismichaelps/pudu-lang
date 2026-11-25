@@ -67,6 +67,8 @@ builtinName :: Builtin -> Text
   [[Eval Value]] remains the compatibility boundary, while this module is an internal depth split.
   _Rejected:_ rewriting every evaluator import for a no-semantics refactor.
 
+Resolved Grill Log: `UrlEncodeBuiltin` (issue #1007) appends the name `urlEncodeComponent` at the end, preserving existing packed tag identities.
+
 ## Cryptographic builtin vocabulary
 
 The closed vocabulary adds `Sha3_256Builtin`, `Sha3_512Builtin`, `Blake2b256Builtin`,

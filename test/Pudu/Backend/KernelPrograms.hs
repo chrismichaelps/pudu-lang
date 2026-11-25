@@ -257,6 +257,16 @@ kernelLibraryPrograms =
       , "  print(display(byte(300)) + \" \" + display(byte(42)) + \" \" + display(Option.unwrapOr(convertInteger[UInt8](-5), 9u8)))"
       , "  0", "}" ]
     , "fallback\nfallback\nfallback\n262\n4294967295 -128 9223372036854775807\nSome(200) None None\n0 42 9\n")
+  , ("URL components percent-encode in one pass, unchanged text included", program
+      [ "import Std.Url as Url"
+      , "fn main() -> Int {"
+      , "  let samples = [\"Std.Http\", \"\", \"a b&c=d/e?f#g\", \"~tilde_ok-1.2\", \"caf\233\&\", \"\128512\&!\", \"100%\", \"+plus+\"]"
+      , "  for sample in samples { print(\"[\" + Url.encodeComponent(sample) + \"]\") }"
+      , "  let encode = urlEncodeComponent"
+      , "  print(encode(\"x y\") + \" \" + display(encode(\"same\") == \"same\"))"
+      , "  print(Url.renderQuery(&[(\"q\", \"pudu lang\"), (\"page\", \"2&3\")]))"
+      , "  0", "}" ]
+    , "[Std.Http]\n[]\n[a%20b%26c%3Dd%2Fe%3Ff%23g]\n[~tilde_ok-1.2]\n[caf%C3%A9]\n[%F0%9F%98%80%21]\n[100%25]\n[%2Bplus%2B]\nx%20y true\nq=pudu%20lang&page=2%263\n")
   ]
 
 kernelRefusalPrograms :: [(String, Text)]

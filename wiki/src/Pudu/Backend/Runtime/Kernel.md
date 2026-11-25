@@ -17,6 +17,8 @@ emitted after the frame types.
 One function per part: a program carries only the kernels it calls, and no
 unused static function is written.
 
+Resolved Grill Log: `urlKernelParts` (issue #1007) gives the URL part its own function, so a program carries it only when it calls `urlEncodeComponent`.
+
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Runtime Dependencies]] · [[Native Builtin Kernels]]

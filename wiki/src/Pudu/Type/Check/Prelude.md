@@ -54,6 +54,8 @@ effectSignatures           :: [(Text, Scheme)]
   existing source must retain its original effect ABI; separately named `Within` effects carry the
   new argument. _Rejected:_ an arity-breaking replacement.
 
+Resolved Grill Log: the checker binds `urlEncodeComponent` (issue #1007) as a function from Str to Str with no effect.
+
 ## Cryptographic primitive signatures
 
 SHA3-256/512 and BLAKE2b-256/512 each have `fn(Bytes) -> Bytes`; HMAC-SHA512 has

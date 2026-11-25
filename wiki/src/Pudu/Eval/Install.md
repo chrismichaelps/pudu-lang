@@ -90,6 +90,8 @@ against it, then evaluate each constant in declaration order.
   the exported symbol from the Pudu name.
 - **Q:** Store impl parameters separately? **A:** No; the function's parameter list is what selection binds against.
 
+Resolved Grill Log: `UrlEncodeBuiltin` (issue #1007) is installed under `urlEncodeComponent` with the other pure builtins, and kernel names still derive from the owning identity list.
+
 ## Binary64 kernels
 
 Installation binds every kernel in `floatKernels` under its `floatKernelName`, beside the

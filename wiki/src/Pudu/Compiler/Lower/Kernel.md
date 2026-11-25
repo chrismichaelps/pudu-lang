@@ -28,6 +28,8 @@ Option results are built in Core from a test and a read, so the runtime
 never names a sum's layout except where a codec builds a whole tree.
 Rejected: one lowering function per builtin.
 
+Resolved Grill Log: `urlEncodeComponent` (issue #1007) is a fixed primitive, so direct calls and callable bodies share its guard and blame.
+
 ## Binary codec (#935)
 
 The binary entries require the checked `Std.Binary.Node` variants and
