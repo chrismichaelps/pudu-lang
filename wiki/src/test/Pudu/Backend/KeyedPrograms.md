@@ -42,3 +42,9 @@ a function field. Name the held record after its initializer effects run.
 ## Runtime keyed layouts (#956)
 
 Resolved Grill Log: cover selected values in construction, lookup, update and iteration, including retained aliases and missing keys.
+
+## Held updates (#1019)
+
+A new program, "map and set updates held once rewrite their own tree, and a shared map or set keeps its contents", runs `insert`, `put` and `remove` on a map that is held once, and copies a map with `let` before the updates so the copy is shared.
+
+Resolved Grill Log: the program covers both the owned path and the copy path, so a change to the count test cannot silently alter a shared value.

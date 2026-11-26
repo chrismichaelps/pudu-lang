@@ -23,7 +23,7 @@ import Pudu.Backend.Emit.Foreign (foreignCall)
 import Pudu.Backend.Emit.Foreign.Callback (callbackOperation)
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
-  , FrameValue (..), FrameValueShape (..), coreScalarOperator )
+  , FrameValue (..), FrameValueShape (..), coreScalarOperator, takenSlotName )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, UnsignedKind))
@@ -199,6 +199,9 @@ frameValue state value = case frameValueShape value of
     let kind = case name of
           KeyedFromArray -> frameValueType value
           _ -> frameSlotType receiver
+        -- A receiver the caller moved out of its binding may be updated in
+        -- place when held once; any other is borrowed and copied.
+        owned operation = if frameSlotName receiver == takenSlotName then operation <> "owned" else operation
         keyed operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
         defaultLookupResult result = case result of
           CoreArrayType{} -> True
@@ -224,13 +227,13 @@ frameValue state value = case frameValueShape value of
           | key == argument, result == frameValueType value, defaultLookupResult result ->
               keyed "lookup_default"
         _ -> refused "a keyed default lookup without matching key and result carriers"
-      KeyedInsert -> keyed "insert"
-      KeyedPut -> keyed "put"
+      KeyedInsert -> keyed (owned "insert")
+      KeyedPut -> keyed (owned "put")
       KeyedMultiMapAdd ->
         let (after, number) = overflowSite state at PlatformSigned CheckedAdd
          in Right (after, aggregateHelper "multimap_add" kind <> "(" <> Text.intercalate ", " (target : operands)
               <> ", &pudu_sites[" <> textOfInt number <> "])", Set.fromList [aggregateNeed "multimap_add" kind])
-      KeyedRemove -> keyed "remove"
+      KeyedRemove -> keyed (owned "remove")
       KeyedKeys -> keyed "keys"
       KeyedValues -> keyed "values"
       KeyedEntries -> keyed "entries"
