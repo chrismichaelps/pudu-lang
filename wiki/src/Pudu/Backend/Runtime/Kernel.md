@@ -31,3 +31,9 @@ follows its prerequisites. [[Native Binary Kernels]] follow the host families
 because the binary reader uses their result channel.
 
 Resolved Grill Log: the HTML family follows the text families it calls. [[Native HTML Kernel]]
+
+## Header kernel part (#1021)
+
+`httpKernelParts` from [[Native HTTP Header Kernel]] joins the kernel runtime parts through its own function, as the URL family does, so a program carries the header part only when it calls `httpHeaderPairs`. Its prerequisites are the array, text, text view, text trim and memory failure parts.
+
+Resolved Grill Log: one function per family keeps the part out of programs that never read a header.

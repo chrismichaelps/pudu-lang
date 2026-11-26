@@ -652,3 +652,9 @@ enter the enclosing block together, and an impossible binding
 stops lowering subsequent statements.
 
 Resolved Grill Log: a held member call passes the written member name to member dispatch. A trait-qualified member names neither a record field nor a builtin collection method, so only declared lookup can answer it.
+
+## Markup and module constants (#1021, #1020)
+
+Named, module-qualified and method call sites route through `keepMarkup` in [[Compiler Lower Markup]] (#1021), which keeps a closed markup call. A qualified call through another module's callable constant, such as `Geo.DOUBLE(21)`, is a value call (#1020) and compiles natively instead of stopping.
+
+Resolved Grill Log: `keepMarkup` only wraps a call that resolution has already produced, so the order of local, constant and function lookup is unchanged.

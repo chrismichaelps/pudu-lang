@@ -49,3 +49,9 @@ targets.
 ## Native byte views (#827)
 
 Add granular byte-size/index-valid/byte-at/boundary/slice-valid/slice/find/find-last/scalar-at/scalar-width kernels. Arguments borrow text; slices retain existing owners through text_view. Reads require the lowering guard. Find kernels return pudu_int -1 for absence and otherwise exact byte offsets; use subtraction bounds before loops and retain overlapping matches. Empty needles and extreme signed magnitudes follow Eval.TextView. Reuse text_width and text_decode; no invalid UTF-8 or byte copies. See [[Native Text Views]].
+
+## Word-at-a-time skip (#1021)
+
+The `html_marks` part defines `pudu_html_skip(bytes, at, length)`. It returns the first position at or after `at` that may hold one of `&`, `<`, `>`, `"` or `'`, moving eight clean bytes at a time with a word test. A word holding a marked byte ends the skip, and the caller checks from there byte by byte. `text_escape_html` and the HTML renderer both use it.
+
+Resolved Grill Log: the word test may stop on a clean word, never past a marked byte, so the byte loop after a stop decides every output byte and the result is unchanged.

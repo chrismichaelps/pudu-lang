@@ -252,6 +252,13 @@ takeReceiver local expression = case coreExpressionShape expression of
     , read' == local
     , all independent arguments ->
         expression{coreExpressionShape = CoreArrayMethod name receiver{coreExpressionShape = CoreTakeLocal local} arguments}
+  -- `m = m.insert(...)`: an update of a map or set held once rewrites its own tree.
+  CoreKeyedMethod name receiver arguments
+    | name `elem` [KeyedInsert, KeyedPut, KeyedRemove]
+    , CoreReadLocal read' <- coreExpressionShape receiver
+    , read' == local
+    , all independent arguments ->
+        expression{coreExpressionShape = CoreKeyedMethod name receiver{coreExpressionShape = CoreTakeLocal local} arguments}
   -- `x = f(&x, ...)`: the call holds the binding's only use, so it receives the value by move.
   CoreCall name arguments
     | movable (coreLocalType local)

@@ -157,6 +157,7 @@ tags: [moc, module]
 - [[Eval Json]] — native JSON decoder and encoder behind `Std.Json`.
 - [[Eval Html Render]] — native page rendering behind `Std.Html.render` and `document`.
 - [[Eval Url Encode]] — percent-encoding behind `Std.Url.encodeComponent` through the `urlEncodeComponent` builtin.
+- [[Eval Http Headers]] — the evaluator side of `httpHeaderPairs`, with the same empty-array refusal as [[Native HTTP Header Kernel]].
 - [[Eval Xml]] — native XML reader behind `Std.Xml`.
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.

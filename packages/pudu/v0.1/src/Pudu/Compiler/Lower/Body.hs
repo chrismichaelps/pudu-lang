@@ -20,6 +20,7 @@ import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWith)
 import Pudu.Compiler.Lower.Array (lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Slice (lowerBracketIndex)
+import Pudu.Compiler.Lower.Markup (keepMarkup)
 import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger, lowerFittingUnwrap)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Pudu.Compiler.Lower.Range (lowerRangeMethod, lowerRangeValue)
@@ -441,7 +442,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just _ <- lookupConstant state [name] -> lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just "Std.Option.unwrapOr" <- resolveFunction state [name]
     , Just lowered <- lowerFittingUnwrap lowerExpression state spanValue arguments -> lowered
-    | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | Just key <- resolveFunction state [name] -> keepMarkup spanValue (lowerFunctionCall lowerExpression state spanValue key callee arguments)
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [name] arguments -> lowered
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name `elem` ["print", "printPart", "printError", "printErrorPart"] -> lowerPrint lowerExpression state spanValue name arguments
@@ -459,13 +460,15 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) named@(Located _ member))) arguments
     | isModuleQualifier state owner, Just "Std.Option.unwrapOr" <- resolveFunction state [owner, member]
     , Just lowered <- lowerFittingUnwrap lowerExpression state spanValue arguments -> lowered
-    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
+    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> keepMarkup spanValue (lowerFunctionCall lowerExpression state spanValue key callee arguments)
+    | isModuleQualifier state owner, Just _ <- lookupConstant state [owner, member] ->
+        lowerValueCall lowerExpression lowerBlock state spanValue (Located callee (MemberExpression receiver named)) arguments
     | Just lowered <- lowerCallbackRegistration lowerExpression state spanValue [owner, member] arguments -> lowered
     | Just lowered <- lowerQualifiedForeignCall lowerExpression state spanValue owner member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
-        clean spanValue callee receiver member arguments -> lowered
+        clean spanValue callee receiver member arguments -> keepMarkup spanValue lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
     | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
         clean spanValue callee receiver member arguments
@@ -479,7 +482,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located callee (MemberExpression receiver named@(Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression clean spanValue member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression (selectedMemberCall callee receiver member arguments)
-        clean spanValue callee receiver member arguments -> lowered
+        clean spanValue callee receiver member arguments -> keepMarkup spanValue lowered
     | functionField receiver member -> lowerValueCall lowerExpression lowerBlock clean spanValue (Located callee (MemberExpression receiver named)) arguments
     | otherwise -> lowerTextMethod lowerExpression (heldMember callee receiver member arguments)
         clean spanValue callee receiver member arguments

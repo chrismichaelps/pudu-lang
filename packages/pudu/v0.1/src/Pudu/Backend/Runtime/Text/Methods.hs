@@ -144,6 +144,27 @@ textMethodRuntimeParts =
       , "  return reversed;"
       , "}"
       ])
+  , ("html_marks",
+      [ "/* The first position at or after `at` that may hold one of & < > \" ',"
+      , "   skipping eight clean bytes at a time. A word with a marked byte, or"
+      , "   occasionally a clean one, stops the skip, and the caller checks from"
+      , "   there byte by byte, so a stop never changes what is written. */"
+      , "static size_t pudu_html_skip(const unsigned char *bytes, size_t at, size_t length) {"
+      , "  static const unsigned char marks[] = {'&', '<', '>', '\"', '\\''};"
+      , "  const uint64_t ones = UINT64_C(0x0101010101010101), highs = UINT64_C(0x8080808080808080);"
+      , "  while (at + 8 <= length) {"
+      , "    uint64_t word, hit = 0;"
+      , "    memcpy(&word, bytes + at, 8);"
+      , "    for (size_t k = 0; k < sizeof marks; ++k) {"
+      , "      uint64_t spread = word ^ (ones * marks[k]);"
+      , "      hit |= (spread - ones) & ~spread & highs;"
+      , "    }"
+      , "    if (hit != 0) return at;"
+      , "    at += 8;"
+      , "  }"
+      , "  return at;"
+      , "}"
+      ])
   , ("text_escape_html",
       [ "static pudu_text pudu_text_escape_html(pudu_text text) {"
       , "  static const char *const entities[] = {\"&amp;\", \"&lt;\", \"&gt;\", \"&quot;\", \"&#39;\"};"
@@ -151,7 +172,7 @@ textMethodRuntimeParts =
       , "  size_t size = text.length;"
       , "  unsigned char *bytes;"
       , "  pudu_text escaped;"
-      , "  for (size_t i = 0; i < text.length; ++i) {"
+      , "  for (size_t i = pudu_html_skip(text.bytes, 0, text.length); i < text.length; i = pudu_html_skip(text.bytes, i + 1, text.length)) {"
       , "    for (size_t k = 0; k < sizeof marks; ++k) {"
       , "      if (text.bytes[i] == (unsigned char)marks[k]) {"
       , "        size_t grow = strlen(entities[k]) - 1;"
@@ -163,7 +184,12 @@ textMethodRuntimeParts =
       , "  if (size == text.length) return pudu_text_retain(text);"
       , "  escaped = pudu_text_allocate(size, &bytes);"
       , "  for (size_t i = 0; i < text.length; ++i) {"
+      , "    size_t clean = pudu_html_skip(text.bytes, i, text.length);"
       , "    size_t k = 0;"
+      , "    memcpy(bytes, text.bytes + i, clean - i);"
+      , "    bytes += clean - i;"
+      , "    i = clean;"
+      , "    if (i == text.length) break;"
       , "    while (k < sizeof marks && text.bytes[i] != (unsigned char)marks[k]) ++k;"
       , "    if (k == sizeof marks) { *bytes++ = text.bytes[i]; continue; }"
       , "    memcpy(bytes, entities[k], strlen(entities[k]));"
@@ -281,7 +307,8 @@ textMethodRuntimeDependencies name = maybe [] id (lookup name
   , ("text_slice", ["text_view", "text_scalars", "text_advance", "magnitude"])
   , ("text_repeat", ["text_allocate", "text_literal", "magnitude", "fail"])
   , ("text_reverse", ["text_allocate", "text_width", "text_retain"])
-  , ("text_escape_html", ["text_allocate", "text_retain"])
+  , ("html_marks", [])
+  , ("text_escape_html", ["text_allocate", "text_retain", "html_marks"])
   , ("text_replace", ["text_allocate", "text_find", "text_retain"])
   , ("text_span", ["text_decode", "make"])
   , ("text_byte_size", ["text", "make"])

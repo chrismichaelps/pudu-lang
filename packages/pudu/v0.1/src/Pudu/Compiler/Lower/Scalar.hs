@@ -128,15 +128,20 @@ lowerBinary lower state at left operator right
  where
   condition = lowerCondition StrictCondition at lower
   -- An empty array literal holds no element, so it takes the other
-  -- operand's array type where checking left its element open.
-  lowerOperand current (Located spanValue (ArrayExpression [])) (Just kind@(CoreArrayType _)) =
-    (current, Just (CoreExpression spanValue kind (CoreArray []), kind))
+  -- operand's array type where checking left its element open. An operand
+  -- held as a runtime choice lends the one array carrier it can hold.
+  lowerOperand current (Located spanValue (ArrayExpression [])) (Just other)
+    | Just kind <- arrayCarrier other = (current, Just (CoreExpression spanValue kind (CoreArray []), kind))
   lowerOperand current operand _ = lower current operand
   -- An empty literal on the left runs nothing, so the right operand's
   -- lowered type can settle it without changing what runs first.
   lowerLeft = case locatedValue left of
-    ArrayExpression [] | (_, Just (_, kind@(CoreArrayType _))) <- lower state right -> lowerOperand state left (Just kind)
+    ArrayExpression [] | (_, Just (_, other)) <- lower state right, Just _ <- arrayCarrier other -> lowerOperand state left (Just other)
     _ -> lower state left
+  arrayCarrier kind = case kind of
+    CoreArrayType _ -> Just kind
+    _ | [carrier] <- [held | held@(CoreArrayType _) <- Set.toList (runtimeCarriers kind)] -> Just carrier
+      | otherwise -> Nothing
 
 containsExactInt :: CoreType -> Bool
 containsExactInt = Set.member (CoreIntegerType ExactIntKind) . runtimeCarriers

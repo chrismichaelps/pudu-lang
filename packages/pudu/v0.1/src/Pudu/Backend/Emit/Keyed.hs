@@ -41,6 +41,17 @@ entryHelpers opening closing kind key value =
       , "  return " <> name "wrap" <> "(pudu_tree_insert(pudu_tree_retain(box->fields[0].tree), "
           <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 1, " <> ops <> "));"
       , "}" ]
+  , helper "insertowned" ["tree_insert", aggregateNeed "ops" kind, aggregateNeed "insert" kind]
+      [ "/* insert into a map its caller moved out of a binding: held once, its"
+      , "   tree is rewritten and its box reused; shared, it is copied. */"
+      , "static pudu_box *" <> name "insertowned" <> "(pudu_box *box, " <> cType key <> " key, " <> cType value <> " value) {"
+      , "  pudu_cell held, stored;"
+      , "  if (box->count != 1) return " <> name "insert" <> "(box, key, value);"
+      , "  held." <> cellName key <> " = key;"
+      , "  stored." <> cellName value <> " = value;"
+      , "  box->fields[0].tree = pudu_tree_insert(box->fields[0].tree, " <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 1, " <> ops <> ");"
+      , "  return pudu_box_retain(box);"
+      , "}" ]
   , helper "put" ["tree_insert", aggregateNeed "ops" kind, aggregateNeed "wrap" kind]
       [ "/* insert, with the new key's spelling replacing an equal held key. */"
       , "static pudu_box *" <> name "put" <> "(pudu_box *box, " <> cType key <> " key, " <> cType value <> " value) {"
@@ -49,6 +60,16 @@ entryHelpers opening closing kind key value =
       , "  stored." <> cellName value <> " = value;"
       , "  return " <> name "wrap" <> "(pudu_tree_insert(pudu_tree_retain(box->fields[0].tree), "
           <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 0, " <> ops <> "));"
+      , "}" ]
+  , helper "putowned" ["tree_insert", aggregateNeed "ops" kind, aggregateNeed "put" kind]
+      [ "/* put into a map its caller moved out of a binding, as insertowned. */"
+      , "static pudu_box *" <> name "putowned" <> "(pudu_box *box, " <> cType key <> " key, " <> cType value <> " value) {"
+      , "  pudu_cell held, stored;"
+      , "  if (box->count != 1) return " <> name "put" <> "(box, key, value);"
+      , "  held." <> cellName key <> " = key;"
+      , "  stored." <> cellName value <> " = value;"
+      , "  box->fields[0].tree = pudu_tree_insert(box->fields[0].tree, " <> name "keyretain" <> "(held), " <> name "valueretain" <> "(stored), 0, " <> ops <> ");"
+      , "  return pudu_box_retain(box);"
       , "}" ]
   , helper "lookup" ("tree_find" : aggregateNeed "ops" kind : snd (retained value ""))
       [ "/* get, once contains has said the key is there. */"
@@ -154,6 +175,15 @@ setHelpers kind member =
       , "  held." <> cellName member <> " = member;"
       , "  return " <> name "wrap" <> "(pudu_tree_insert(pudu_tree_retain(box->fields[0].tree), " <> name "keyretain" <> "(held), " <> unit <> ", 1, " <> ops <> "));"
       , "}" ]
+  , helper "insertowned" ["tree_insert", aggregateNeed "ops" kind, aggregateNeed "insert" kind]
+      [ "/* insert into a set its caller moved out of a binding, as for a map. */"
+      , "static pudu_box *" <> name "insertowned" <> "(pudu_box *box, " <> cType member <> " member) {"
+      , "  pudu_cell held;"
+      , "  if (box->count != 1) return " <> name "insert" <> "(box, member);"
+      , "  held." <> cellName member <> " = member;"
+      , "  box->fields[0].tree = pudu_tree_insert(box->fields[0].tree, " <> name "keyretain" <> "(held), " <> unit <> ", 1, " <> ops <> ");"
+      , "  return pudu_box_retain(box);"
+      , "}" ]
   , helper "union" ["tree_insert", "tree_walk", aggregateNeed "ops" kind, aggregateNeed "wrap" kind]
       [ "/* Set.union left right keeps the left set's members. */"
       , "static pudu_box *" <> name "union" <> "(pudu_box *box, pudu_box *other) {"
@@ -246,6 +276,15 @@ shared kind key value =
       , "  pudu_cell probe;"
       , "  probe." <> cellName key <> " = key;"
       , "  return " <> name "wrap" <> "(pudu_tree_remove(pudu_tree_retain(box->fields[0].tree), probe, " <> ops <> "));"
+      , "}" ]
+  , helper "removeowned" ["tree_remove", aggregateNeed "ops" kind, aggregateNeed "remove" kind]
+      [ "/* remove from a collection its caller moved out of a binding, as insertowned. */"
+      , "static pudu_box *" <> name "removeowned" <> "(pudu_box *box, " <> cType key <> " key) {"
+      , "  pudu_cell probe;"
+      , "  if (box->count != 1) return " <> name "remove" <> "(box, key);"
+      , "  probe." <> cellName key <> " = key;"
+      , "  box->fields[0].tree = pudu_tree_remove(box->fields[0].tree, probe, " <> ops <> ");"
+      , "  return pudu_box_retain(box);"
       , "}" ]
   , helper "keys" ("array" : "tree_walk" : snd (retained key ""))
       (walkHelper kind "keys" key (\node -> fst (retained key (node <> "->key." <> cellName key))))

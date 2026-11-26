@@ -320,3 +320,9 @@ synchronized. Existing text primitives and packed identities are unchanged.
 Declare mutexClose(Int) -> Result[(), Str] alongside synchronization effects. Resolved Grill Log: preserve existing schemes; the closed signature table has a bounded exception at 514 lines with no lifecycle logic.
 
 Resolved Grill Log: `htmlRender` takes a reference to a `Std.Html.Html` page and a Bool, and answers Str.
+
+## httpHeaderPairs signature (#1021)
+
+The prelude binds `httpHeaderPairs` as a function from `Str` to an array of `(Str, Str)`, matching the lowering and evaluator entries.
+
+Resolved Grill Log: the checked signature and the runtime answer agree, so a misuse is a checker diagnostic and never a runtime refusal.

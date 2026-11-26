@@ -265,3 +265,9 @@ A closure construction still requires its emitted body.
 - `FrameConstantReady`, `FrameConstantRead` and `FrameConstantKeep` emit the ready check, the kept read and the keep store. Read and keep retain by the value's kind, so the cell keeps one reference for the whole run.
 
 Resolved Grill Log (#999): **Q:** Does a kept read transfer ownership? **A:** No; it retains, and any in-place update copies the kept value first, so the cell's reference is never consumed. _Rejected:_ moving the value out of the cell on read.
+
+## Owned keyed receivers (#1019)
+
+`KeyedInsert`, `KeyedPut` and `KeyedRemove` select the owned helper (`insertowned`, `putowned`, `removeowned`) only when the receiver's slot is the moved `$taken` slot. Any other receiver is borrowed and uses the plain helper.
+
+Resolved Grill Log: the choice follows the receiver's slot name, so only a value the caller moved out of its binding can be rewritten in place.

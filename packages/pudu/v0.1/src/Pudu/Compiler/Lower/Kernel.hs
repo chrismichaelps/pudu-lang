@@ -176,6 +176,7 @@ option kind = CoreSumType "Option" [kind]
 fixedPrimitives :: [(Text, Primitive)]
 fixedPrimitives =
   [ ("urlEncodeComponent", Primitive [CoreTextType] CoreTextType [] (whole KernelUrlEncode 1))
+  , ("httpHeaderPairs", Primitive [CoreTextType] (CoreArrayType (CoreTupleType [CoreTextType, CoreTextType])) [] (whole KernelHttpHeaders 1))
   , ("bufferAlloc", Primitive [intType] bytes [Guard (Below 0 0) "E7004" "buffer allocation size cannot be negative"] (whole KernelBufferAlloc 1))
   , ("bufferSize", Primitive [bytes] intType [] ByteLength)
   , ("bufferReadU64", reading u64 KernelBufferReadU64 8)

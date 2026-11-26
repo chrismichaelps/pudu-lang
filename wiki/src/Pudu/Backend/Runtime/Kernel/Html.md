@@ -34,3 +34,9 @@ Writing into the text owner removes the final copy, and the per-thread length hi
 ## Referenced by
 
 [[Native Kernel Runtime]] · [[Eval Html Render]]
+
+## Drop helper, kept renderings and skipping (#1021)
+
+The writer carries a drop helper for the page type, and each frame records the output offset at which its subtree starts. A thread-local table of 256 cells keeps the rendered text of a subtree, keyed by the markup value's identity; 1024 seen slots record which subtrees have been rendered before. A subtree seen a second time is rendered once more and kept, with a retained reference, when its rendered length is at least 64 bytes. Kept cells are released at exit. Escaping jumps over clean runs with `pudu_html_skip` from [[Native Text Methods]].
+
+Resolved Grill Log: the seen table holds no references, so an address reused by another subtree only means that subtree is rendered and kept. The kept cell holds a reference, so a kept text always belongs to the subtree it was keyed by. Subtrees under 64 bytes are not worth a cell.

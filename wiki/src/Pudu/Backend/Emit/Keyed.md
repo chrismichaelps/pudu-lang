@@ -63,3 +63,9 @@ entryHelpers builds the map-shaped helper family with its opening and closing te
 
 Resolved Grill Log: lookup with a default searches once, retains a found
 result, and constructs an empty array or zero only when the key is absent.
+
+## Owned updates (#1019)
+
+Maps gain `insertowned` and `putowned`; sets gain `insertowned`. Each takes its box as moved in and checks its count: when the box is held once, the tree is rewritten in place and the same box is returned retained. Otherwise the plain helper (`insert`, `put`) runs and copies. `removeowned` is part of the shared helpers, so maps and sets both have it, and it follows the same rule against `remove`.
+
+Resolved Grill Log: the count is the only ownership test, so a map or set with another holder keeps its contents, and the in-place path reuses the box rather than allocating another.

@@ -212,3 +212,9 @@ position semantics.
 Resolved Grill Log: the replacement receiver move also covers a function call
 that borrows the assigned local, when no other operand reads it; the call
 receives the local by move. [[NATIVE-OWNERSHIP]]
+
+## Keyed receivers taken (#1019)
+
+`takeReceiver` also moves the receiver of a map or set `insert`, `put` or `remove` when the receiver is the local being assigned and every argument is independent of it. `m = m.insert(...)` then rewrites the map's own tree. The independence test is the one used for arrays.
+
+Resolved Grill Log: an argument that reads the binding stops the move, so the update observes the value it would have observed before.

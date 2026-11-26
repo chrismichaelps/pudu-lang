@@ -94,3 +94,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Program View Spec]] — public view compatibility and boundary evidence.
 
 - [[Program Attribute Spec]] — declared attribute uses and their refusals, one exact-code property (#965).
+
+- [[Compiler Lower Markup]] — kept closed `Std.Html` calls, built once per run.

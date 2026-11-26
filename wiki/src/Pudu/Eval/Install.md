@@ -346,3 +346,9 @@ Retain the derived selector and native class alias alongside the checked foreign
 `installDelegate` installs a delegate's members through `qualifyCallbackSignature` and `qualifiedGroupMembers`, the helpers group callbacks already use, so callback members get one qualification path.
 
 Resolved Grill Log: `htmlRender` is bound to [[Eval Html Render]].
+
+## httpHeaderPairs binding (#1021)
+
+Installs `httpHeaderPairs` as `HttpHeadersBuiltin`, beside `urlEncodeComponent`, so the builtin is also a value that can be passed as a callable.
+
+Resolved Grill Log: the binding is made with the other builtins, so a callable reference and a direct call reach the same function.

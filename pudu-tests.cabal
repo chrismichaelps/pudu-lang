@@ -120,6 +120,7 @@ test-suite pudu-test
     Pudu.Backend.TextCollectionPrograms
     Pudu.Backend.ConvertPrograms
     Pudu.Backend.KeyedPrograms
+    Pudu.Backend.LedgerAuditPrograms
     Pudu.Backend.WordMapPrograms
     Pudu.Backend.StorePrograms
     Pudu.Backend.ForeignPrograms

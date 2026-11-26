@@ -43,3 +43,9 @@ Resolved Grill Log: the box is released as its own type through the standard
 drop helper, so the host never guesses a carrier.
 
 Resolved Grill Log: `KernelHtmlRender` calls `pudu_html_render` from [[Native HTML Kernel]].
+
+## Header and render arguments (#1021)
+
+`frameKernel` passes the drop helper of the page's own type to `pudu_html_render`, after its constants. For `KernelHttpHeaders` it passes the pair maker of the result's element type to `pudu_http_header_pairs`, so the kernel builds each pair with the program's own constructor.
+
+Resolved Grill Log: the kernel never constructs a pair layout itself; the maker is always the one emitted for the program's tuple type.

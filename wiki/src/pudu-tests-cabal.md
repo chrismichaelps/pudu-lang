@@ -111,6 +111,7 @@ Register Pudu.Backend.ConvertPrograms ([[Backend Convert Programs]]).
 ## Keyed corpus (#561)
 
 Register Pudu.Backend.KeyedPrograms ([[Backend Keyed Programs]]).
+Register Pudu.Backend.LedgerAuditPrograms ([[Backend Ledger Audit Programs]]).
 
 ## Shape corpus (#563)
 

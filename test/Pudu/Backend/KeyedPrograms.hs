@@ -101,6 +101,32 @@ keyedSuccessPrograms =
       , "  while i < 10 {", "    if i in s { count = count + 1 }", "    i = i + 1", "  }"
       , "  print(display(count))", "  0", "}" ]
     , "true false false\ncandidate\nset\ntrue\nfalse true\ntrue false\nfalse true\ntrue\ntrue false\n3\n")
+  , ("map and set updates held once rewrite their own tree, and a shared map or set keeps its contents", program
+      [ "fn main() -> Int {"
+      , "  var m: Map[Str, Int] = mapOf([(\"a\", 1)])"
+      , "  let kept = m"
+      , "  var i = 0"
+      , "  while i < 5 { m = m.insert(\"k\" + display(i), i)"
+      , "    i = i + 1 }"
+      , "  m = m.insert(\"a\", 10)"
+      , "  m = m.remove(\"k2\")"
+      , "  print(show(m) + \" \" + show(kept))"
+      , "  var s: Set[Int] = setOf([1])"
+      , "  let held = s"
+      , "  s = s.insert(2)"
+      , "  s = s.insert(3)"
+      , "  s = s.remove(1)"
+      , "  print(show(s) + \" \" + show(held))"
+      , "  var t: Map[Int, Str] = mapOf([])"
+      , "  var j = 0"
+      , "  while j < 20 { t = t.insert(j % 7, \"v\" + display(j))"
+      , "    j = j + 1 }"
+      , "  let snapshot = t"
+      , "  t = t.insert(100, \"new\")"
+      , "  print(display(t.size()) + \" \" + display(snapshot.size()) + \" \" + show(t.get(3)) + \" \" + show(snapshot.get(100)))"
+      , "  0"
+      , "}" ]
+    , "{\"a\": 10, \"k0\": 0, \"k1\": 1, \"k3\": 3, \"k4\": 4} {\"a\": 1}\n#{2, 3} #{1}\n8 7 Some(\"v17\") None\n")
   ]
 
 keyedRefusalPrograms :: [(String, Text)]
