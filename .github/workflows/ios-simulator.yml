@@ -33,6 +33,11 @@ jobs:
     # The simulator step boots an iPhone and an iPad and runs the full device
     # matrix; on a contended hosted runner a single first frame can take 14 s.
     timeout-minutes: 75
+    # The C compiler's wait defaults to 120 s, which a contended hosted runner
+    # exceeded while compiling the app for the simulator. The limit bounds a
+    # hung compiler, not a correct translation.
+    env:
+      PUDU_CC_TIMEOUT: 600
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
