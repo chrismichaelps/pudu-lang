@@ -25,6 +25,25 @@ live. Output must still equal the expected answer.
 - **Q:** Why `-Wno-unused-function`? **A:** Programs that never allocate text
   leave the counting `malloc` unused; the generated program itself is still
   checked warning-free by the native harness.
+- **Q:** Why not compare every library case's stdout here? **A:** The flat-table and codec programs have no written answer; NativeSpec already compares them byte for byte with the interpreter, so this run owns only the allocation claim.
+
+## Library mode
+
+`testLibraryLeaks` writes Main.pudu to the temp directory and loads it with
+`compileProgram`, so standard-library imports resolve. `emitSingle` and
+`emitLibrary` feed one shared checker (`testCountedWith`). Cases with a written
+answer compare stdout. The rest (the flat table and codec bodies from
+[[Backend Kernel Counted Programs]]) must exit 0 with empty stderr and no live
+block; their output parity is covered by the differential spec.
+
+Property label: "native pure kernels behind library imports release every allocation".
+
+## Reallocation
+
+The counter also intercepts `realloc`: a reallocation from null opens a
+counted block, and one that moves an existing block keeps the count. Without
+it, a block the runtime opened with `realloc(NULL, n)` (the binary codec's
+growth) was freed uncounted and tripped the underflow guard (exit 98).
 
 ## Method lifetimes (#551)
 

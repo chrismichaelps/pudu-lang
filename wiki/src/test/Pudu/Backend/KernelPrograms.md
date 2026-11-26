@@ -14,6 +14,8 @@ builtin as a value. Module programs import `Std.FlatMap`, `Std.Json`,
 `Std.Xml` and `Std.Csv`. Refusal programs pin each reachable E7004 and
 E7001 with its span, directly and through a value.
 
+The flat-table and codec refusal cases are built from [[Backend Kernel Counted Programs]] bodies plus their refusing tail. `kernelLibraryPrograms` now also runs under the counted-allocation harness, so the completing bodies are checked for live allocations at exit.
+
 ## Resolved Grill Log
 
 Expected output is written by hand or from published vectors, never copied

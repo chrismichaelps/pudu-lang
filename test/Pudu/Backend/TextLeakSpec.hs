@@ -34,14 +34,16 @@ import Pudu.Backend.OutputPrograms (outputSuccessPrograms, outputStreamPrograms)
 import Pudu.Backend.BytesPrograms (bytesSuccessPrograms)
 import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms)
 import Pudu.Backend.StorePrograms (storeSuccessPrograms)
-import Pudu.Backend.KernelPrograms (kernelSuccessPrograms)
+import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms)
+import Pudu.Backend.KernelCountedPrograms (kernelCountedLibraryPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms)
 import Pudu.Backend.HostPrograms (hostCountedPrograms)
 import Pudu.Backend.CryptoPrograms (cryptoSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), compiledNativeModule, lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), compiledNativeModule, lowerProgram, programNativeModules)
+import Pudu.Compiler.Program (compileProgram, programDiagnostics, programSources)
 import Pudu.Diagnostic (hasErrors)
 import Pudu.Source (SourceName (..), newSource)
 import System.Directory (findExecutable)
@@ -66,6 +68,7 @@ textLeakProperties =
   , ("native word-map algebra releases every allocation", testLeaksFor wordMapSuccessPrograms)
   , ("native indexed stores and MultiMap primitives release every allocation", testLeaksFor storeSuccessPrograms)
   , ("native pure kernels release every allocation", testLeaksFor kernelSuccessPrograms)
+  , ("native pure kernels behind library imports release every allocation", testLibraryLeaks)
   , ("native host services, tasks and scopes release every allocation", testLeaksFor hostCountedPrograms)
   , ("native type parameters, constructors, dynamic values and sequence bindings release every allocation", testLeaksFor abstractionSuccessPrograms)
   , ("native digests and sealing release every allocation", testLeaksFor cryptoSuccessPrograms)
@@ -311,8 +314,45 @@ testLeaksWithSetup setup programs =
   testCountedPrograms [] "" setup
     [(label, source, output, errors, ExitSuccess) | (label, source, output, errors) <- programs]
 
+{-| Library-importing kernel programs load through the program loader from a
+    written @Main.pudu@. Cases with a written answer compare standard output;
+    the rest owe their output parity to the differential spec and must here
+    finish cleanly with no live block. -}
+testLibraryLeaks :: IO Property
+testLibraryLeaks = testCountedWith emitLibrary [] "" ""
+  ([(label, source, Just output, "", ExitSuccess) | (label, source, output) <- kernelLibraryPrograms]
+    <> [(label, source, Nothing, "", ExitSuccess) | (label, source) <- kernelCountedLibraryPrograms])
+
 testCountedPrograms :: [String] -> Text -> Text -> [(String, Text, Text, Text, ExitCode)] -> IO Property
-testCountedPrograms linkerFlags fixture setup programs = do
+testCountedPrograms linkerFlags fixture setup programs = testCountedWith emitSingle linkerFlags fixture setup
+  [(label, source, Just output, errors, status) | (label, source, output, errors, status) <- programs]
+
+{-| Emits one self-contained module checked on its own. -}
+emitSingle :: FilePath -> Text -> IO (Either String Text)
+emitSingle _ text = do
+  source <- newSource (SourceName "Main.pudu") text
+  checked <- runCompile source
+  pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
+    (False, Just parsed) -> case lowerProgram "main" [compiledNativeModule parsed checked] of
+      Lowered core -> either (Left . show) Right (lowerFrames core >>= emitProgram "text-leak-test" [source])
+      other -> Left (show other)
+    _ -> Left (show (compileDiagnostics checked))
+
+{-| Emits a program whose imports resolve beside it and in the standard library. -}
+emitLibrary :: FilePath -> Text -> IO (Either String Text)
+emitLibrary root text = do
+  let path = root </> "Main.pudu"
+  TextIO.writeFile path text
+  program <- compileProgram path
+  pure $ case programNativeModules program of
+    Nothing -> Left (show (programDiagnostics program))
+    Just modules -> case lowerProgram "main" modules of
+      Lowered core -> either (Left . show) Right (lowerFrames core >>= emitProgram "text-leak-test" (programSources program))
+      other -> Left (show other)
+
+testCountedWith :: (FilePath -> Text -> IO (Either String Text)) -> [String] -> Text -> Text
+  -> [(String, Text, Maybe Text, Text, ExitCode)] -> IO Property
+testCountedWith emit linkerFlags fixture setup programs = do
   configured <- lookupEnv "PUDU_CC"
   compiler <- findExecutable (maybe "cc" id configured)
   case compiler of
@@ -323,32 +363,29 @@ testCountedPrograms linkerFlags fixture setup programs = do
       pure (conjoin outcomes)
  where
   check cc root (label, text, expected, expectedErrors, expectedStatus) = do
-    source <- newSource (SourceName "Main.pudu") text
-    checked <- runCompile source
-    case (hasErrors (compileDiagnostics checked), compileModule checked) of
-      (False, Just parsed) -> case lowerProgram "main" [compiledNativeModule parsed checked] of
-        Lowered core -> case lowerFrames core >>= emitProgram "text-leak-test" [source] of
-          Left failure -> pure (counterexample (label <> ": " <> show failure) (False === True))
-          Right emitted -> do
-            let path = root </> "leaks.c"
-                binary = root </> "leaks"
-            TextIO.writeFile path (instrument <> emitted <> fixture <> trailer setup)
-            (built, output, errors) <- readProcessWithExitCode cc
-              (["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary, "-lm"] <> linkerFlags) ""
-            if built /= ExitSuccess || not (null output && null errors)
-              then pure (counterexample (label <> ": " <> show built <> output <> errors) (False === True))
-              else do
-                (status, out, err) <- readProcessWithExitCode binary [] ""
-                let observedErrors = case expectedStatus of
-                      ExitSuccess -> Text.pack err
-                      ExitFailure _ -> Text.take (Text.length expectedErrors) (Text.pack err)
-                pure $ counterexample (label <> ": " <> show (status, err)) $ conjoin
-                  [status === expectedStatus, Text.pack out === expected, observedErrors === expectedErrors]
-        other -> pure (counterexample (label <> ": " <> show other) (False === True))
-      _ -> pure (counterexample (label <> ": " <> show (compileDiagnostics checked)) (False === True))
+    emitted <- emit root text
+    case emitted of
+      Left failure -> pure (counterexample (label <> ": " <> failure) (False === True))
+      Right code -> do
+        let path = root </> "leaks.c"
+            binary = root </> "leaks"
+        TextIO.writeFile path (instrument <> code <> fixture <> trailer setup)
+        (built, output, errors) <- readProcessWithExitCode cc
+          (["-std=c11", "-pedantic", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", path, "-o", binary, "-lm"] <> linkerFlags) ""
+        if built /= ExitSuccess || not (null output && null errors)
+          then pure (counterexample (label <> ": " <> show built <> output <> errors) (False === True))
+          else do
+            (status, out, err) <- readProcessWithExitCode binary [] ""
+            let observedErrors = case expectedStatus of
+                  ExitSuccess -> Text.pack err
+                  ExitFailure _ -> Text.take (Text.length expectedErrors) (Text.pack err)
+            pure $ counterexample (label <> ": " <> show (status, err)) $ conjoin $
+              [status === expectedStatus, observedErrors === expectedErrors]
+                <> [Text.pack out === answer | Just answer <- [expected]]
 
 {-| Counts every live heap block, frames and text alike, and fails the process
-    at exit if any is still held. -}
+    at exit if any is still held. A reallocation from null opens a block; one
+    that moves an existing block keeps the count. -}
 instrument :: Text
 instrument = Text.unlines
   [ "#if defined(__linux__)", "#define _DEFAULT_SOURCE 1", "#define _POSIX_C_SOURCE 200809L", "#endif"
@@ -358,10 +395,12 @@ instrument = Text.unlines
   , "  void *answer = malloc(bytes); if(answer != NULL) ++test_live; return answer; }"
   , "static void *test_calloc(size_t count, size_t bytes) {"
   , "  void *answer = calloc(count,bytes); if(answer != NULL) ++test_live; return answer; }"
+  , "static void *test_realloc(void *pointer, size_t bytes) {"
+  , "  void *answer = realloc(pointer, bytes); if(pointer == NULL && answer != NULL) ++test_live; return answer; }"
   , "static void test_free(void *pointer) {"
   , "  if(pointer != NULL) { if(test_live == 0) _Exit(98); --test_live; } free(pointer); }"
   , "static void test_check(void) { if(test_live != 0) { fprintf(stderr, \"leaked %zu blocks\\n\", test_live); _Exit(97); } }"
-  , "#define malloc test_malloc", "#define calloc test_calloc", "#define free test_free"
+  , "#define malloc test_malloc", "#define calloc test_calloc", "#define realloc test_realloc", "#define free test_free"
   , "#define main pudu_test_program"
   ]
 

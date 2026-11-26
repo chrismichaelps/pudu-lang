@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-26 — Buffer bounds and counted kernel corpus
+
+- Interpreter buffer bounds no longer overflow near the Int maximum (#1023); the counted-allocation run now loads library-importing programs and covers the flat table and the JSON/XML/CSV and binary codecs (#1022). Undisposed `Sync` cells are released at program exit (#1026); the counted run also counts `realloc`.
+
 ## 2026-11-25 — In-place map and set updates
 
 - Map and set insert, put and remove on a value held once rewrite its own tree; the Maps benchmark went from 0.21 s to 0.09 s natively. refs #1019
