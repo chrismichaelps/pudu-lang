@@ -32,7 +32,9 @@ ARM64 and x86_64, resolving CI shards 1 and 4.
 Resolved: the independent implementation and wiki-parity review was recorded
 on PR #1027 on 2026-11-26 (https://github.com/chrismichaelps/pudu-lang/pull/1027#pullrequestreview-6079573141).
 The Records, tuples, sums and collections row is Implemented. No next action
-remains for this handoff.
+remains for the ledger row.
+
+Still open outside this handoff: Windows evidence for fixed seeds is pending as before; it does not gate the coverage ledger.
 
 ## Referenced by
 
