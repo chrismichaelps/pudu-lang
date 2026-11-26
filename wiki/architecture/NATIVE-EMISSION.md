@@ -35,7 +35,7 @@ programs and the measurements and parity cases required to close them.
 
 The checker walks each body after types settle and rejects use after a move,
 partial moves, holder and capture escapes, explicit `drop` calls and unbound
-droppable pattern parts (E4001–E4008). The interpreter drops owned locals,
+droppable pattern parts (E4001–E4009). The interpreter drops owned locals,
 parameters and temporaries on `Done`, `Unwound` and `Aborted`, newest first,
 running a type's own `drop` before its parts. Native lowering emits one glue
 function per needs-drop type and a per-function drop table that runs before

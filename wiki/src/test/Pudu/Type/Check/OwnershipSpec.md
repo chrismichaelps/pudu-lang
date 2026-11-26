@@ -33,7 +33,7 @@ The first group checks codes:
 - a move in a loop is E4001 on the next turn;
 - assigning a moved writable local makes it usable again;
 - moving a droppable field alone is E4002;
-- taking apart a `Drop` type is E4002;
+- taking apart a `Drop` type is E4009;
 - an explicit `drop` call is E4003;
 - an array, a closure capture and a module value are E4004;
 - a read-only temporary is E4005;

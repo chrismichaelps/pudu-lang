@@ -48,7 +48,7 @@ A value whose type implements `Drop`, or stores a part that does, needs drop.
 Ownership checking gives it one owner: a by-value use moves it, a read after a
 move is refused, a field cannot be moved out alone, a type with its own `drop`
 cannot be taken apart, and a holder, closure, module value or field store
-cannot keep it (E4001–E4008). The checker publishes the moving uses and owning
+cannot keep it (E4001–E4009). The checker publishes the moving uses and owning
 binders in the settled module, so the interpreter and native lowering read the
 same facts.
 

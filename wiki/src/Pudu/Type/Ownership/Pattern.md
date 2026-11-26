@@ -38,7 +38,7 @@ For a subject that needs drop:
 - alternatives check every alternative against the same subject.
 
 Before descending into a nominal constructor or record pattern, the walk asks
-whether the type implements `Drop`. If it does, the pattern is E4002: the
+whether the type implements `Drop`. If it does, the pattern is E4009: the
 value must be bound whole and its fields read through that name.
 
 ## Negative Logic
@@ -63,6 +63,9 @@ checks the inner pattern against the inner `Option`.
   Its `drop` runs on the whole value, and a pattern has already moved the
   fields out. _Rationale:_ the user's destructor would see a value it cannot
   clean up.
+- **Q:** Why does taking apart a `Drop` type get its own code? **A:** It is a
+  different refusal from moving a field out alone, and each code means one
+  thing. _Rejected:_ sharing E4002 between the two.
 - **Q:** Why substitute type arguments here? **A:** A payload written as `T`
   may be `Res` at the use. _Rationale:_ the decision must follow the value the
   program actually matched.

@@ -53,7 +53,7 @@ inspect at typeValue located pattern = case pattern of
     NominalType owner arguments -> do
       own <- lift (implementsDrop owner)
       if own
-        then refuse "E4002" (locatedSpan located)
+        then refuse "E4009" (locatedSpan located)
           ("a " <> nominalName owner <> " cannot be taken apart: its drop needs the whole value")
           "bind the whole value to a name and read its fields through that name"
         else continue owner arguments

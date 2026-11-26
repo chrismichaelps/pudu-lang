@@ -49,13 +49,14 @@ after an unconditional transfer.
 | Code | Meaning |
 | --- | --- |
 | E4001 | use of a moved value, definite or possible |
-| E4002 | partial move of a droppable field, or taking apart a type with its own `Drop` |
+| E4002 | partial move of a droppable field |
 | E4003 | explicit call to `drop` |
 | E4004 | a holder, closure capture, module value or builtin operand would keep a value needing drop |
 | E4005 | a droppable temporary is only read, so nothing owns it |
 | E4006 | a droppable value is stored into a field, reference or record update |
 | E4007 | a pattern leaves a droppable part unbound |
 | E4008 | a `Drop` implementation has the wrong target, member, receiver or result |
+| E4009 | taking apart a type with its own `Drop` |
 
 Every refusal carries a help that names the safe alternative. The walk reports
 once per span and code.

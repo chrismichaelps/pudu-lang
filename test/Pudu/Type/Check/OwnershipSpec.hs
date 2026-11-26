@@ -56,7 +56,7 @@ testOwnership = do
     , counterexample "a move in a loop is a use after a move on the next turn" (inLoop === ["E4001"])
     , counterexample "assigning a moved local makes it usable again" (reinitialized === [])
     , counterexample "a field that needs drop does not move out alone" (fieldMove === ["E4002"])
-    , counterexample "a type with its own drop is not taken apart" (takenApart === ["E4002"])
+    , counterexample "a type with its own drop is not taken apart" (takenApart === ["E4009"])
     , counterexample "drop is not called by the program" (explicitDrop === ["E4003"])
     , counterexample "an array does not hold values that need drop" (inArray === ["E4004"])
     , counterexample "a closure does not capture a value that needs drop" (captured === ["E4004"])
@@ -84,7 +84,7 @@ testContracts = do
     "borrow it with & or move the whole record"
   takenApart <- contractMain
     ["let r = Res{name: \"r\"}", "match r {", "  case Res{name} => { let _ = print(name) }", "}"]
-    "Res{name}" "E4002" "a Res cannot be taken apart: its drop needs the whole value"
+    "Res{name}" "E4009" "a Res cannot be taken apart: its drop needs the whole value"
     "bind the whole value to a name and read its fields through that name"
   explicitDrop <- contractMain
     ["var r = Res{name: \"r\"}", "r.drop()"]
