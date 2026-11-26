@@ -2,22 +2,24 @@
 module Pudu.Type.Ownership (checkOwnership) where
 
 import Control.Monad (forM_, when)
+import Data.Char (isUpper)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
 import Pudu.Semantic.Prelude (preludeValueNames)
 import Pudu.Source (Span)
 import Pudu.Type.Drop (implementsDrop, needsDrop)
-import Pudu.Type.Env (Checker, finalExpressionTypes, methodReceivers)
+import Pudu.Type.Env (Checker, finalExpressionTypes, lookupName, methodReceivers)
 import Pudu.Type.Ownership.Declaration (checkDropImplementation)
 import Pudu.Type.Ownership.Flow
 import Pudu.Frontend.Syntax.Pattern (patternBindings)
 import Pudu.Type.Ownership.Pattern (checkPattern)
-import Pudu.Type.Value (NominalId (..), Type (..))
+import Pudu.Type.Value (NominalId (..), Scheme (..), Type (..))
 
 {-| Check every body of a module and answer the spans of the uses that move a
     value needing drop, and of the binders that own one. Values that need no drop are not tracked: they keep
@@ -121,7 +123,7 @@ expression mode located@(Located at value) = do
   temporary mode located
   case value of
     NameExpression (name :| []) -> useName mode at name
-    NameExpression _ -> moduleValue at
+    NameExpression _ -> pure ()
     LiteralExpression _ -> pure ()
     UnaryExpression operator operand
       | operator `elem` ["&", "&mut"] -> place operand
@@ -132,11 +134,12 @@ expression mode located@(Located at value) = do
     BinaryExpression left operator right
       | operator `elem` ["&&", "||"] -> expression Read left >> branches [expression Read right, pure ()]
       | otherwise -> expression Read left >> expression Read right
-    CallExpression callee arguments -> call callee arguments
+    CallExpression callee arguments -> call callee arguments >> ownedTask at arguments
     MemberExpression base _ -> member mode at base
     IndexExpression base index -> place base >> expression Read index
     RangeExpression low _ high -> mapM_ (expression Read) low >> mapM_ (expression Read) high
     TryExpression operand -> expression Consume operand
+    AwaitExpression operand@(Located _ (CallExpression callee arguments)) -> holding operand >> call callee arguments
     AwaitExpression operand -> expression Read operand
     TupleExpression members -> mapM_ (expression Consume) members
     ArrayExpression members -> mapM_ (expression Consume) members
@@ -196,14 +199,16 @@ fieldInit (Located _ field) = case fieldInitValue field of
   Nothing -> useName Consume (locatedSpan (fieldInitName field)) (locatedValue (fieldInitName field))
 
 {-| A use of a local that needs drop: reading it requires it is still there,
-    and a consuming use moves it. -}
+    and a consuming use moves it. A name with no local binder is a function, a
+    constructor or a module value; a module value that needs drop is refused
+    where it is declared, so the use itself is not. -}
 useName :: Mode -> Span -> Text -> Walk ()
 useName mode at name = do
   owning <- needs at
   when owning $ do
     found <- resolveBinder name
     case found of
-      Nothing -> when (Set.notMember name constructors) (moduleValue at)
+      Nothing -> pure ()
       Just (_, True) ->
         refuse "E4004" at (name <> " needs drop and cannot be captured by a closure")
           "pass it to the closure as an argument instead"
@@ -215,12 +220,6 @@ useName mode at name = do
             "a value that needs drop has one owner; borrow it with & to use it without moving it"
         when (mode == Consume) (markMoved binder at)
 
-moduleValue :: Span -> Walk ()
-moduleValue at = do
-  owning <- needs at
-  when owning $ refuse "E4004" at "a module value cannot hold a value that needs drop"
-    "create the value inside the function that owns it"
-
 {-| A place read through: the root must still be there, and nothing moves. -}
 place :: Located Expression -> Walk ()
 place located@(Located at value) = case value of
@@ -230,13 +229,31 @@ place located@(Located at value) = case value of
   UnaryExpression "*" inner -> place inner
   _ -> expression Read located
 
+{-| A member of a local value is a field: moving one out alone is refused. A
+    member of a type or module qualifier is a constructor or a declaration. -}
 member :: Mode -> Span -> Located Expression -> Walk ()
 member mode at base = do
-  owning <- needs at
-  when (owning && mode == Consume) $
-    refuse "E4002" at "cannot move a field that needs drop out of its record"
-      "borrow it with & or move the whole record"
-  place base
+  local <- receiverIsLocalValue base
+  when local $ do
+    owning <- needs at
+    when (owning && mode == Consume) $
+      refuse "E4002" at "cannot move a field that needs drop out of its record"
+        "borrow it with & or move the whole record"
+    place base
+
+{-| A task runs its body each time it is awaited, so a task holding a value
+    that needs drop would drop it on every run, or never when it is not
+    awaited. Such a task is awaited where it is made. -}
+ownedTask :: Span -> [Located Expression] -> Walk ()
+ownedTask at arguments = do
+  found <- typeAt at
+  case found of
+    Just (NominalType owner _) | nominalName owner == "Task" -> do
+      owning <- or <$> mapM (needs . locatedSpan) arguments
+      when owning $ refuse "E4010" at
+        "a task that owns a value that needs drop must be awaited where it is made"
+        "write .await on the call, or pass a borrow of the value"
+    _ -> pure ()
 
 assign :: Located Expression -> Located Expression -> Walk ()
 assign target source = case locatedValue target of
@@ -263,8 +280,8 @@ call callee arguments = case locatedValue callee of
     receivers <- factReceivers <$> facts
     local <- receiverIsLocalValue receiver
     case Map.lookup (locatedSpan receiver) receivers of
-      Just True -> expression Consume receiver >> mapM_ (expression Consume) arguments
-      Just False -> place receiver >> mapM_ (expression Consume) arguments
+      Just True -> genericReceiver receiver >> expression Consume receiver >> mapM_ (expression Consume) arguments
+      Just False -> genericReceiver receiver >> place receiver >> mapM_ (expression Consume) arguments
       Nothing
         | not local -> mapM_ (expression Consume) arguments
         | otherwise -> do
@@ -277,8 +294,67 @@ call callee arguments = case locatedValue callee of
     found <- resolveBinder name
     if found == Nothing && Set.member name builtins
       then mapM_ builtinOperand arguments >> mapM_ (expression Read) arguments
-      else expression Read callee >> mapM_ (expression Consume) arguments
+      else do
+        when (found == Nothing) (genericArguments name arguments)
+        expression Read callee >> mapM_ (expression Consume) arguments
   _ -> expression Read callee >> mapM_ (expression Consume) arguments
+
+{-| A generic body neither tracks nor drops a value of a type parameter, so it
+    may copy or lose one. A value that needs drop is not passed where the
+    callee's parameter mentions a type parameter; a borrow of it is. A
+    constructor keeps what it is given whole, and its instantiated type drops
+    it, so constructors are not checked. -}
+genericArguments :: Text -> [Located Expression] -> Walk ()
+genericArguments name arguments
+  | maybe True (isUpper . fst) (Text.uncons name) = pure ()
+  | otherwise = do
+      found <- lift (lookupName name)
+      case found of
+        Just Scheme{schemeParams = params@(_ : _), schemeType = written}
+          | FunctionTypeRequiring _ inputs _ _ <- unrestricted written ->
+              forM_ (zip inputs arguments) $ \(input, argument) ->
+                when (mentions (Set.fromList (map fst params)) input) (genericOperand argument)
+        _ -> pure ()
+ where
+  unrestricted (RestrictedType _ inner) = unrestricted inner
+  unrestricted kind = kind
+
+{-| A method declared for a generic type runs one body for every type
+    argument, so it is not called on a value whose type arguments need drop. -}
+genericReceiver :: Located Expression -> Walk ()
+genericReceiver receiver = do
+  found <- typeAt (locatedSpan receiver)
+  case found >>= nominalArguments of
+    Just arguments -> do
+      owning <- or <$> mapM (lift . needsDrop) arguments
+      when owning (genericRefusal (locatedSpan receiver))
+    Nothing -> pure ()
+ where
+  nominalArguments kind = case kind of
+    NominalType _ arguments@(_ : _) -> Just arguments
+    ReferenceTypeValue _ inner -> nominalArguments inner
+    RestrictedType _ inner -> nominalArguments inner
+    _ -> Nothing
+
+genericOperand :: Located Expression -> Walk ()
+genericOperand operand = do
+  owning <- needs (locatedSpan operand)
+  when owning (genericRefusal (locatedSpan operand))
+
+genericRefusal :: Span -> Walk ()
+genericRefusal at = refuse "E4011" at
+  "a value that needs drop cannot be used where a type parameter stands"
+  "pass a borrow of the value, or write the function for its type"
+
+{-| Whether a written type mentions one of the parameters, outside a borrow. -}
+mentions :: Set Text -> Type -> Bool
+mentions names kind = case kind of
+  RigidType name -> Set.member name names
+  NominalType _ arguments -> any (mentions names) arguments
+  TupleTypeValue members -> any (mentions names) members
+  AppliedType head' arguments -> any (mentions names) (head' : arguments)
+  RestrictedType _ inner -> mentions names inner
+  _ -> False
 
 {-| A receiver written as a type or module qualifier names no value. -}
 receiverIsLocalValue :: Located Expression -> Walk Bool

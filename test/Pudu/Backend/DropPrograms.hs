@@ -118,7 +118,7 @@ dropSuccessPrograms =
         , "}"
         ]
     , lines' [ "in arg", "drop arg", "after" ] )
-  , ( "a task owns its async function's parameters and drops them when it ends, named or not"
+  , ( "a task awaited where it is made owns its async function's parameters and drops them when it ends, named or not"
     , program
         [ "async fn useIt(r: Res) -> Int {"
         , "  let _ = print(\"task \" + r.name)"
@@ -126,9 +126,8 @@ dropSuccessPrograms =
         , "}"
         , "async fn ignore(r: Res) -> Int { 2 }"
         , "async fn main() -> Result[Int, Str] {"
-        , "  let pending = useIt(Res{name: \"used\"})"
         , "  let _ = print(\"made\")"
-        , "  let a = pending.await"
+        , "  let a = useIt(Res{name: \"used\"}).await"
         , "  let b = ignore(Res{name: \"ignored\"}).await"
         , "  let lifted = async fn(r: Res) -> Int {"
         , "    let _ = print(\"lambda \" + r.name)"
@@ -141,6 +140,25 @@ dropSuccessPrograms =
         ]
     , lines'
         [ "made", "task used", "drop used", "drop ignored", "lambda lam", "drop lam", "sum 6" ] )
+  , ( "variants without a payload build values of sums that need drop, bare and qualified"
+    , program
+        [ "type Slot = | Empty | Full(Res)"
+        , "type Mode = | On | Off"
+        , "impl Drop for Mode {"
+        , "  fn drop(self: &mut Self) -> () {"
+        , "    let _ = print(\"drop mode\")"
+        , "  }"
+        , "}"
+        , "fn main() -> Int {"
+        , "  let s = Empty"
+        , "  let f = Full(Res{name: \"full\"})"
+        , "  let m = Mode.On"
+        , "  let o = Off"
+        , "  let _ = print(\"built\")"
+        , "  0"
+        , "}"
+        ]
+    , lines' [ "built", "drop mode", "drop mode", "drop full" ] )
   ]
 
 {-| Programs that stop: what each owns is dropped before the stop is reported,

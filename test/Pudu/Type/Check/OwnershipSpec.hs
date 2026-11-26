@@ -25,6 +25,10 @@ resource =
   , "}"
   , "type Holder = { mut first: Res, second: Option[Res] }"
   , "fn take(r: Res) -> Str { r.name }"
+  , "fn dup[T](x: T) -> (T, T) { (x, x) }"
+  , "fn peek[T](x: &T) -> Int { 0 }"
+  , "async fn hold(r: Res) -> Int { 1 }"
+  , "type Slot = | Empty | Full(Res)"
   ]
 
 inMain :: [Text] -> IO [Text]
@@ -49,8 +53,16 @@ testOwnership = do
   fieldStore <- inMain ["var h = Holder{first: Res{name: \"f\"}, second: None}", "h.first = Res{name: \"g\"}"]
   partBehind <- inMain ["let o = Some(Res{name: \"o\"})", "match o {", "  case Some(_) => { }", "  case None => { }", "}"]
   moduleValue <- codes (resource <> ["const SHARED = Res{name: \"s\"}", "fn main() -> Int { 0 }"])
+  generic <- inMain ["let p = dup(Res{name: \"d\"})"]
+  genericBorrow <- inMain ["let r = Res{name: \"r\"}", "let _ = peek(&r)"]
+  storedTask <- inMain ["let t = hold(Res{name: \"t\"})"]
+  nullary <- inMain ["let s = Empty", "let f = Full(Res{name: \"f\"})"]
   pure $ conjoin
     [ counterexample "borrowing and moving once is clean" (clean === [])
+    , counterexample "a type parameter does not take a value that needs drop" (generic === ["E4011"])
+    , counterexample "a type parameter takes a borrow of one" (genericBorrow === [])
+    , counterexample "a task holding a value that needs drop is awaited where it is made" (storedTask === ["E4010"])
+    , counterexample "variants without a payload build sums that need drop" (nullary === [])
     , counterexample "a use after a move is refused" (afterMove === ["E4001"])
     , counterexample "a use after a move on some paths is refused" (maybeMoved === ["E4001"])
     , counterexample "a move in a loop is a use after a move on the next turn" (inLoop === ["E4001"])
@@ -110,6 +122,14 @@ testContracts = do
     ["let o = Some(Res{name: \"o\"})", "match o {", "  case Some(_) => { }", "  case None => { }", "}"]
     "_) =>" "E4007" "this part of the value needs drop and is not bound"
     "bind it to a name so it has an owner that drops it"
+  storedTask <- contractMain
+    ["let t = hold(Res{name: \"t\"})"]
+    "hold(Res{name: \"t\"})" "E4010" "a task that owns a value that needs drop must be awaited where it is made"
+    "write .await on the call, or pass a borrow of the value"
+  generic <- contractMain
+    ["let p = dup(Res{name: \"d\"})"]
+    "Res{name: \"d\"}" "E4011" "a value that needs drop cannot be used where a type parameter stands"
+    "pass a borrow of the value, or write the function for its type"
   wrongMember <- contract
     [ "module M", "type Res = { name: Str }"
     , "impl Drop for Res {", "  fn other(self: &Self) -> () { }", "}" ]
@@ -131,6 +151,8 @@ testContracts = do
     , counterexample "a read-only temporary names the temporary" readTemporary
     , counterexample "a field store names the field" fieldStore
     , counterexample "a wildcard part names the wildcard" partBehind
+    , counterexample "a stored owning task names the call" storedTask
+    , counterexample "a value at a type parameter names the argument" generic
     , counterexample "a wrong Drop member names the member" wrongMember
     , counterexample "a wrong self names the member" wrongSelf
     ]
