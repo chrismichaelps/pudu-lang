@@ -17,6 +17,9 @@ tags: [changelog]
 ## 2026-11-25 — URL component kernel
 
 - `Std.Url.encodeComponent` percent-encodes through the `urlEncodeComponent` kernel in one pass and returns unchanged text without allocating; a million encodes went from 1.83 s to 0.06 s natively. refs #1007
+## 2026-11-25 — Void base element
+
+- Native HTML rendering treats `base` as a void element, as the interpreter does; a new parity program covers every void element, lists and a wide set of attributes. refs #1014
 
 ## 2026-11-25 — ASCII text case
 

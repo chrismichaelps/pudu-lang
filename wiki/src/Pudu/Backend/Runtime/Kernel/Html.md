@@ -29,6 +29,8 @@ The walk keeps an explicit heap stack of child-list frames instead of recursing,
 
 Writing into the text owner removes the final copy, and the per-thread length hint makes growth rare on repeated pages; RenderBench went from 0.07 s to 0.05 s, and an address and undefined-behavior sanitizer run of the parity program was clean.
 
+**Q:** How is the void element lookup kept in step with `Std.Html`? **A:** The names are grouped by length; the four-letter group once omitted `base`, so native output closed it while the interpreter did not (#1014). A parity program now renders every void element, lists, and a wide set of attributes natively, in the interpreter, and through the library writer, and requires all three to agree.
+
 ## Referenced by
 
 [[Native Kernel Runtime]] · [[Eval Html Render]]
