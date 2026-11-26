@@ -264,3 +264,9 @@ Other values retain their existing behavior; captures and source spans stay inta
 A record expression is built by `recordConstructor` and then passed through
 `declaredOrder`, so canonical sum constructors keep dev's identity and
 plain records keep declaration order (#519).
+
+## Drop scopes (#1028)
+
+`evaluate` installs drop support when any `Drop` implementation exists. Declarations, patterns, parameters and match bindings adopt the binders checking marked; a `::move` reads a local and clears its binding; an expression statement releases a marked temporary; `let _ = value` drops immediately. Scope frames run their drops on `Done`, `Unwound` and `Aborted`, newest first.
+
+Resolved Grill Log: every way a scope ends drops what it still owns; a moved binding is empty and is not dropped twice.

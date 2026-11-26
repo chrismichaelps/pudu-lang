@@ -12,7 +12,10 @@
 
     A reference that chose types for parameters bounded by a trait with a
     static member is rewritten to apply them explicitly, in the declaration's
-    parameter order, so the call carries the selection erasure would lose. -}
+    parameter order, so the call carries the selection erasure would lose.
+
+    A use ownership checking found to move a value that needs drop is wrapped
+    in `moveOperator`, so each engine reads the move from the module it runs. -}
 module Pudu.Compiler.Literals
   ( resolveOwnerSelections
   , resolveLiterals
@@ -22,6 +25,8 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Type.Equality ((:~:) (..))
@@ -32,26 +37,28 @@ import Pudu.Eval.Value (Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
+import Pudu.Ownership (moveOperator)
 import Pudu.IntegerLiteral (IntegerKind, parseIntegerLiteral)
 import Pudu.Source (Span)
 import Pudu.Type.Value (Type (..), OwnerSelection (..), ProviderSelection (..), nominalKey, capabilityList)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
-resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span ProviderSelection -> Map Span OwnerSelection -> Module -> Module
-resolveLiterals kinds selections providers owners = walk (Facts kinds selections providers owners False)
+resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span ProviderSelection -> Map Span OwnerSelection -> Set Span -> Module -> Module
+resolveLiterals kinds selections providers owners moves = walk (Facts kinds selections providers owners moves False)
 
 {-| Lower only generated owner annotations into printable ordinary applications. -}
 resolveOwnerSelections :: Map Span [Type] -> Module -> Module
 resolveOwnerSelections selections
   | Map.null selections = id
-  | otherwise = walk (Facts Map.empty selections Map.empty Map.empty True)
+  | otherwise = walk (Facts Map.empty selections Map.empty Map.empty Set.empty True)
 
 data Facts = Facts
   { factKinds :: !(Map Span Text)
   , factSelections :: !(Map Span [Type])
   , factProviders :: !(Map Span ProviderSelection)
   , factOwners :: !(Map Span OwnerSelection)
+  , factMoves :: !(Set Span)
   , factOwnersOnly :: !Bool
   }
 
@@ -140,6 +147,8 @@ instance (GWalk f, GWalk g) => GWalk (f :*: g) where
 instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
     Just Refl
+      | not (factOwnersOnly kinds), NameExpression (_ :| []) <- value, Set.member spanValue (factMoves kinds) ->
+          moved spanValue value
       | not (factOwnersOnly kinds), RecordExpression (ModuleName path) fields <- value ->
           let selected = case Map.lookup spanValue (factOwners kinds) of
                 Just (VariantOwner owner label names) -> ModuleName ("::sum::" :| (nominalKey owner : label : names))
@@ -181,6 +190,9 @@ instance (Walk a, Typeable a) => Walk (Located a) where
    where
     withArguments (Located at (NamedType path _)) arguments = Located at (NamedType path arguments)
     withArguments other _ = other
+
+moved :: Span -> Expression -> Located Expression
+moved at value = Located at (UnaryExpression moveOperator (Located at value))
 
 {-| Resolved member symbols cannot be spelled by a source identifier. -}
 selectProvider :: Facts -> Span -> Expression -> Expression
@@ -312,6 +324,15 @@ instance Walk ForeignCallbackPassing where
 instance Walk ForeignCallback
 instance Walk ForeignCallbackParameter
 instance Walk ForeignParameter
-instance Walk FieldInit
+{-| A field written by its name alone uses the local of that name, and moves
+    it when ownership checking says so. -}
+instance Walk FieldInit where
+  walk facts field = case fieldInitValue field of
+    Nothing
+      | not (factOwnersOnly facts), Set.member at (factMoves facts) ->
+          field{fieldInitValue = Just (moved at (NameExpression (locatedValue (fieldInitName field) :| [])))}
+     where
+      at = locatedSpan (fieldInitName field)
+    _ -> to (gwalk facts (from field))
 instance Walk MatchArm
 instance Walk Expression

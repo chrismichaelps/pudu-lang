@@ -30,6 +30,7 @@ aliases: [Program Compiler Module Map]
   orchestration.
 - [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001` refusals for everything the
   native subset does not carry.
+- [[Compiler Lower Drop]] — owned locals, scope-end drops and one glue per needs-drop type (#1028).
 - [[Compiler Lower Function Body]] — entry and named-function boundaries, with body callbacks (#846).
 - [[Compiler Lower Body]] — the block, statement, expression, and call-site traversal the reachability
   driver drives; state and signature admission have separate modules.

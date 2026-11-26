@@ -10,6 +10,15 @@ tags: [changelog]
 - Interpreter buffer bounds no longer overflow near the Int maximum (#1023); the counted-allocation run now loads library-importing programs and covers the flat table and the JSON/XML/CSV and binary codecs (#1022). Undisposed `Sync` cells are released at program exit (#1026); the counted run also counts `realloc`. The Records, tuples, sums and collections row is Implemented after an independent review.
 - Independent review of the kernel promotion recorded on the PR; the native-kernels handoff is closed. refs #1022
 
+## 2026-11-26 — User drop and moves on every exit path
+
+- Checker ownership walk, interpreter drop scopes, and native drop glue/drop tables; two-engine traces cover normal exit, return, break, continue, `?`, matches, replacement and stops. refs #1028
+- Async functions and async lambdas hand owned parameters to their task, which drops them when it ends. refs #1028
+- Owning tasks are awaited where they are made (E4010); a value that needs drop is not used where a type parameter stands (E4011); payload-free variants of sums that need drop build. refs #1028
+- E4011 is decided at every instantiation of a generic value, so function values, qualified calls, method type parameters and borrows cannot carry a value that needs drop into a generic body; an async method taking self by value is covered by E4010. refs #1028
+- `Self` is a type parameter like any other: a trait default inherited by an implementation whose target needs drop is refused at that implementation, and a dereference or a pattern over a borrow cannot move a value that needs drop out of it (E4012). refs #1028
+- An awaited result that needs drop belongs to the scope that awaited it, and is dropped when that scope ends. refs #1028
+
 ## 2026-11-25 — In-place map and set updates
 
 - Map and set insert, put and remove on a value held once rewrite its own tree; the Maps benchmark went from 0.21 s to 0.09 s natively. refs #1019

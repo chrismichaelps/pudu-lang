@@ -38,6 +38,7 @@ import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (DeclaredShapes, ModuleTypes (..), TypeInfo, checkTypesDetailed)
 import Pudu.Type.Value (NominalId, Scheme, Type)
 import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Source (Source, Span)
 
@@ -179,7 +180,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
            in do
                 let settledSyntax = resolveLiterals (maybe Map.empty moduleIntegerKinds typing)
                       (maybe Map.empty moduleSelections typing) (maybe Map.empty moduleProviders typing)
-                      (maybe Map.empty moduleOwners typing) parsed
+                      (maybe Map.empty moduleOwners typing) (maybe Set.empty moduleMoves typing) parsed
                     ownedSyntax = if hasErrors typed then parsed else
                       resolveOwnerSelections (maybe Map.empty moduleSelections typing) parsed
                 (constantDiagnostics, folded) <-

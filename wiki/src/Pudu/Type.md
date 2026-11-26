@@ -186,3 +186,9 @@ stores them under.
 Resolved Grill Log: preserve each successful dynamic widening's span,
 canonical trait and solved payload in the checked module. The span remains
 available to select facts belonging to a later specialized body.
+
+## Ownership products (#1028)
+
+`ModuleTypes` gains `moduleMoves :: Set Span`; `moduleIntegerKinds` also marks each owning binder with `::owned`. `checkTypesDetailed` consumes the checker's `(moves, owned)` pair and publishes both with the other settled facts. Tooling and both engines read the same product.
+
+Resolved Grill Log: ownership facts travel with the existing per-span fact channel, so a cached module and a fresh one answer alike. No second product shape.

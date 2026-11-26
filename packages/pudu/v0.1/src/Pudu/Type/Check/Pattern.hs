@@ -26,6 +26,7 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , bindName
+  , recordExpression
   , inTypeScopeWith
   , freshVariable
   , lookupField
@@ -108,7 +109,9 @@ ownerOfScheme scheme = case schemeType scheme of
 bindPattern :: DeclaredTypes -> [(Text, Int)] -> Located Pattern -> Type -> Checker ()
 bindPattern declared rigid (Located patternSpan pattern') subjectType = case pattern' of
   WildcardPattern -> pure ()
-  BindingPattern name -> bindName (locatedValue name) (monotype subjectType)
+  BindingPattern name -> do
+    recordExpression (locatedSpan name) subjectType
+    bindName (locatedValue name) (monotype subjectType)
   LiteralPattern literal -> do
     literalTypeValue <- literalType patternSpan literal
     _ <- unify patternSpan subjectType literalTypeValue
@@ -310,7 +313,9 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
         (Just "check the field name against the type declaration")
   case fieldPatternValue field of
     Just nested -> bindPattern declared rigid nested fieldType
-    Nothing -> bindName name (monotype fieldType)
+    Nothing -> do
+      recordExpression (locatedSpan (fieldPatternName field)) fieldType
+      bindName name (monotype fieldType)
 
 {-| A generated construction names a variant through its canonical owner,
     `Module.Type.Variant`, which its defining module need not import. Typed

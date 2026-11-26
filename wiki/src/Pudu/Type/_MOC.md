@@ -25,6 +25,9 @@ tags: [moc, module]
 - [[Type Interface Spec]] — imported generic and late-alias checks and callback refusals.
 
 - [[Type Check Pattern Spec]] — correlated product coverage and missing-pattern diagnostics.
+- [[Type Drop]] · [[Type Ownership]] — needs-drop decision and the whole-module move walk (#1028).
+- [[Type Ownership Declaration]] · [[Type Ownership Flow]] · [[Type Ownership Pattern]] — `Drop` shape, move state and pattern ownership (#1028).
+- [[Type Check Ownership Spec]] — move, escape and `Drop`-shape diagnostic contracts (#1028).
 
 - [[Type Boundary]] — the phase entry point and the published type map.
 - [[Type Value]] — formed types, schemes, and how a type is rendered.

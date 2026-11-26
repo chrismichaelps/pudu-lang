@@ -266,3 +266,11 @@ Run Objective-C Foundation conformance on macOS and record the platform skip els
 The module conformance property runs `ledgerAuditPrograms` after `modulePrograms`, and the module refusal property runs `ledgerAuditRefusals` after `moduleRefusalPrograms`. See [[Backend Ledger Audit Programs]].
 
 Resolved Grill Log: the ledger programs join the existing module properties, so Partial claims run in both engines without a new property.
+## Drop programs (#1028)
+
+The native suite runs `dropSuccessPrograms` against their written traces and
+against the interpreter, and `dropStopPrograms` against the interpreter, so a
+drop that is missing, late or in another order fails in one engine.
+
+Resolved Grill Log: the drop programs join the native properties rather than
+a new suite, so the same corpus answers trace parity and stop parity.

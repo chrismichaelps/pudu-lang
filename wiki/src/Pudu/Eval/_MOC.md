@@ -12,6 +12,7 @@ tags: [moc, module]
 - [[Eval Function Closure Tests]] — receiver, generic, qualified, and missing Decimal dispatch checks.
 
 - [[Eval Runtime]] — scoped resource ownership shared by evaluation modes.
+- [[Eval Drop]] — user `drop` before parts, once per owned value (#1028).
 - [[Eval Context]] — serialized accepted-state retention across evaluator actions.
 
 - [[Eval Foreign Result]] — exact non-owning result conversion and shape failures.

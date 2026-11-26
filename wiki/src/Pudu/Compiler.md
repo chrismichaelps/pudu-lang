@@ -211,3 +211,9 @@ Resolved Grill Log: separate semantic roles even at identical generated spans. N
 Resolved Grill Log: the full compilation product carries the module's
 successful dynamic widenings. Frontend-only and unchecked results carry
 an empty collection. The source of evidence is checking.
+
+## Ownership facts through compilation (#1028)
+
+`compileFrontendWithDependencies` passes `moduleMoves` to `resolveLiterals` beside the literal kinds, selections, providers and owners, so the settled module carries each moving use as `::move`. The owned-binder spans ride in `moduleIntegerKinds` under `::owned`; no new compile-product field is added. Cached and fresh products therefore carry the same ownership facts.
+
+Resolved Grill Log: moves belong to the settled syntax both engines read, not to a parallel cache field that could drift. A module's own `Drop` trait is not the prelude's.

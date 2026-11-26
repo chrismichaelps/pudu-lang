@@ -320,6 +320,7 @@ library
     Pudu.Compiler.Lower.Decimal
     Pudu.Compiler.Lower.Dynamic
     Pudu.Compiler.Lower.Default
+    Pudu.Compiler.Lower.Drop
     Pudu.Compiler.Lower.Keyed
     Pudu.Compiler.Lower.WordMap
     Pudu.Compiler.Lower.Store
@@ -401,6 +402,7 @@ library
     Pudu.Eval.DeclaredOwner
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Drop
     Pudu.Eval.Frozen
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Argument
@@ -581,6 +583,12 @@ library
     Pudu.Type.Formation.Order
     Pudu.Type.Formation.Shell
     Pudu.Type.Marker
+    Pudu.Type.Drop
+    Pudu.Ownership
+    Pudu.Type.Ownership
+    Pudu.Type.Ownership.Declaration
+    Pudu.Type.Ownership.Flow
+    Pudu.Type.Ownership.Pattern
     Pudu.Type.Implementation
     Pudu.Type.Proof
     Pudu.Type.Proof.Match

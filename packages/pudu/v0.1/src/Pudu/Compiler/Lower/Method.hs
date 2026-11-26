@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Method — implementation members and trait defaults
     as ordinary native calls, selected by the receiver's checked type. -}
-module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerHeldMethod, lowerQualifiedMethod, lowerOwnedMethod, callInstance) where
+module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerHeldMethod, lowerQualifiedMethod, lowerOwnedMethod, callInstance, invokeLent, unselected) where
 
 import Data.Map.Strict (Map)
 import Data.List (mapAccumL)

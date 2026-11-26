@@ -28,6 +28,8 @@ import Pudu.Compiler.Lower.Bytes (lowerBytesOf)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry, unwrapOrLeave)
 import Pudu.Compiler.Lower.Scope (leaving, leavingLoop, lowerScope, released)
+import Pudu.Compiler.Lower.Drop (adoptLocal, closingScope, dropValue, droppingAll, droppingLoop, ownedAt)
+import Pudu.Ownership (moveOperator)
 import Pudu.Compiler.Lower.Decimal (decimalLiteral)
 import Pudu.Compiler.Lower.Dynamic (hasRuntimeChoice, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
 import Pudu.Compiler.Lower.Generic (writtenCoreType, writtenTypeArguments)
@@ -53,7 +55,7 @@ import Pudu.Core
 import Pudu.Eval.Operator.Access (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax
   ( Block (..), Declaration (..), Expression (..)
-  , Function, Literal (..), Located (..), Statement (..), TypeSyntax (NamedType) )
+  , Function, Literal (..), Located (..), Pattern (WildcardPattern), Statement (..), TypeSyntax (NamedType) )
 import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
@@ -72,8 +74,8 @@ lowerFunctionBody = lowerFunctionBodyWith lowerExpression lowerBlock
     expression as the result. The scope is popped on exit, so C block scoping
     and Pudu scoping agree. -}
 lowerBlock :: LowerState -> Located Block -> (LowerState, CoreBlock, CoreType)
-lowerBlock state (Located _ block) =
-  (popped, CoreBlock{coreBlockStatements = statements <> resultStatements, coreBlockResult = coreResult}, blockType (statements <> resultStatements) coreResult)
+lowerBlock state (Located blockSpan block) =
+  (popped, closed, blockType (statements <> resultStatements) coreResult)
   where
     pushed = state{lowerScopes = [] : lowerScopes state}
     (afterStatements, statements, stopped) = foldStatements pushed (blockStatements block)
@@ -81,7 +83,11 @@ lowerBlock state (Located _ block) =
       _ | stopped -> (afterStatements, [], Nothing, CoreUnitType)
       Nothing -> (afterStatements, [], Nothing, blockType statements Nothing)
       Just located -> lowerBlockResult afterStatements located
-    popped = afterResult{lowerScopes = drop 1 (lowerScopes afterResult)}
+    lowered = CoreBlock{coreBlockStatements = statements <> resultStatements, coreBlockResult = coreResult}
+    -- What the scope owns is dropped once its result is in hand; a block that
+    -- stopped left through a transfer that dropped it already.
+    (closedState, closed) = if stopped then (afterResult, lowered) else closingScope blockSpan afterResult lowered
+    popped = closedState{lowerScopes = drop 1 (lowerScopes closedState)}
 
 {-| A block's trailing expression. An assignment there is a statement and the
     block's result is empty, as the evaluator reads it. -}
@@ -96,11 +102,8 @@ lowerBlockResult state located@(Located expressionSpan expression) = case expres
           | expressionIsPrintValued coreRight ->
               (refuse expressionSpan "assigning a Result[(), Str] value" after, [], Nothing, CoreUnitType)
           | coreType == coreLocalType local || coreType == CoreNeverType ->
-              ( after
-              , [CoreStatement{coreStatementSpan = expressionSpan, coreStatementShape = CoreAssign local (takeReceiver local coreRight)}]
-              , Nothing
-              , CoreUnitType
-              )
+              let (replaced, statement) = replacing after expressionSpan local (takeReceiver local coreRight)
+               in (replaced, [statement], Nothing, CoreUnitType)
           | otherwise ->
               ( refuse expressionSpan "an assignment whose value has a different type" after
               , []
@@ -125,6 +128,13 @@ foldStatements state = go state []
   where
     go current collected [] = (current, reverse collected, False)
     go current collected (one@(Located statementSpan statement) : rest) = case statement of
+      {-| A wildcard keeps nothing, so the statement owns the value and drops
+          it where the statement ends. The tuple and record path below binds
+          the subject to a root and publishes its parts, which a wildcard has
+          no use for, so the discard is lowered here instead. -}
+      LetPatternStatement _ (Located _ WildcardPattern) _ _ -> case lowerStatement current one of
+        (after, Just lowered) -> go after (lowered : collected) rest
+        (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       LetPatternStatement kind pattern _ subject | hasSequencePattern pattern ->
         case lowerLetSequence lowerExpression current statementSpan kind pattern subject of
           (after, Just statements) -> binding after collected statements rest
@@ -169,8 +179,8 @@ lowerBindingValue state written = case lowerExpression state written of
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
-  DeclarationStatement (Located declarationSpan (BindingDeclaration _ binding (Located _ name) annotation value))
-    -> let panicked = annotatedPanic state annotation value in case maybe (lowerBindingValue state value) id panicked of
+  DeclarationStatement (Located declarationSpan (BindingDeclaration _ binding (Located nameSpan name) annotation value))
+    -> adopted nameSpan name $ let panicked = annotatedPanic state annotation value in case maybe (lowerBindingValue state value) id panicked of
         (after, Just (coreValue, coreType))
           | expressionIsPrintValued coreValue -> halt declarationSpan "binding a Result[(), Str] value" after
           -- A binding annotated dynamic holds the value widened.
@@ -206,13 +216,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
           (after, Just (coreRight, coreType))
             | expressionIsPrintValued coreRight -> halt statementSpan "assigning a Result[(), Str] value" after
             | coreType == coreLocalType local || coreType == CoreNeverType ->
-                ( after
-                , Just
-                    CoreStatement
-                      { coreStatementSpan = statementSpan
-                      , coreStatementShape = CoreAssign local (takeReceiver local coreRight)
-                      }
-                )
+                fmap Just (replacing after statementSpan local (takeReceiver local coreRight))
             | otherwise -> halt statementSpan "an assignment whose value has a different type" after
           (after, Nothing) -> refused after
     -- Expression lowering hands `=` back here; refuse rather than loop.
@@ -244,6 +248,9 @@ lowerStatement state (Located statementSpan statement) = case statement of
                   (afterElse, Nothing) -> refused afterElse
         (afterCondition, Nothing) -> refused afterCondition
     _ -> case lowerExpression state locatedExpression of
+      (after, Just (coreExpression, _))
+        | ownedAt after (locatedSpan locatedExpression)
+        , (dropped, Just released') <- dropValue after statementSpan coreExpression -> (dropped, Just released')
       (after, Just (coreExpression, _)) ->
         ( after
         , Just
@@ -254,35 +261,64 @@ lowerStatement state (Located statementSpan statement) = case statement of
         )
       (after, Nothing) -> refused after
   ReturnStatement Nothing ->
-    let (joined, joins) = leaving state statementSpan
-        (after, shape) = loanedReturn joined statementSpan Nothing
-     in (observeReturn CoreUnitType after, Just (afterJoins statementSpan joins CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape}))
+    let (released', drops) = droppingAll state statementSpan
+        (joined, joins) = leaving released' statementSpan
+        (after, shape) = loanedReturn joined statementSpan (Nothing)
+     in (observeReturn CoreUnitType after, Just (afterJoins statementSpan (drops <> joins) CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape}))
   ReturnStatement (Just located) -> case projectedReturn state located of
     (after, Just (coreValue, _))
       | expressionIsPrintValued coreValue ->
           halt (locatedSpan located) "returning a Result[(), Str] value" after
     (after, Just (coreValue, coreType))
-      | allowedReturn coreType, null (lowerOpenScopes after) || coreType == CoreNeverType ->
+      | allowedReturn coreType, (null (lowerOpenScopes after) && not (ownsAny after)) || coreType == CoreNeverType ->
           let (left, shape) = loanedReturn after statementSpan (Just coreValue)
            in (observeReturn coreType left, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = shape})
       -- The value is in hand before the scopes the return leaves are joined.
       | allowedReturn coreType ->
           let (withKept, kept) = bindLocal after "" coreType
-              (joined, joins) = leaving withKept statementSpan
+              (released', drops) = droppingAll withKept statementSpan
+              (joined, joins) = leaving released' statementSpan
               (left, shape) = loanedReturn joined statementSpan (Just (CoreExpression statementSpan coreType (CoreReadLocal kept)))
               held = CoreStatement statementSpan (CoreDeclare kept coreValue)
-           in (observeReturn coreType left, Just (afterJoins statementSpan (held : joins) (CoreStatement statementSpan shape)))
+           in (observeReturn coreType left, Just (afterJoins statementSpan (held : drops <> joins) (CoreStatement statementSpan shape)))
     (after, Just (_, coreType)) ->
       halt (locatedSpan located) ("returning a " <> coreTypeName coreType <> " value") after
     (after, Nothing) -> refused after
   BreakStatement label operand -> joiningTransfer (lowerTransfer lowerExpression statementSpan label (Just operand) state)
   ContinueStatement label -> joiningTransfer (lowerTransfer lowerExpression statementSpan label Nothing state)
   LetElseStatement{} -> halt statementSpan "refutable pattern bindings" state
+  LetPatternStatement _ (Located _ WildcardPattern) _ subject -> case lowerExpression state subject of
+    (after, Just (value, _))
+      | expressionIsPrintValued value -> halt statementSpan "a Result[(), Str] value" after
+      | otherwise -> case dropValue after statementSpan value of
+          (dropped, Just released') | ownedAt after (locatedSpan subject) -> (dropped, Just released')
+          _ -> (after, Just (CoreStatement statementSpan (CoreEvaluate value)))
+    (after, Nothing) -> refused after
   LetPatternStatement{} -> halt statementSpan "pattern bindings" state
   InvalidStatement -> halt statementSpan "this statement" state
  where
   allowedReturn kind = allowedResultType (lowerFunctionResult state) kind
     || (lowerFlexibleResult state && nativeValueType kind)
+  ownsAny current = not (Set.null (lowerOwned current))
+  adopted at name (after, lowered) = case lookupLocal after name of
+    Just local | lowered /= Nothing -> (adoptLocal at local after, lowered)
+    _ -> (after, lowered)
+
+{-| Assigning a local that owns a value needing drop drops the old value
+    immediately before the store, with the new value already in hand. -}
+replacing :: LowerState -> Span -> CoreLocal -> CoreExpression -> (LowerState, CoreStatement)
+replacing state at local value
+  | Set.member (coreLocalId local) (lowerOwned state)
+  , (withKept, kept) <- bindLocal state "" (coreExpressionType value)
+  , (dropped, Just released') <- dropValue withKept at (CoreExpression at (coreLocalType local) (CoreTakeLocal local)) =
+      ( dropped
+      , CoreStatement at (CoreEvaluate (CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock
+          [ CoreStatement at (CoreDeclare kept value)
+          , released'
+          , CoreStatement at (CoreAssign local (CoreExpression at (coreExpressionType value) (CoreReadLocal kept)))
+          ] Nothing))))
+      )
+  | otherwise = (state, CoreStatement at (CoreAssign local value))
 
 projectedReturn :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 projectedReturn state located = case lowerExpression state located of
@@ -301,18 +337,23 @@ afterJoins at joins final = CoreStatement at (CoreEvaluate (CoreExpression at Co
     break's value is in hand first. -}
 joiningTransfer :: (LowerState, Maybe CoreStatement) -> (LowerState, Maybe CoreStatement)
 joiningTransfer (state, Just statement@(CoreStatement at shape))
-  | not (null (lowerOpenScopes state)) = case shape of
+  | not (null (lowerOpenScopes state)) || not (Set.null (lowerOwned state)) = case shape of
       CoreContinue identity ->
-        let (joined, joins) = leavingLoop state at identity in (joined, Just (afterJoins at joins statement))
+        let (joined, joins) = leavingDropping state identity in (joined, Just (afterJoins at joins statement))
       CoreBreak identity Nothing ->
-        let (joined, joins) = leavingLoop state at identity in (joined, Just (afterJoins at joins statement))
+        let (joined, joins) = leavingDropping state identity in (joined, Just (afterJoins at joins statement))
       CoreBreak identity (Just operand) | coreExpressionType operand /= CoreNeverType ->
         let (withKept, kept) = bindLocal state "" (coreExpressionType operand)
-            (joined, joins) = leavingLoop withKept at identity
+            (joined, joins) = leavingDropping withKept identity
             carried = CoreStatement at (CoreBreak identity (Just (CoreExpression at (coreExpressionType operand) (CoreReadLocal kept))))
          in (joined, Just (afterJoins at (if null joins then [] else CoreStatement at (CoreDeclare kept operand) : joins)
               (if null joins then statement else carried)))
       _ -> (state, Just statement)
+ where
+  leavingDropping current identity =
+    let (released', drops) = droppingLoop current at identity
+        (joined, joins) = leavingLoop released' at identity
+     in (joined, drops <> joins)
 joiningTransfer other = other
 
 {-| Preserve an entry's explicit return type even when its outer block has
@@ -423,6 +464,11 @@ lowerExpression state (Located spanValue expression) = case expression of
       Nothing | Just lowered <- lowerCallbackValue state spanValue (first : rest) -> lowered
       Nothing -> maybe (halt spanValue "module-qualified names" state) id
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
+  UnaryExpression operator (Located _ (NameExpression (name :| [])))
+    | operator == moveOperator, Just local <- lookupLocal state name ->
+        typed state (CoreTakeLocal local) (coreLocalType local)
+  UnaryExpression operator operand
+    | operator == moveOperator -> lowerExpression state operand
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   -- An assignment's value is unit: it runs as the statement it is.
   BinaryExpression _ "=" _ -> case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of

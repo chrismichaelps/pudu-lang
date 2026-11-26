@@ -312,3 +312,12 @@ Resolved Grill Log: a prepared place read can allocate native locals
 for held slice bounds before dispatching a dynamic member.
 
 Resolved Grill Log: a checked trait member stays with its trait. Declared method lookup on a held receiver whose type lacks that trait's implementation finds no member, and the call reports the missing member with the written, trait-qualified name, as evaluation does.
+## Drop glue calls (#1028)
+
+`invokeLent` and `unselected` are exported so the drop glue can call a
+type's own `drop` with the value whole, as a lent call that borrows the
+value it is given.
+
+Resolved Grill Log: the glue calls the implementation through the same
+dispatch the program uses, so a trait-qualified or inherited `drop` is
+reached the same way.

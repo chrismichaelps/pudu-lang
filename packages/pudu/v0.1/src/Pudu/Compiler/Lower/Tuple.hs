@@ -5,8 +5,9 @@ import Data.List (mapAccumL, transpose)
 import qualified Data.Set as Set
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, normalizeAggregateValue, projectRuntimeValue, runtimeCarriers, storageCarrier)
+import Pudu.Compiler.Lower.Drop (adoptLocal)
 import Pudu.Compiler.Lower.Place (declareLocal)
-import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused)
 import Pudu.Compiler.Lower.Types (nativeValueType, ownerKeyOf, recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax
@@ -155,6 +156,9 @@ lowerTuplePattern lower state at binding pattern subject = case lower state subj
        in (final, (declare saved carried :) <$> statements)
   publishLocals current captures =
     let (ready, declarations) = mapAccumL
-          (\prior (name, value) -> declareLocal binding prior at (locatedValue name) value)
+          (\prior (name, value) -> owning name (declareLocal binding prior at (locatedValue name) value))
           current captures
      in (ready, sequence declarations)
+  owning name (after, declared) = case lookupLocal after (locatedValue name) of
+    Just local | declared /= Nothing -> (adoptLocal (locatedSpan name) local after, declared)
+    _ -> (after, declared)

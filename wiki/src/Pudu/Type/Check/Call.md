@@ -204,3 +204,9 @@ uses the same helper for called, retained and explicitly applied members.
 Resolved Grill Log: T.member must not fall through as ErrorType or flatten to
 an unbound T.member value key. Self specializes from the bound's receiver;
 method-local parameters remain real parameters and publish ordinary selections.
+
+## Receiver ownership facts (#1028)
+
+When a selected method's receiver type is not a reference, the call records the receiver span as by-value through `recordMethodReceiver`; a reference receiver is recorded as a read. The ownership walk reads this map to decide whether a call moves its receiver.
+
+Resolved Grill Log: only the selected method's instantiated `self` type decides; the written callee spelling and the receiver's shape do not.

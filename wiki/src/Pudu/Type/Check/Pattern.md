@@ -172,3 +172,9 @@ Resolved Grill Log. An exported type alias participates in type
 formation. Variant admission still uses the namespace that declares
 the constructor. Report the missing constructor before recovering its
 nested bindings. [[Program Graph Spec]]
+
+## Binder type facts (#1028)
+
+`bindPattern` records each binding pattern's subject type at the binder's own span with `recordExpression`, so the ownership walk can ask whether that binder owns a value needing drop. Wildcards record nothing.
+
+Resolved Grill Log: the binder span is the identity the ownership walk and both engines use; the pattern's whole span is not a binder.

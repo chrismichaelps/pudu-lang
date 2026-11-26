@@ -65,3 +65,13 @@ the whole pattern using the original subject's runtime kind.
 Resolved Grill Log. Publish each successful capture through
 [[Compiler Lower Place]] using the original binding kind. Each
 mutable name has its own layout requirements, including later loans.
+## Owned pattern binders (#1028)
+
+A destructuring binder adopts its local, so a part that owns a value needing
+drop is dropped when the `let`'s scope ends. A wildcard keeps nothing: the
+discard is lowered in [[Compiler Lower Body]] instead, where the value can be
+dropped where the statement ends.
+
+Resolved Grill Log: the tuple and record path publishes the parts it binds;
+a wildcard publishes nothing, so it has no use for the root local that path
+builds.

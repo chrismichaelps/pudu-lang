@@ -13,7 +13,7 @@ for changes to the compiler, its Cabal configuration, or the smoke itself.
 Build the compiler with the repository's pinned GHC and Cabal and run the
 smoke with `--require-simulator`. Before the smoke, run [[UIKit Coverage Tests]] and the [[UIKit Coverage Inventory]] check against the runner's SDK.
 
-The native-ffi job has a 75-minute timeout. The simulator step boots an iPhone and an iPad and runs the full device matrix, including the capability run.
+The native-ffi job has a 75-minute timeout. The simulator step boots an iPhone and an iPad and runs the full device matrix, including the capability run. The job sets `PUDU_CC_TIMEOUT=600`: the C compiler's default wait of 120 seconds was exceeded on a contended hosted runner while compiling the app for the simulator, and the limit bounds a hung compiler rather than a correct translation.
 
 Build steps restore two caches before `cabal update`. The first holds the cabal store (`~/.local/state/cabal/store` and `~/.cabal/store`), keyed on the hashes of `*.cabal` and `cabal.project*`. The second holds `dist-newstyle`, keyed `ios-dist-<os>-<ref>-<sha>`, restoring from the same ref and then from `refs/heads/dev`. Recompilation is decided by source hashes, so only changed modules compile again.
 
@@ -23,6 +23,7 @@ Build steps restore two caches before `cabal update`. The first holds the cabal 
 - Use a runner image whose default Xcode meets the floor in [[Native Platform Adoption]], and its installed simulator runtimes. An older Xcode or a missing runtime fails the job so every successful run proves the C foreign call executed.
 - Feature pushes run the gate before stacked pull requests target dev.
 - **Q:** Why 75 minutes? **A:** The device matrix (iPhone and iPad, with the capability run) exceeded 40 minutes on a contended hosted runner while every check passed; caching the cabal store and build tree removes most of the twelve-minute compile. _Rejected:_ dropping the iPad from CI.
+- **Q:** Why give the C compiler ten minutes here? **A:** The job's own app build exceeded the two-minute default on a shared runner and reported E6004 although the same build takes seconds on a machine to itself. _Rationale:_ the wait bounds a compiler that has hung; the same bound is set for the suite job. _Rejected:_ lowering the emission's output size to fit the default, which would trade a runner's load for the compiler's work.
 
 ## Referenced by
 

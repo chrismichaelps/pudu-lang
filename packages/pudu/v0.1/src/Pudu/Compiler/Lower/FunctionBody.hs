@@ -6,8 +6,10 @@
     arrive as callbacks, so this module owns only the function boundary. -}
 module Pudu.Compiler.Lower.FunctionBody (lowerEntryBodyWith, lowerFunctionBodyWith) where
 
+import qualified Data.Set as Set
 import Pudu.Compiler.Lower.Call (outputResult)
 import Pudu.Compiler.Lower.Control (printValued)
+import Pudu.Compiler.Lower.Drop (adoptLocals, closingScope, ownedLocals)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue)
 import Pudu.Compiler.Lower.Lambda (lowerTask)
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
@@ -79,7 +81,7 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
       | functionAsync function
       , Just result@(CoreSumType "Result" [success, _]) <- lowerDeclaredResult current =
           case lowerTask lowerExpression lowerBlock current{lowerFlexibleResult = True}
-              (locatedValue (functionName function)) (CoreFunctionType [] result) function of
+              (locatedValue (functionName function)) (CoreFunctionType [] result) Set.empty function of
             (after, Just (task, CoreFunctionType [] answered)) ->
               let at = coreExpressionSpan task
                   expression = CoreExpression at
@@ -171,8 +173,10 @@ lowerEntryBodyWith lowerExpression lowerBlock located state
 lowerFunctionBodyWith :: LowerExpression -> LowerBlock -> Located Function -> CoreSignature -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerFunctionBodyWith lowerExpression lowerBlock located signature state = case functionBlock function of
   -- An async function answers its body as a task; nothing runs until an await.
+  -- Its owned parameters pass to the task, which drops them when it ends.
   Just _ | functionAsync function ->
-    case lowerTask lowerExpression lowerBlock state (locatedValue (functionName function)) (signatureResult signature) function of
+    case lowerTask lowerExpression lowerBlock state (locatedValue (functionName function)) (signatureResult signature)
+        (ownedLocals state parameterLocals) function of
       (after, Just (task, _)) ->
         ( after
         , Just CoreFunction
@@ -182,7 +186,9 @@ lowerFunctionBodyWith lowerExpression lowerBlock located signature state = case 
             , coreFunctionBody = CoreBlock [] (Just task) } )
       (after, Nothing) -> refused after
   Just block ->
-    let (after, lowered, _) = lowerBlock state block
+    let owningParameters = adoptLocals parameterLocals state
+        (afterBody, body, _) = lowerBlock owningParameters block
+        (after, lowered) = closingScope (locatedSpan block) afterBody body
         expected = signatureResult signature
         (projected, coreBlock) = case coreBlockResult lowered of
           Just value ->
@@ -208,6 +214,9 @@ lowerFunctionBodyWith lowerExpression lowerBlock located signature state = case 
   _ -> refused state
   where
     function = locatedValue located
+    parameterLocals =
+      zip (map (locatedSpan . parameterName . locatedValue) (functionParameters function))
+        (map coreParameterLocal (signatureParameters signature))
 
 functionBlock :: Function -> Maybe (Located Block)
 functionBlock function = case functionBody function of

@@ -43,6 +43,9 @@ module Pudu.Type.Env
   , capturedFromOutside
   , inTypeScopeWith
   , lookupField
+  , lookupDeclaredName
+  , finalExpressionTypes
+  , finalInstantiations
   , lookupOwnerVariants
   , lookupTypeParams
   , lookupName
@@ -61,10 +64,14 @@ module Pudu.Type.Env
   , isMutableField
   , recordUnwrittenParameter
   , markResultSpans
+  , recordMethodReceiver
+  , recordMoves
+  , methodReceivers
   , isResultSpan
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordInstantiation
   , recordProvider
   , recordProviderSelection
   , recordDynamicWidening
@@ -297,6 +304,10 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  {-| Every instantiation of a generic value other than a constructor, by the
+      span of the reference, with the types it chose for the parameters.
+      Ownership checking refuses one that chose a type needing drop. -}
+  , stateInstantiationsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, ProviderSelection)]
   , stateDynamicWideningsRev :: ![(Span, NominalId, Type)]
   , stateOwnersRev :: ![(Span, OwnerSelection)]
@@ -306,6 +317,15 @@ data CheckerState = CheckerState
       Marked before their subexpressions are checked, so a match learns its
       position when it is reached. -}
   , stateResultSpans :: !(Set Span)
+  {-| The receiver of every call that selected a declared method, with whether
+      that method takes `self` by value. Ownership checking reads it after the
+      bodies are checked, so a by-value receiver moves and a borrowed one does
+      not; a receiver absent here called a builtin method. -}
+  , stateMethodReceivers :: !(Map.Map Span Bool)
+  {-| The uses ownership checking found to move a value that needs drop. -}
+  , stateMoves :: !(Set Span)
+  {-| The binders ownership checking found to own a value that needs drop. -}
+  , stateOwned :: !(Set Span)
   }
 
 type SpanKey = Span
@@ -339,6 +359,11 @@ data CheckerProducts = CheckerProducts
   , producedProviders :: ![(Span, ProviderSelection)]
   , producedDynamicWidenings :: ~[(Span, NominalId, Type)]
   , producedOwners :: ![(Span, OwnerSelection)]
+  {-| Every use that moves a value needing drop, so each engine stops owning
+      it where it moved instead of dropping it at the end of its scope. -}
+  , producedMoves :: !(Set Span)
+  {-| Every binder that owns a value needing drop, dropped where it ends. -}
+  , producedOwned :: !(Set Span)
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -382,6 +407,8 @@ runChecker (Checker action) = case action initialState of
     , stateProvidersRev = providers
     , stateDynamicWideningsRev = widenings
     , stateOwnersRev = owners
+    , stateMoves = moves
+    , stateOwned = owned
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
@@ -392,6 +419,8 @@ runChecker (Checker action) = case action initialState of
       , producedDynamicWidenings =
           [(at, trait, resolveFinal substitution payload) | (at, trait, payload) <- reverse widenings]
       , producedOwners = reverse owners
+      , producedMoves = moves
+      , producedOwned = owned
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
  where
@@ -448,11 +477,15 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateInstantiationsRev = []
     , stateProvidersRev = []
     , stateDynamicWideningsRev = []
     , stateOwnersRev = []
     , statePatternTests = Set.empty
     , stateResultSpans = Set.empty
+    , stateMethodReceivers = Map.empty
+    , stateMoves = Set.empty
+    , stateOwned = Set.empty
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -634,6 +667,10 @@ patternTests = Checker $ \state -> (statePatternTests state, state)
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
   Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
+recordInstantiation :: Span -> [Type] -> Checker ()
+recordInstantiation spanValue chosen =
+  Checker $ \state -> ((), state{stateInstantiationsRev = (spanValue, chosen) : stateInstantiationsRev state})
 
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =
@@ -930,6 +967,29 @@ withDeclared declared = Checker $ \state -> ((), state{stateDeclared = declared}
 lookupField :: NominalId -> Checker (Maybe [(Text, Type)])
 lookupField name =
   Checker $ \state -> (Map.lookup name (declaredFields (stateDeclared state)), state)
+
+{-| The declaration a bare type name resolves to in the module being checked. -}
+lookupDeclaredName :: Text -> Checker (Maybe NominalId)
+lookupDeclaredName name =
+  Checker $ \state -> (Map.lookup name (declaredNames (stateDeclared state)), state)
+
+{-| Every recorded expression type with inference settled, by span; a later
+    recording of a span replaces an earlier one. -}
+finalExpressionTypes :: Checker (Map.Map Span Type)
+finalExpressionTypes =
+  Checker $ \state ->
+    ( Map.fromList
+        [(at, resolveFinal (stateSubstitution state) value) | (at, value) <- reverse (stateTypes state)]
+    , state
+    )
+
+{-| Every recorded instantiation with inference settled, in checking order. -}
+finalInstantiations :: Checker [(Span, [Type])]
+finalInstantiations =
+  Checker $ \state ->
+    ( [(at, map (resolveFinal (stateSubstitution state)) chosen) | (at, chosen) <- reverse (stateInstantiationsRev state)]
+    , state
+    )
 
 {-| The generic parameters a nominal declaration introduced, so a structural
     walk can substitute a use's arguments into its declared components. -}
@@ -1393,3 +1453,16 @@ markResultSpans spans = Checker $ \state ->
 {-| Whether an expression's value is the enclosing function's result. -}
 isResultSpan :: Span -> Checker Bool
 isResultSpan spanValue = Checker $ \state -> (Set.member spanValue (stateResultSpans state), state)
+
+{-| Note that the receiver at this span called a declared method, and whether
+    that method takes `self` by value. -}
+recordMethodReceiver :: Span -> Bool -> Checker ()
+recordMethodReceiver spanValue byValue = Checker $ \state ->
+  ((), state {stateMethodReceivers = Map.insert spanValue byValue (stateMethodReceivers state)})
+
+recordMoves :: (Set Span, Set Span) -> Checker ()
+recordMoves (moved, owned) = Checker $ \state ->
+  ((), state {stateMoves = Set.union moved (stateMoves state), stateOwned = Set.union owned (stateOwned state)})
+
+methodReceivers :: Checker (Map.Map Span Bool)
+methodReceivers = Checker $ \state -> (stateMethodReceivers state, state)

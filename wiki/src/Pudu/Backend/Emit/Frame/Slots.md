@@ -23,3 +23,11 @@ Rewrite all parameters, instructions, terminators and physical descriptors.
 ## Referenced by
 
 [[Backend Frame Program]] · [[Native Frame Slot Reuse]]
+## Drop slots keep their place (#1028)
+
+A slot a stop may drop is fixed for the whole frame, like a parameter or a
+terminator slot, and it is renamed with the other slots when the frame is
+compacted.
+
+Resolved Grill Log: a drop table names slots by number, so a compacted frame
+would otherwise point the table at the wrong slot.

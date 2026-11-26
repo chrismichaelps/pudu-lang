@@ -25,6 +25,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import Pudu.Diagnostic (Diagnostic)
+import Pudu.Ownership (ownedBinderKind)
 import Pudu.Semantic (resolveModule, writableReferences)
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -69,7 +70,9 @@ data ModuleTypes = ModuleTypes
   {-| What inference settled on for each integer literal, by span.
 
       A literal written without a suffix is not a platform `Int` merely because
-      it was written plainly, and only the checker knows what it became. -}
+      it was written plainly, and only the checker knows what it became. The
+      same map marks each binder that owns a value needing drop with
+      `ownedBinderKind`, so the fact travels wherever literal kinds do. -}
   , moduleIntegerKinds :: !(Map.Map Span Text)
   {-| The methods this module's declarations provide, by owner: its impls'
       methods and the trait defaults they inherit, and its traits' members. -}
@@ -83,22 +86,26 @@ data ModuleTypes = ModuleTypes
   , moduleOwners :: !(Map.Map Span OwnerSelection)
   , moduleProviders :: !(Map.Map Span ProviderSelection)
   , moduleDynamicWidenings :: ~[(Span, NominalId, Type)]
+  {-| The uses that move a value needing drop, which the settled syntax
+      marks so each engine stops owning the value where it moved. -}
+  , moduleMoves :: !(Set Span)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, owners, providers, widenings, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, owners, providers, widenings, (moves, owned), diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
-          , moduleIntegerKinds = Map.fromList kinds
+          , moduleIntegerKinds = Map.fromList kinds <> Map.fromSet (const ownedBinderKind) owned
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
           , moduleShapes = declaredShapesWith imported moduleValue
           , moduleOwners = Map.fromList owners
           , moduleProviders = Map.fromList providers
           , moduleDynamicWidenings = widenings
+          , moduleMoves = moves
           }
       , diagnostics
       )

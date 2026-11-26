@@ -19,7 +19,7 @@ aliases: [Type Env]
 
 Own checker state, name frames, declared shapes, trait obligations, deferred integer-literal constraints, rigid bounds, and diagnostics for [[Type Check]].
 
-`withAdditionalRigidBounds` answers its action's value. `noteStaticTrait`/`isStaticTrait` track traits declaring a member without `self`; `recordSelection` keeps, by reference span, the types an instantiation chose, produced zonked as `producedSelections`.
+`withAdditionalRigidBounds` answers its action's value. `noteStaticTrait`/`isStaticTrait` track traits declaring a member without `self`; `recordSelection` keeps, by reference span, the types an instantiation chose, produced zonked as `producedSelections`. `recordInstantiation` keeps, by reference span, the types every instantiation of a generic value other than a constructor chose; `finalInstantiations` answers them in checking order with the final substitution applied.
 
 ## Interface
 
@@ -97,6 +97,12 @@ The exported signatures are the module header's export list.
   three-way question and a list can only answer two of them; the map also turns the lookup from a
   scan into a lookup, which matters because it is asked at every call inside a compile-time body.
 
+### Instantiation record
+
+- `recordInstantiation :: Span -> [Type] -> Checker ()` prepends one entry to `stateInstantiationsRev`, which is kept newest first.
+- `finalInstantiations :: Checker [(Span, [Type])]` reverses that list and applies the completed substitution to every chosen type, so each entry reads as the type inference settled on rather than a variable.
+- Entries cover every instantiation of a generic value except a constructor's: a call, a qualified name, a function value, or a method's own type parameters. [[Type Check Rule]] makes the recording calls and [[Type Ownership]] reads the result.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
@@ -150,7 +156,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 - **Q:** Model an integer literal as `Int` immediately? **A:** No; retain a deferred literal constraint. _Rationale:_ annotations and call parameters must select narrower or wider integer types before fit checking, while a context-free literal still defaults predictably. _Rejected:_ hard-coded `Int`; caller-wide numeric promotion; a special nominal literal type that cannot record its later solution.
 - **Q:** What does a method call on an unsettled integer literal look up? **A:** `settleIntegerLiteral` settles it to `Int` first, and the member is looked up there. _Rationale:_ a member of an open variable was answered with a fresh variable, so `let n = 3` then `n.bogus()` checked and `42.toText()` had no type; `Int` is what finalization would choose for a literal nothing else constrained, so only programs naming a member that does not exist change. The pending constraint is found through its resolved variable, because `let n = 3` has already unified the binding with the literal. _Rejected:_ checking the member against every integer type; leaving the variable open and trusting the name (#366).
 - **Q:** May a nested construct finalize every pending literal? **A:** No; it records the next type-variable identity and selects only constraints in the required creation range. Even within that range, branch/result validation retains unsolved constraints for an enclosing context. _Rationale:_ an annotated `if` or `match`, and an expression used beside another literal, must not default before its outer context is applied. _Rejected:_ global finalization at each diagnostic boundary; count-based stack slicing that nested settlement can invalidate; carrying unresolved shape diagnostics to module end.
-- **Q:** Record every generic instantiation? **A:** No; only those with a parameter bounded by a static trait, so ordinary generic calls pay nothing.
+- **Q:** Why record every instantiation rather than only static selections? **A:** Ownership checking must see every type a generic value was used at, however it was reached. _Rationale:_ a function value, a qualified name, or a method's type parameter reaches a generic without a call shape a check could read. _Rejected:_ inspecting call shapes, which misses function values, qualified names and method parameters.
 
 ## Referenced by
 
@@ -336,3 +342,9 @@ Resolved Grill Log: each successful obligation records the full span,
 trait identity and payload type. Publication applies the final checker
 substitution. Retain rigid parameters for a later specialization and
 keep these facts local to this module's analysis.
+
+## Move and ownership facts (#1028)
+
+The checker state gains `producedMoves` and `producedOwned`; `recordMoves` stores the ownership walk's two span sets with the other products. `recordMethodReceiver` stores whether a selected method takes its receiver by value, and `recordExpression` on a pattern binder gives the walk its type.
+
+Resolved Grill Log: facts belong to the same check that produced the types; no second lookup or runtime inference reconstructs them.

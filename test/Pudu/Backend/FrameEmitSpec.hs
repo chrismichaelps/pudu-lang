@@ -88,7 +88,7 @@ testPhysicalSlots = do
           , stored (text 8) literal, stored (text 9) literal
           ] (FrameJump (Just at) next)
         , FrameBlock next [printed (scalar 3), printed (text 5), printed (text 7)] (FrameReturn Nothing Nothing)
-        ]
+        ] []
       logical = FrameModule "Main" "main" [original] Map.empty Map.empty []
   pure $ case frameModuleFunctions (compactFrameSlots logical) of
     [result] -> case frameFunctionBlocks result of

@@ -181,3 +181,9 @@ See [[Bound Provider Delivery]].
 declaration order, found by the record's owner or, for a construction
 spelled through an alias, the owner's own name. Construction itself is
 dev's `recordConstructor`; only the stored order changes (#519).
+
+## Drop scopes (#1028)
+
+A `Held` entry is either a name or a value. `installDrops` enables drop scopes; `scopedFrame` keeps frame cells while drops are active, records owned binders in the innermost scope, and drops them newest first on `Done`, `Unwound` and `Aborted`. `registerOwned` keeps a shadowed name's old value by value; `dropNow` releases a replaced or discarded value; `releaseTemporary` drops a marked statement value; `ownedName` answers whether the nearest binding owns its value.
+
+Resolved Grill Log: a scope owns bindings, not spellings; a stop during cleanup still runs the remaining drops, and a second stop ends cleanup with that stop reported.

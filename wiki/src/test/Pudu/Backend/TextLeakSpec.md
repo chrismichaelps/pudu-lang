@@ -261,3 +261,10 @@ same input buffer. Both outputs must survive release of the argument copy.
 
 A direct owned result and a distinct handle slot share the batch and each
 release once.
+## Drop programs (#1028)
+
+The success drop corpus is counted for allocations, so a drop that runs but
+releases nothing fails as a leak.
+
+Resolved Grill Log: the counted corpus is the same one the trace property
+uses, so a program cannot pass one and fail the other.

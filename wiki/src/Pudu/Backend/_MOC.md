@@ -52,6 +52,7 @@ aliases: [Backend Module Map]
 
 - [[Backend Emit Tests]] · [[Backend Native Tests]] — the two specs that hold
   lowering, emission, and native execution to their documented promises.
+- [[Backend Drop Programs]] — two-engine drop traces and stops (#1028).
 - [[Backend Method Programs]] — native method dispatch and order (#551).
 - [[Backend Generic Programs]] — native generics (#552).
 - [[Backend Try Programs]] — native `?` (#553).

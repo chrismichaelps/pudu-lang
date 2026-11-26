@@ -24,6 +24,8 @@ import Pudu.Eval.Env
   , variantOwner
   , Evaluator (..)
   , abortAt
+  , adoptNames
+  , dropping
   , catchUnwind
   , expectBool
   , lookupName
@@ -43,6 +45,7 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Pattern (patternBindings)
 import Pudu.IntegerLiteral (defaultIntegerKind)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -63,7 +66,9 @@ data LoopNeeds = LoopNeeds
 
 evaluateWhile :: LoopNeeds -> Span -> Maybe Text -> Located Expression -> Located Block -> Evaluator Value
 evaluateWhile needs spanValue label condition body = do
-  kernel <- pureLoop spanValue condition body
+  -- A region keeps its locals out of every scope, so none runs while drops do.
+  releasing <- dropping
+  kernel <- if releasing then pure Nothing else pureLoop spanValue condition body
   case kernel of
     Just native -> native
     Nothing -> loop (0 :: Int)
@@ -109,7 +114,7 @@ evaluateWhileLet needs spanValue label pattern' subject body = loop (0 :: Int)
         case matchPattern pattern' value of
           Nothing -> pure UnitValue
           Just bindings -> do
-            outcome <- withFrame bindings (catchUnwind (loopBlock needs body))
+            outcome <- withFrame bindings (adoptNames (patternBindings pattern') >> catchUnwind (loopBlock needs body))
             case transferFor label outcome of
               Stop _ -> pure UnitValue
               Again -> loop (iterations + 1)
@@ -187,7 +192,7 @@ evaluateFor needs spanValue label binder iterated body = case elements of
             case matchPattern binder item of
               Nothing -> walk advance nextState (iterations + 1)
               Just bindings -> do
-                outcome <- withFrame bindings (catchUnwind (loopBlock needs body))
+                outcome <- withFrame bindings (adoptNames (patternBindings binder) >> catchUnwind (loopBlock needs body))
                 case transferFor label outcome of
                   Stop _ -> pure UnitValue
                   Again -> walk advance nextState (iterations + 1)
@@ -225,7 +230,7 @@ evaluateFor needs spanValue label binder iterated body = case elements of
     value : rest -> case matchPattern binder value of
       Nothing -> step rest
       Just bindings -> do
-        outcome <- withFrame bindings (catchUnwind (loopBlock needs body))
+        outcome <- withFrame bindings (adoptNames (patternBindings binder) >> catchUnwind (loopBlock needs body))
         case transferFor label outcome of
           Stop _ -> pure UnitValue
           Again -> step rest

@@ -294,3 +294,9 @@ Resolved Grill Log: identity comes from the declaration or native ABI, not a glo
 ## Resolved Grill Log for Objective-C delegates
 
 `callCallbackValue` takes the handler applier as a parameter, so a delegate method and an ordinary callback apply the handler the same way.
+
+## Owned parameters (#1028)
+
+Before a closure body runs, `adoptParameters` adopts the parameters checking marked, so a parameter that owns a value needing drop is dropped when the call's scope ends. `callClosureLending` is exported for the drop runner.
+
+Resolved Grill Log: parameters are ordinary owned binders of the callee's frame; the caller's move facts decide whether the callee holds the only reference.

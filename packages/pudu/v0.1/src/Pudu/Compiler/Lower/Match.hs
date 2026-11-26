@@ -8,6 +8,7 @@ import qualified Data.Map.Strict as Map
 import Data.List (find, mapAccumL)
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Control (ConditionUse (MatchGuard), expressionIsPrintValued, joinBranchValues, lowerCondition)
+import Pudu.Compiler.Lower.Drop (adoptLocal, closingScope)
 import Pudu.Compiler.Lower.Place (declareLocal)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Types (ownerKeyOf, recordFields, sumVariants, typeForSpan, writtenLabel)
@@ -74,7 +75,7 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
                 (afterGuard, Just (Just coreGuard))
                   | coreExpressionType coreGuard == CoreNeverType ->
                       go (close afterGuard) subjectKind (CoreArm armSpan corePattern Nothing coreGuard : done) rest
-                (afterGuard, Just coreGuard) -> case lower afterGuard body of
+                (afterGuard, Just coreGuard) -> case closeArm (lower afterGuard body) of
                   (afterBody, Nothing) -> refused (close afterBody)
                   (afterBody, Just (coreBody, bodyKind))
                     | discarded ->
@@ -85,6 +86,14 @@ lowerMatch lower discarded state at subject arms = case lowerMatchSubject lower 
                     | otherwise -> go (close afterBody) subjectKind (CoreArm armSpan corePattern coreGuard coreBody : done) rest
       guardOf current test =
         fmap (fmap fst) (lowerCondition MatchGuard (locatedSpan test) lower current test)
+      -- What the arm's bindings own is dropped when the arm's body is done.
+      closeArm lowered = case lowered of
+        (afterBody, Just (coreBody, bodyKind)) ->
+          let (closedState, closed) = closingScope (coreExpressionSpan coreBody) afterBody (CoreBlock [] (Just coreBody))
+           in case closed of
+                CoreBlock [] (Just same) -> (closedState, Just (same, bodyKind))
+                _ -> (closedState, Just (CoreExpression (coreExpressionSpan coreBody) bodyKind (CoreBlockValue closed), bodyKind))
+        other -> other
 
 {-| Only a successful arm publishes locals into the enclosing block. -}
 lowerLetElse :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression -> Located Block
@@ -177,13 +186,13 @@ lowerPattern :: LowerExpression -> LowerState -> CoreType -> Map Text CoreLocal 
   -> (LowerState, Maybe (CorePattern, Map Text CoreLocal))
 lowerPattern lower state kind bound (Located at shape) = case shape of
   WildcardPattern -> done state CoreWildcardPattern bound
-  BindingPattern (Located _ name) -> case Map.lookup name bound of
+  BindingPattern (Located nameSpan name) -> case Map.lookup name bound of
     Just local
       | coreLocalType local == kind -> done state (CoreBindPattern local) bound
       | otherwise -> halt at "a pattern binding with incompatible native carriers" state
     Nothing ->
       let (after, local) = bindLocal state name kind
-       in done after (CoreBindPattern local) (Map.insert name local bound)
+       in done (adoptLocal nameSpan local after) (CoreBindPattern local) (Map.insert name local bound)
   _ | Just variants <- runtimeChoiceAlternatives kind ->
         narrowed variants
     | isDynamic kind ->

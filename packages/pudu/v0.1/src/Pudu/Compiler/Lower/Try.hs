@@ -6,6 +6,7 @@ import Data.List (find)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.Dynamic (mapRuntimeChoice, projectRuntimeValue, runtimeCarriers)
 import Pudu.Compiler.Lower.Loan (loanedValue)
+import Pudu.Compiler.Lower.Drop (droppingAll)
 import Pudu.Compiler.Lower.Scope (leaving)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
 import Pudu.Compiler.Lower.Sum (constructVariant)
@@ -73,7 +74,8 @@ unwrapOrLeave after at core kind
                 (left, returned) = loanedValue recorded at rebuilt
                 -- The failure is in hand before the scopes it leaves are joined.
                 (withKept, kept) = bindLocal left "" (coreExpressionType returned)
-                (joined, joins) = leaving withKept at
+                (released, drops) = droppingAll withKept at
+                (joined, joins) = fmap (drops <>) (leaving released at)
                 leave = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock
                   (if null joins then [CoreStatement at (CoreReturn (Just returned))]
                    else [CoreStatement at (CoreDeclare kept returned)] <> joins

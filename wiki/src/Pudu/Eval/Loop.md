@@ -126,3 +126,9 @@ Resolved Grill Log: represent named sums independently of ordinary records and p
 ## Declared owners named like built-ins (#529)
 
 A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.
+
+## Loops and drops (#1028)
+
+The pure loop-region path is skipped while drops are active, so a loop that owns a droppable value runs the ordinary evaluator. `while let` and `for` binders adopt their pattern bindings before the body.
+
+Resolved Grill Log: a region keeps its locals out of every scope, so it cannot run the drops a loop body owes. The tree loop keeps the ownership contract.

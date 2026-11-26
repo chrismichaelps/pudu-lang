@@ -34,6 +34,7 @@ import Pudu.Type.Env
   , methodProvider
   , lookupName
   , recordExpression
+  , recordMethodReceiver
   , recordOwner
   , report
   )
@@ -118,6 +119,10 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
             changesReceiver <- case instantiated of
               FunctionTypeValue _ (selfInput : _) _ -> exclusiveInput selfInput
               _ -> pure False
+            byValue <- case instantiated of
+              FunctionTypeValue _ (selfInput : _) _ -> notReference <$> zonk selfInput
+              _ -> pure False
+            recordMethodReceiver (locatedSpan target) byValue
             applied <- bindReceiver calleeSpan resolved instantiated
             when changesReceiver (checkExclusiveReceiver target)
             recordExpression calleeSpan applied
@@ -265,6 +270,12 @@ checkTraitCall selected checker declared rigid (Located calleeSpan callee) argum
     RigidType "Self" -> True
     ReferenceTypeValue _ inner -> isSelf inner
     _ -> False
+
+{-| A `self` that is not a reference takes the receiver by value. -}
+notReference :: Type -> Bool
+notReference held = case held of
+  ReferenceTypeValue _ _ -> False
+  _ -> True
 
 {-| The type a borrow refers to, following as many references as were written.
 

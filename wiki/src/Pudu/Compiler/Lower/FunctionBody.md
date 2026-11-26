@@ -93,3 +93,21 @@ carrier. It keeps the entry's status convention.
 
 Resolved Grill Log: project a selected default into the checked
 dynamic parameter layout before the entry binds it.
+
+## Owned parameters and the closed body (#1028)
+
+A function's parameters are adopted before its body is lowered, so a
+parameter that owns a value needing drop is dropped when the function's scope
+ends. The body is then closed through `closingScope`, which keeps the body's
+result, drops what the scope owns, and leaves a body that never returned
+alone.
+
+Resolved Grill Log: parameters are ordinary owned binders of the callee; the
+caller's move facts decide whether the callee holds the only reference.
+
+## Async parameter ownership (#1028)
+
+A named async function passes the ownership set of its parameters, from
+`ownedLocals`, to `lowerTask`, so its task drops them when the body ends. The
+async entry passes the empty set: its parameters are defaults bound before the
+task and are captured into it. The named-function path reads its parameter locals through one `parameterLocals` binding, shared by the async and ordinary branches.

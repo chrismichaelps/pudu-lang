@@ -51,3 +51,10 @@ no longer constrain its visible arity. Verify the traversal call
 supplies the hidden count and the omitted ABI slot.
 
 Resolved Grill Log. Traversal lowering takes a callback specializer; frame target checks follow variant switch arms and their fallback.
+## Owned locals in a frame (#1028)
+
+The frame builders carry the module's owned locals and each function's drop
+slots, so a frame with a drop table is built the way the lowering builds it.
+
+Resolved Grill Log: the drop table is part of the frame's shape, so the
+frame tests construct it rather than leaving it empty by default.

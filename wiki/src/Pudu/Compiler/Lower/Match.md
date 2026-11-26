@@ -180,3 +180,12 @@ that transfers suppresses its arm body. [[Compiler Lower Control]]
 Resolved Grill Log. Keep sequence captures private until the match
 succeeds. Publish mutable captures through [[Compiler Lower Place]]
 after success. Preserve the original failure path and span.
+## Owned pattern bindings (#1028)
+
+A binding pattern adopts its local, so a pattern binder that owns a value
+needing drop is dropped when the arm's body ends. Each arm's body is closed
+through `closingScope`, which drops what the arm owns after the arm's value
+is in hand.
+
+Resolved Grill Log: an arm's bindings live in the arm, not in the enclosing
+block, so they are dropped with the arm.

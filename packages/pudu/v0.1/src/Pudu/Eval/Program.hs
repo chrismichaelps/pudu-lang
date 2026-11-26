@@ -21,7 +21,7 @@ module Pudu.Eval.Program
   , linkedNames
   ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -32,6 +32,7 @@ import Pudu.Eval.Env
   , captureEnvironment
   , currentFrame
   , currentMethods
+  , installDrops
   , markModuleScope
   , pushFrame
   , replaceFrame
@@ -42,6 +43,7 @@ import Pudu.Eval.Env
   , abortAt
   , lookupName
   )
+import Pudu.Eval.Drop (dropValue, implementsDropAnywhere)
 import Pudu.Eval.Frozen (Frozen, freeze, thaw)
 import Pudu.Eval.Install
   ( installBuiltinConstructors
@@ -67,6 +69,7 @@ import Pudu.Eval
   ( EvalOutcome (..)
   , awaitTask
   , callClosure
+  , callNeeds
   , evaluate
   , evaluateBlockInFrame
   , runCounted
@@ -184,6 +187,13 @@ programEntry folded integerKinds dependencies entryName moduleValue = do
       above this line holds only names somebody wrote, which is what lets a
       function literal capture the ones it mentions instead of all of them. -}
   markModuleScope
+  {-| A program that implements `Drop` ends every scope by dropping what it
+      owns, which the tree walker does on every way a scope is left; compiled
+      bodies keep locals in slots that no scope closes, so they are not used. -}
+  installed <- currentMethods
+  when (implementsDropAnywhere installed) $ do
+    installDrops (dropValue callNeeds)
+    Evaluator (\env -> pure (Done () env{envCompiledBodies = Nothing}))
   found <- lookupName entryName
   case found of
     Just (FunctionValue closure) -> do

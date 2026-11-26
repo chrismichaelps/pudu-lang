@@ -42,6 +42,38 @@ Only counted aggregates move: arrays, maps, sets, stores and records. A typed fa
 
 [[Compiler Lower Tail Move]] moves the final read of a counted local in a function's tail. [[Backend Emit Multi Map]] updates a MultiMap record held once in place: it takes the key's array out of an exclusive tree path, appends to it, and inserts into exclusive trees.
 
+## User drop and moves (#1028)
+
+A value whose type implements `Drop`, or stores a part that does, needs drop.
+Ownership checking gives it one owner: a by-value use moves it, a read after a
+move is refused, a field cannot be moved out alone, a type with its own `drop`
+cannot be taken apart, a holder, closure, module value or field store cannot
+keep it, and nothing moves out of a borrow (E4001–E4012). The checker publishes
+the moving uses and owning binders in the settled module, so the interpreter
+and native lowering read the same facts.
+
+The interpreter drops an owned value when its scope ends, on `Done`, `Unwound`
+and `Aborted`, newest first. A type's own `drop` runs first with the value
+whole; its parts follow in declaration order. Native lowering emits one glue
+function per needs-drop type and a per-function drop table; the table runs
+before frames unwind, so a panic releases every active frame. Two-engine
+traces cover normal exit, return, break, continue, `?`, matches, replacement
+and stops, and the success corpus is counted for allocations.
+
+See [[Type Ownership]], [[Eval Drop]], [[Compiler Lower Drop]] and
+[[Native Emission Coverage]].
+
+Async function and async lambda parameters are owned and dropped by their task.
+A task that owns such a value is awaited where it is made (E4010), including an
+async method taking `self` by value on a receiver that needs drop. A type that
+needs drop cannot stand for a type parameter at any instantiation (called,
+qualified, taken as a value, or as a method), borrows included (E4011); `Self`
+is a type parameter too, so a trait default inherited by an implementation
+whose target needs drop is refused at that implementation.
+
+An awaited result belongs to the scope that awaited it: the task hands the
+value over, and that scope drops it when it ends.
+
 ## Measurement
 
 `bench/eval/MultiMap.pudu` at -O2: native 3446 ms, evaluator 830 ms before this

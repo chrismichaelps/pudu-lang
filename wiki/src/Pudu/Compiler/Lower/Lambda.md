@@ -45,6 +45,12 @@ the call is emitted, including calls with a hidden default argument count.
 
 ## Resolved Grill Log
 
+- **Q:** Who owns an async function's parameters natively? **A:** Its task. The
+  outer call only makes the task, and an async lambda's body ends when the task
+  is made, so dropping there would run before the body. _Rationale:_ the task
+  is the only place that runs after the body. Rejected: dropping at the outer
+  function's end.
+
 - **Q:** Copy or reference captures? **A:** Copy, as the evaluator's snapshot
   does; reassigning a captured `var` later changes nothing the lambda sees.
   Assigning a captured name inside the lambda is rejected by checking (E3076).
@@ -91,6 +97,18 @@ to [[Compiler Lower Loan]] with the callee as `Through`. A lambda with
 typed at its declared result, and closes its trailing result over the
 finals.
 
+## Owned closure parameters (#1028)
+
+A closure's parameters are adopted before its body is lowered, so a
+parameter that owns a value needing drop is dropped when the closure's scope
+ends. The body closes the scope it opened; the scope left is the closure's
+own, holding its parameters, so it closes with the body.
+
+Resolved Grill Log: a closure's parameters are ordinary owned binders of the
+closure, as a named function's are of the function. The closure owns the
+value it was handed and drops it when the closure ends; the caller's move
+facts decide whether the closure holds the only reference.
+
 ## Tasks and async lambdas (#846)
 
 An async body lifts as a task: a function of nothing over the names it
@@ -100,6 +118,13 @@ inside an `async with scope` offers it to the innermost scope and the scope's
 joiner, which runs it and stashes a failure for the scope's function. Resolved
 Grill Log: one lifted function serves a written lambda and its async form; a
 task lends no `&mut` parameters and runs only when awaited or joined.
+
+`lowerTask` and `liftFunction` take the set of handed parameter ids, the
+parameters of an async function that its task owns. A captured handed local is
+adopted by the lifted body through `adoptOwned`, and a handed parameter is
+captured even when the body never names it. An async lambda does not adopt its
+own parameters: its body ends as soon as the task is made, so the task takes
+them instead.
 
 ## Calls through runtime callable alternatives (#956)
 

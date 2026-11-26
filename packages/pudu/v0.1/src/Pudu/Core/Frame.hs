@@ -48,6 +48,9 @@ data FrameFunction = FrameFunction
   , frameFunctionSlots :: ![FrameSlot]
   , frameFunctionEntry :: !FrameLabel
   , frameFunctionBlocks :: ![FrameBlock]
+  {-| The slots that own a value needing drop, newest first, with the glue
+      function that drops each when a stop unwinds the frame. -}
+  , frameFunctionDrops :: ![(FrameSlot, Text)]
   }
   deriving stock (Eq, Show)
 

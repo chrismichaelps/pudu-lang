@@ -51,3 +51,11 @@ keeps `?` and await failure spans, loaned finals and scope joins identical.
 ## Runtime layouts in sum payloads (#956)
 
 Resolved Grill Log: Read the physical success and failure payload types. Rebuild a failure in the enclosing result carrier before returning and joining scopes.
+## Drops before a failure leaves (#1028)
+
+`?` and an awaited failure drop every open scope before the scopes it leaves
+are joined, so a value that needs drop is released on the way out. The
+failure is in hand before the drops run.
+
+Resolved Grill Log: the drops come before the joins, so the failure carrier
+is built from a scope that no longer owns anything.

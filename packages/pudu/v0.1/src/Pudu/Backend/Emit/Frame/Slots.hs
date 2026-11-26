@@ -46,6 +46,7 @@ compactFunction function
       { frameFunctionParameters = map rename (frameFunctionParameters function)
       , frameFunctionSlots = Map.elems (Map.fromList [(frameSlotId new, new) | slot <- slots, let new = rename slot])
       , frameFunctionBlocks = map rewrite blocks
+      , frameFunctionDrops = [(rename slot, glue) | (slot, glue) <- frameFunctionDrops function]
       }
   where
     slots = frameFunctionSlots function
@@ -53,7 +54,8 @@ compactFunction function
     parameters = frameFunctionParameters function
     located = concatMap (\block -> map (frameBlockLabel block,) (frameBlockInstructions block)) blocks
     terminators = concatMap (getConst . terminatorSlots (\slot -> Const [slot]) . frameBlockTerminator) blocks
-    fixed = Set.fromList (map frameSlotId (parameters <> terminators <> concatMap foreignSlots located))
+    -- A slot a stop may drop keeps its own place for the whole frame.
+    fixed = Set.fromList (map frameSlotId (parameters <> terminators <> concatMap foreignSlots located <> map fst (frameFunctionDrops function)))
     allReferences = parameters <> terminators <> concatMap (references . snd) located
     types = Map.fromList [(frameSlotId slot, frameSlotType slot) | slot <- slots]
     ordinal (FrameSlotId number) = number
