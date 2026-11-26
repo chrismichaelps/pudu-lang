@@ -222,6 +222,7 @@ installBuiltinConstructors = do
   bind "jsonDecode" (BuiltinValue JsonDecodeBuiltin)
   bind "jsonEncode" (BuiltinValue JsonEncodeBuiltin)
   bind "htmlRender" (BuiltinValue HtmlRenderBuiltin)
+  bind "httpHeaderPairs" (BuiltinValue HttpHeadersBuiltin)
   bind "urlEncodeComponent" (BuiltinValue UrlEncodeBuiltin)
   bind "binaryEncode" (BuiltinValue BinaryEncodeBuiltin)
   bind "binaryDecode" (BuiltinValue BinaryDecodeBuiltin)

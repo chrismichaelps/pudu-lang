@@ -267,3 +267,9 @@ synchronized. Existing text primitives and packed identities are unchanged.
 Register mutexClose as an ordinary primitive value name. Resolved Grill Log: naming owns neither signature nor lifecycle policy.
 
 Resolved Grill Log: `htmlRender` is a prelude name.
+
+## httpHeaderPairs name (#1021)
+
+`httpHeaderPairs` is in the prelude name list beside `urlEncodeComponent`, so a program names it without an import.
+
+Resolved Grill Log: the name appears in every layer that lists prelude names, so resolution and checking cannot disagree.

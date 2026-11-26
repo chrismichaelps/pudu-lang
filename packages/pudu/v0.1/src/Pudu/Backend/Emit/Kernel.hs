@@ -43,6 +43,13 @@ frameKernel readSlot value name constants arguments = do
       Right (call (cells <> [aggregateHelper "drop" kind]), [part, aggregateNeed "drop" kind])
     KernelHost host | host `elem` releasesAnswer ->
       Right (call (cells <> [aggregateHelper "drop" (frameValueType value)]), [part, aggregateNeed "drop" (frameValueType value)])
+    -- The renderer keeps subtrees it has seen before and releases them with
+    -- the page type's own drop.
+    -- Each pair is made by the program's own pair constructor.
+    KernelHttpHeaders | CoreArrayType pair <- frameValueType value ->
+      Right (call (cells <> [aggregateHelper "make" pair]), [part, aggregateNeed "make" pair])
+    KernelHtmlRender | kind : _ <- map frameSlotType arguments ->
+      Right (call (cells <> map (Text.pack . show) constants <> [aggregateHelper "drop" kind]), [part, aggregateNeed "drop" kind])
     _ -> Right (call (passed cells <> map (Text.pack . show) constants <> fixed), [part])
  where
   releasesOperand = ["cell_open", "cell_swap", "channel_push", "thread_spawn", "scope_adopt", "scope_stash"]
@@ -113,6 +120,7 @@ kernelEntry name = case name of
   KernelJsonDecode -> plain "pudu_json_decode"
   KernelJsonEncode -> plain "pudu_json_encode"
   KernelHtmlRender -> plain "pudu_html_render"
+  KernelHttpHeaders -> plain "pudu_http_header_pairs"
   KernelUrlEncode -> plain "pudu_url_encode"
   KernelBinaryEncode -> plain "pudu_binary_encode"
   KernelBinaryDecode -> plain "pudu_binary_decode"

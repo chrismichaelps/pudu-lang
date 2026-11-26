@@ -362,6 +362,9 @@ declareBuiltinConstructors = do
     )
   {-| A URL component percent-encoded; see `Pudu.Eval.UrlEncode`. -}
   bindName "urlEncodeComponent" (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Str" [])))
+  {-| A request head's header pairs, or none for the caller to read; see
+      `Pudu.Eval.HttpHeaders`. -}
+  bindName "httpHeaderPairs" (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Array" [TupleTypeValue [NominalType "Str" [], NominalType "Str" []]])))
   {-| A `Std.Binary` node tree as bytes; see `Pudu.Eval.Binary`. -}
   bindName "binaryEncode"
     (monotype (FunctionTypeValue False [ReferenceTypeValue False (NominalType stdBinaryNodeId [])] (NominalType "Bytes" [])))

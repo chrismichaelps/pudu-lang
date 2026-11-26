@@ -18,6 +18,19 @@ export type MessageError
 /// hand for a test is worth reading and refusing it teaches nothing.
 export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
   let split = splitHead(source)
+  // A head every header line of which reads whole is read in one pass; any
+  // other is read line by line below, which also says what is wrong with it.
+  let fast = httpHeaderPairs(split[0])
+  if fast.length() > 0 {
+    let parts = parseRequestLine(firstLine(split[0])) ?
+    return Ok(Http.Request {
+        method: Http.methodFrom(parts[0]),
+        target: parts[1],
+        headers: fast,
+        body: split[1],
+        binaryBody: None
+      })
+  }
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoRequestLine) } else {
     let parts = parseRequestLine(lines[0]) ?
@@ -34,6 +47,17 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
 
 /// A request read from text where the head has already been separated from the body.
 export fn parseHead(head: Str) -> Result[Http.Request, MessageError] {
+  let fast = httpHeaderPairs(head)
+  if fast.length() > 0 {
+    let parts = parseRequestLine(firstLine(head)) ?
+    return Ok(Http.Request {
+        method: Http.methodFrom(parts[0]),
+        target: parts[1],
+        headers: fast,
+        body: "",
+        binaryBody: None
+      })
+  }
   let lines = headLines(head)
   if lines.length() == 0 { Err(NoRequestLine) } else {
     let parts = parseRequestLine(lines[0]) ?
@@ -246,6 +270,14 @@ fn splitHead(source: Str) -> (Str, Str) {
       (source.slice(0, single), source.slice(single + 2, source.length()))
     } else { (source, "") }
   }
+}
+
+/// The request line: the head up to its first line break, split as
+/// `headLines` splits it.
+fn firstLine(head: Str) -> Str {
+  let separator = if head.contains("\r\n") { "\r\n" } else { "\n" }
+  let end = head.indexOf(separator)
+  if end < 0 { head } else { head.take(end) }
 }
 
 /// The head in lines, with carriage returns removed and blanks dropped.

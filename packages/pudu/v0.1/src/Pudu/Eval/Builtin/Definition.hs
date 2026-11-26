@@ -224,6 +224,7 @@ data Builtin
   | JsonDecodeBuiltin
   | JsonEncodeBuiltin
   | HtmlRenderBuiltin
+  | HttpHeadersBuiltin
   | UrlEncodeBuiltin
   | BinaryEncodeBuiltin
   | BinaryDecodeBuiltin
@@ -465,6 +466,7 @@ builtinName value = case value of
   JsonDecodeBuiltin -> "jsonDecode"
   JsonEncodeBuiltin -> "jsonEncode"
   HtmlRenderBuiltin -> "htmlRender"
+  HttpHeadersBuiltin -> "httpHeaderPairs"
   UrlEncodeBuiltin -> "urlEncodeComponent"
   BinaryEncodeBuiltin -> "binaryEncode"
   BinaryDecodeBuiltin -> "binaryDecode"

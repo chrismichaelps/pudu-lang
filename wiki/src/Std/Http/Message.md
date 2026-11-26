@@ -74,3 +74,9 @@ Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot 
 `headLines` splits on the detected line separator (`\r\n` or `\n`) directly and trims any trailing empty slice via a single slice bounds check, avoiding $O(N)$ intermediate array pushes. `parseHeaders` scans colon delimiters and extracts name and value via `take` and `drop`, eliminating redundant `length()` traversals across UTF-16 Text slices. `parseHead` parses a head that has already been split from the body without rescanning for `\r\n\r\n`.
 
 Resolved Grill Log: header parsing must minimize heap allocations and avoid redundant Unicode length counting; array rebuilding on every line pays a linear interpreter penalty for every header carried.
+
+## Header pair fast path (#1021)
+
+`parseRequest` and `parseHead` call `httpHeaderPairs` first. A non-empty result becomes the request's headers, and the request line comes from `firstLine`, the head up to its first line break split as `headLines` splits it. An empty result falls back to the line-by-line reader, which also reports what is wrong with the head.
+
+Resolved Grill Log: the native fast path never refuses; the line reader stays the only source of a `MessageError`.

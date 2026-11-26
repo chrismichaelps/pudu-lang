@@ -238,3 +238,9 @@ synchronized. Existing text primitives and packed identities are unchanged.
 Append MutexCloseBuiltin after all existing tags with the single source name mutexClose. Resolved Grill Log: preserve packed tag identities and keep lifecycle execution in the concurrency coordinator.
 
 Resolved Grill Log: `HtmlRenderBuiltin` is named `htmlRender`.
+
+## httpHeaderPairs constructor (#1021)
+
+`HttpHeadersBuiltin` is a builtin constructor, and its name `httpHeaderPairs` is in the name table beside `UrlEncodeBuiltin`.
+
+Resolved Grill Log: the constructor and its name are added together, so the name table stays total.

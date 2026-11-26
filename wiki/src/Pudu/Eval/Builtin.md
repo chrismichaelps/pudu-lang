@@ -255,3 +255,9 @@ return an exact UInt8 and keep naming, typing, installation and pure dispatch
 synchronized. Existing text primitives and packed identities are unchanged.
 
 Resolved Grill Log: `htmlRender` dispatches to [[Eval Html Render]] and is pure, so constants fold through it.
+
+## httpHeaderPairs dispatch (#1021)
+
+`HttpHeadersBuiltin` dispatches to `callHttpHeaders` in [[Eval Http Headers]]. The builtin is pure and counts with the other pure builtins for constant folding.
+
+Resolved Grill Log: pure like `urlEncodeComponent`, so constants may fold through it.

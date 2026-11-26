@@ -38,3 +38,9 @@ total; the host's state is asked separately from its answer so no answer
 carrier grows a status field.
 
 Resolved Grill Log: `KernelHtmlRender` takes the `Std.Html.Html` variants' indexes: Element, Text, Fragment, Trusted.
+
+## Header pair kernel (#1021)
+
+`KernelHttpHeaders` names the header-pair kernel: one text operand, answering an array of text pairs. The pair type comes from the expression, not from the name.
+
+Resolved Grill Log: one closed name per runtime function, as for the other kernels, so emission stays exhaustive.

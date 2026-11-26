@@ -78,6 +78,8 @@ data CoreKernelName
   {-| The integers are the `Std.Html.Html` variants' indexes: Element, Text,
       Fragment, Trusted. -}
   | KernelHtmlRender
+  {-| A request head's header pairs, or none when the caller must read it. -}
+  | KernelHttpHeaders
   {-| A URL component with every byte but the unreserved ones as %XX. -}
   | KernelUrlEncode
   {-| The integers are the `Std.Binary.Node` variants' indexes: Whole, Real,

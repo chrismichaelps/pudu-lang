@@ -201,6 +201,7 @@ library
     Pudu.Backend.Runtime.Kernel.Column
     Pudu.Backend.Runtime.Kernel.Csv
     Pudu.Backend.Runtime.Kernel.Html
+    Pudu.Backend.Runtime.Kernel.Http
     Pudu.Backend.Runtime.Kernel.Json
     Pudu.Backend.Runtime.Kernel.Url
     Pudu.Backend.Runtime.Kernel.Mac
@@ -332,6 +333,7 @@ library
     Pudu.Compiler.Lower.Primitive
     Pudu.Compiler.Lower.MultiMap
     Pudu.Compiler.Lower.Loan
+    Pudu.Compiler.Lower.Markup
     Pudu.Compiler.Lower.Range
     Pudu.Compiler.Lower.Bytes
     Pudu.Compiler.Lower.Control
@@ -376,6 +378,7 @@ library
     Pudu.Eval.Capture
     Pudu.Eval.Csv
     Pudu.Eval.HtmlRender
+    Pudu.Eval.HttpHeaders
     Pudu.Eval.Json
     Pudu.Eval.UrlEncode
     Pudu.Eval.Binary
