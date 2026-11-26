@@ -3,6 +3,7 @@ module Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.KernelCountedPrograms (codecProgram, flatTableProgram)
 
 kernelSuccessPrograms :: [(String, Text, Text)]
 kernelSuccessPrograms =
@@ -97,6 +98,7 @@ kernelSuccessPrograms =
         , "  print(show(bufferCompare(w3, 0, w3, 8, 8)) + show(bufferCompare(w3, 8, w3, 0, 8)) + show(bufferCompare(w3, 0, w3, 0, 24)) + show(bufferCompare(w3, 0, b, 20, 8)) + show(bufferCompare(w3, 0, b, 0, 0)))"
         , "  print(show(bufferCopy(w3, 0, b, 4, 8)) + show(bufferCopy(w3, 0, b, 20, 8)) + show(bufferCopy(w3, 20, b, 0, 8)))"
         , "  print(show(bufferScanU64(w3, 0, 3, 18446744073709551614u64)) + show(bufferScanU64(w3, 0, 3, 18446744073709551615u64)) + show(bufferScanU64(w3, 0, 4, 1u64)) + show(bufferScanU64(w3, 8, 2, 18446744073709551614u64)) + show(bufferScanU64(w3, 0, 3, 7u64)))"
+        , "  print(show(bufferReadU64(w3, 9223372036854775804)) + show(bufferWriteU32(b, 9223372036854775806, 1u32)) + show(bufferFill(b, 8, 9223372036854775807, 1u8)) + show(bufferCompare(w3, 9223372036854775807, b, 0, 8)) + show(bufferCopy(w3, 0, b, 9223372036854775807, 8)) + show(bufferScanU64(w3, 8, 2305843009213693952, 1u64)))"
         , "  let alloc = bufferAlloc"
         , "  let rd = bufferReadU64"
         , "  let sz: fn(Bytes) -> Int = bufferSize"
@@ -104,7 +106,7 @@ kernelSuccessPrograms =
         , "  0"
         , "}"
         ]
-      , "0x000000000000000000000000000000000000000000000000 24 0x\n0xffffffffffffffff000000000000000000000000000000000xfffffffffffffffffeffffffffffffff00000000000000000xfffffffffffffffffeffffffffffffff00286bee000000000xfffffffffffffffffeffffffffffffff000000000000f83f0x000000000000000000000000000000000000000000000000\nSome(18446744073709551615)Some(-2)Some(4000000000)Some(1.5)\nNoneNoneSome(0)NoneNoneNone\nSome(0x0000ababab00000000000000000000000000000000000000)NoneSome(0x000000000000000000000000000000000000000000000000)None\nSome(1)Some(-1)Some(0)NoneSome(0)\nSome(0x00000000ffffffffffffffff000000000000000000000000)NoneNone\nSome(1)Some(0)NoneSome(0)None\n<builtin bufferAlloc>0x0000Some(18446744073709551615)24<builtin bufferReadU64>\n" )
+      , "0x000000000000000000000000000000000000000000000000 24 0x\n0xffffffffffffffff000000000000000000000000000000000xfffffffffffffffffeffffffffffffff00000000000000000xfffffffffffffffffeffffffffffffff00286bee000000000xfffffffffffffffffeffffffffffffff000000000000f83f0x000000000000000000000000000000000000000000000000\nSome(18446744073709551615)Some(-2)Some(4000000000)Some(1.5)\nNoneNoneSome(0)NoneNoneNone\nSome(0x0000ababab00000000000000000000000000000000000000)NoneSome(0x000000000000000000000000000000000000000000000000)None\nSome(1)Some(-1)Some(0)NoneSome(0)\nSome(0x00000000ffffffffffffffff000000000000000000000000)NoneNone\nSome(1)Some(0)NoneSome(0)None\nNoneNoneNoneNoneNoneNone\n<builtin bufferAlloc>0x0000Some(18446744073709551615)24<builtin bufferReadU64>\n" )
   , ( "column kernels over unsigned and float rows, NaN and signed zero included"
       , program
         [ "fn put(buffer: Bytes, row: Int, value: UInt64) -> Bytes {"
@@ -202,8 +204,7 @@ kernelSuccessPrograms =
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)
 
-{-| Refusals keep their codes, messages and spans through every kernel family. -}
-{-| Programs whose library imports the single-module leak harness cannot load. -}
+{-| Programs that import the standard library; the counted run loads them through the program loader. -}
 kernelLibraryPrograms :: [(String, Text, Text)]
 kernelLibraryPrograms =
   [ ( "an empty array compares with an array whose element a generic solved"
@@ -339,6 +340,7 @@ kernelLibraryPrograms =
     , "<div id=\"main\" class=\"a b\" style=\"color: red; font: &quot;x&quot;\" title=\"T &lt;&amp;&gt; &#39;q&#39; &quot;dq&quot;\" lang=\"es\" dir=\"rtl\" hidden=\"hidden\" tabindex=\"-1\" accesskey=\"k\" contenteditable=\"true\" draggable=\"false\" spellcheck=\"true\" translate=\"no\" role=\"navigation\" aria-label=\"Main \233\&\" aria-hidden=\"true\" data-id=\"42\" data-x.y:z_1=\"\">body</div>\n<form action=\"/send?a=1&amp;b=2\" method=\"post\" enctype=\"multipart/form-data\" target=\"_blank\" autocomplete=\"off\" novalidate=\"novalidate\"><label for=\"who\">Email</label><input type=\"email\" name=\"who\" value=\"a&quot;b&lt;c&gt;\" placeholder=\"you@example.test\" required=\"required\" disabled=\"\" readonly=\"readonly\" maxlength=\"80\" minlength=\"3\" min=\"1\" max=\"9\" step=\"0.5\" pattern=\"[a-z]+@.*\" autofocus=\"autofocus\" multiple=\"multiple\" checked=\"checked\" list=\"suggestions\" size=\"20\" form=\"f1\" inputmode=\"email\" /><select name=\"pick\" multiple=\"multiple\"><option value=\"1\" selected=\"selected\">One</option><option value=\"2\">Two &amp; more</option></select><textarea rows=\"3\" cols=\"40\" wrap=\"soft\">line &lt;1&gt;\nline 2</textarea><button type=\"submit\" formaction=\"/alt\">Go</button></form>\n<img src=\"/i.png\" alt=\"A &quot;quoted&quot; alt\" width=\"34\" height=\"33\" srcset=\"/i.png 1x, /i2.png 2x\" sizes=\"(max-width: 600px) 100vw\" loading=\"lazy\" decoding=\"async\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\" usemap=\"#m\" /><a href=\"https://example.test/?q=a b&amp;r=&lt;x&gt;\" rel=\"noopener noreferrer\" download=\"f.txt\" hreflang=\"en\" target=\"_self\">link</a><link rel=\"stylesheet\" href=\"/s.css\" media=\"screen\" integrity=\"sha384-abc+/=\" crossorigin=\"\" /><video controls=\"controls\" autoplay=\"\" muted=\"muted\" loop=\"loop\" poster=\"/p.jpg\" preload=\"none\"><source src=\"/v.mp4\" type=\"video/mp4\" /><track kind=\"captions\" src=\"/c.vtt\" srclang=\"en\" default=\"default\" /></video>\n<table class=\"grid\"><tr><th scope=\"col\" abbr=\"N\">Name</th><th colspan=\"2\">Span</th></tr><tr><td rowspan=\"2\" headers=\"h1 h2\">a</td><td>b</td><td>c</td></tr></table>\n<area data-v=\"area\" /><base data-v=\"base\" /><br data-v=\"br\" /><col data-v=\"col\" /><embed data-v=\"embed\" /><hr data-v=\"hr\" /><img data-v=\"img\" /><input data-v=\"input\" /><link data-v=\"link\" /><meta data-v=\"meta\" /><source data-v=\"source\" /><track data-v=\"track\" /><wbr data-v=\"wbr\" /><BR data-v=\"BR\">x</BR><Img data-v=\"Img\">x</Img><div data-v=\"div\">x</div>\n<ul class=\"plain\"><li>one</li><li>two &amp; &lt;three&gt;</li><li></li></ul>\n<ol start=\"3\" reversed=\"reversed\" type=\"i\"><li>a</li><li><ul><li>nested &lt;1&gt;</li><li><ol><li>deep</li></ol></li></ul></li><li><b>raw</b></li></ol>\n<ul></ul>\n<dl><dt>term</dt><dd>definition</dd></dl>\n<ul class=\"nav\" role=\"list\"><li><a href=\"/docs\" class=\"active\" aria-label=\"Docs \233\&\">Docs</a></li><li><a href=\"/x?a=1&amp;b=&lt;2&gt;\" data-track=\"nav\">X &amp; Y</a></li><li><input type=\"checkbox\" checked=\"checked\" required=\"required\" disabled=\"disabled\" name=\"c\" /></li><li class=\"last extra\" id=\"replaced\">last</li></ul>\n<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\" /><title>T&amp;T</title></head><body><ul class=\"nav\" role=\"list\"><li><a href=\"/docs\" class=\"active\" aria-label=\"Docs \233\&\">Docs</a></li><li><a href=\"/x?a=1&amp;b=&lt;2&gt;\" data-track=\"nav\">X &amp; Y</a></li><li><input type=\"checkbox\" checked=\"checked\" required=\"required\" disabled=\"disabled\" name=\"c\" /></li><li class=\"last extra\" id=\"replaced\">last</li></ul></body></html>\n")
   ]
 
+{-| Refusals keep their codes, messages and spans through every kernel family. -}
 kernelRefusalPrograms :: [(String, Text)]
 kernelRefusalPrograms =
   [ ( "binary writer refuses duplicate fields through a builtin value"
@@ -350,48 +352,9 @@ kernelRefusalPrograms =
         , "  0"
         , "}" ] )
   , ( "flat table primitives, degenerate tables and a negative capacity"
-      , program
-        [ "import Std.FlatMap as Flat"
-        , "import Std.FlatMap {FlatMap}"
-        , ""
-        , "fn key(index: Int) -> UInt64 {"
-        , "  match convertInteger[UInt64](index) { case Some(word) => word"
-        , "    case None => 0u64 }"
-        , "}"
-        , ""
-        , "fn main() -> Int {"
-        , "  var table: FlatMap[Str] = swissTableEmpty(3)"
-        , "  print(show(table) + display(swissTableSize(&table)) + show(swissTableLookup(&table, 4u64)) + show(swissTableEntries(&table)))"
-        , "  for index in 0..40 { table = swissTableInsert(&table, key(index * 7919), \"v\" + display(index)) }"
-        , "  print(display(table.capacity) + \" \" + display(swissTableSize(&table)) + show(swissTableLookup(&table, 7919u64)) + show(swissTableLookup(&table, 5u64)))"
-        , "  let before = table"
-        , "  table = swissTableInsert(&table, 7919u64, \"again\")"
-        , "  for index in 0..20 { table = swissTableDelete(&table, key(index * 2 * 7919)) }"
-        , "  table = swissTableDelete(&table, 99u64)"
-        , "  print(display(swissTableSize(&table)) + show(swissTableLookup(&table, 7919u64)) + show(swissTableLookup(&table, 0u64)) + show(swissTableLookup(&before, 0u64)) + display(swissTableSize(&before)))"
-        , "  for index in 0..10 { table = swissTableInsert(&table, key(index * 2 * 7919), \"back\") }"
-        , "  print(show(swissTableEntries(&table)))"
-        , "  print(show(table))"
-        , "  let made = Flat.empty[Int](100)"
-        , "  let filled = Flat.insert(&made, 18446744073709551615u64, 5)"
-        , "  print(display(made.capacity) + show(Flat.get(&filled, 18446744073709551615u64)) + display(Flat.containsKey(&filled, 1u64)) + display(Flat.size(&filled)) + show(Flat.entries(&filled)) + display(Flat.isEmpty(&made)) + show(Flat.remove(&filled, 18446744073709551615u64)))"
-        , "  let odd: FlatMap[Int] = FlatMap{capacity: 0, count: 0, ctrl: bucketsOf(), slots: bucketsOf()}"
-        , "  let grown = swissTableInsert(&odd, 3u64, 4)"
-        , "  print(show(grown) + show(swissTableLookup(&grown, 3u64)) + show(swissTableDelete(&grown, 3u64)))"
-        , "  let small: FlatMap[Int] = FlatMap{capacity: 3, count: 0, ctrl: bucketsOf(), slots: bucketsOf()}"
-        , "  let three = swissTableInsert(&swissTableInsert(&small, 1u64, 1), 2u64, 2)"
-        , "  print(show(three) + show(swissTableLookup(&three, 2u64)) + show(swissTableLookup(&three, 1u64)))"
-        , "  let insert: fn(&FlatMap[Str], UInt64, Str) -> FlatMap[Str] = swissTableInsert"
-        , "  let size: fn(&FlatMap[Str]) -> Int = swissTableSize"
-        , "  let find: fn(&FlatMap[Str], UInt64) -> Option[Str] = swissTableLookup"
-        , "  let fresh: fn(Int) -> FlatMap[Str] = swissTableEmpty"
-        , "  let one = insert(&fresh(1), 9u64, \"nine\")"
-        , "  print(show(insert) + display(size(&one)) + show(find(&one, 9u64)) + show(find(&one, 8u64)))"
-        , "  let bad: FlatMap[Str] = swissTableEmpty(0 - 1)"
-        , "  print(show(bad))"
-        , "  0"
-        , "}"
-        ] )
+      , flatTableProgram
+        [ "  let bad: FlatMap[Str] = swissTableEmpty(0 - 1)"
+        , "  print(show(bad))" ] )
   , ( "HTML pages render and document as the interpreter does: escaping, refused names, handlers, void elements and deep nesting"
       , program
         [ "import Std.Html as H"
@@ -424,60 +387,8 @@ kernelRefusalPrograms =
         , "  0"
         , "}" ] )
   , ( "JSON, XML and CSV codecs over accepted and refused inputs, depth bounds included"
-      , program
-        [ "import Std.Json as J"
-        , "import Std.Json {Json, Null, Boolean, Number, Fractional, Text, List, Object}"
-        , "import Std.Xml as Xml"
-        , "import Std.Csv as Csv"
-        , ""
-        , "fn main() -> Int {"
-        , "  let texts = [ \"null\", \" true \", \"false\", \"0\", \"-0\", \"-12\", \"9223372036854775807\", \"9223372036854775808\", \"-9223372036854775808\", \"1.5\", \"-2e10\", \"1E+2\", \"01\", \"1.\", \".5\", \"1e\", \"-\", \"\\\"\\\"\", \"\\\"a\\\\n\\\\t\\\\\\\"\\\\\\\\\\\\/\\\\b\\\\f\\\\r\\\"\", \"\\\"\\\\u00e9\\\\u4e2d\\\\ud83d\\\\ude00\\\\u0000x\\\"\", \"\\\"\\\\ud83d\\\"\", \"\\\"\\\\udc00\\\"\", \"\\\"\\\\ud83dx\\\"\", \"\\\"\\\\u12g4\\\"\", \"\\\"bad\\\\q\\\"\", \"\\\"open\", \"\\\"h\233\&llo \9731\& \128512\&\\\"\", \"[]\", \"[ ]\", \"[1, 2 ,3]\", \"[1,]\", \"[,1]\", \"[1 2]\", \"\\{\\}\", \"\\{ \\}\", \"\\{\\\"a\\\":1,\\\"b\\\":[true,null,\\{\\\"c\\\":\\\"d\\\"\\}],\\\"a\\\":2\\}\", \"\\{\\\"a\\\" 1\\}\", \"\\{a:1\\}\", \"\\{\\\"a\\\":1,\\}\", \"[[[[[[[[[[1]]]]]]]]]]\", \"tru\", \"nulll\", \"1 2\", \"\", \"  \", \"[\\\"x\\\"]  \\n\\t\", \"\\\"tab\\there\\\"\", \"\\{\\\"k\\\":-0.0e-0\\}\" ]"
-        , "  for text in texts {"
-        , "    let decoded = jsonDecode(text)"
-        , "    match decoded {"
-        , "      case Some(value) => print(show(value) + \" | \" + jsonEncode(&value, false) + \" | \" + jsonEncode(&value, true))"
-        , "      case None => print(\"none: \" + show(J.decode(text)))"
-        , "    }"
-        , "  }"
-        , "  var deep = \"\""
-        , "  for index in 0..512 { deep = deep + \"[\" }"
-        , "  var close = \"\""
-        , "  for index in 0..512 { close = close + \"]\" }"
-        , "  print(display(match jsonDecode(deep + close) { case Some(_) => 1"
-        , "    case None => 0 }) + display(match jsonDecode(\"[\" + deep + close + \"]\") { case Some(_) => 1"
-        , "    case None => 0 }))"
-        , "  let built = Json.Object([(\"ctl\", Json.Text(\"\\u{1}\\u{1f}\\u{7f}\\\"\\\\/\")), (\"n\", Json.Number(-9223372036854775807 - 1)), (\"f\", Json.Fractional(\"1.50\")), (\"l\", Json.List([Json.Null, Json.Boolean(false), Json.List([]), Json.Object([])]))])"
-        , "  print(jsonEncode(&built, false))"
-        , "  print(jsonEncode(&built, true))"
-        , "  print(J.encode(&built) + show(J.decode(J.encodePretty(&built)) == Ok(built)))"
-        , "  let documents = [ \"<a/>\", \"<a></a>\", \"  <?xml version=\\\"1.0\\\"?>\\n<!-- note --><root a=\\\"1\\\" b='two &amp; &lt;3&gt; &quot;q&quot; &apos;s&apos; &#65;&#x42;&#x1F600;&#xD800;&#99999999;&unknown;&#;&#x; &toolongentityname; & alone'>text <b>bold</b><!-- c --><![CDATA[raw <&> ]]><?pi x?> tail&amp;\\n <c d=\\\"\\\"/> \\u{a0}\\u{3000} </root> trailing\", \"<a b=\\\"1\\\" b=\\\"2\\\"/>\", \"<a b=1/>\", \"<a b/>\", \"<a\", \"<a>\", \"<a></b>\", \"<a><b></a></b>\", \"<!DOCTYPE x><a/>\", \"<?xml?\", \"<!-- x\", \"\", \"   \", \"text\", \"<a>&#x110000;&#12;&#0;</a>\", \"<ns:tag xmlns:ns=\\\"u\\\"><ns:child/></ns:tag>\", \"<a>\\n  <b/>\\n</a  >\", \"<a x = 'y' ></a>\", \"< a/>\", \"<a/ >\", \"<\233\& \252\&=\\\"\241\&\\\">\223\&</\233\&>\", \"<a><![CDATA[x]]</a>\", \"<a><?pi</a>\", \"<a><!-- x</a>\", \"<a>]]></a>\" ]"
-        , "  for document in documents {"
-        , "    match xmlDecode(document) {"
-        , "      case Some(tag) => print(show(tag))"
-        , "      case None => print(\"none: \" + show(Xml.decode(document)))"
-        , "    }"
-        , "  }"
-        , "  var nest = \"\""
-        , "  var unnest = \"\""
-        , "  for index in 0..512 { nest = nest + \"<n>\""
-        , "    unnest = unnest + \"</n>\" }"
-        , "  print(display(match xmlDecode(nest + unnest) { case Some(_) => 1"
-        , "    case None => 0 }) + display(match xmlDecode(\"<n>\" + nest + unnest + \"</n>\") { case Some(_) => 1"
-        , "    case None => 0 }))"
-        , "  let sheets = [ \"a,b,c\\n1,2,3\\n\", \"a,b\\r\\n\\\"q,1\\\",\\\"he said \\\"\\\"hi\\\"\\\"\\\"\\r\\nlast,row\", \"\", \"\\n\\n\", \"no newline\", \"x,\\\"open\\n\", \"x,\\\"q\\\"\", \"\233\&,\9731\&\\n\128512\&,\\n\", \"a\\r,b\\r\\n\", \"\\\"a\\\"b\\\"c\\\",d\\n\", \"a,b\\n\\\"\" ]"
-        , "  for sheet in sheets {"
-        , "    print(show(csvRecords(sheet.toBytes(), \",\")) + show(csvRecords(sheet.toBytes(), \";\")))"
-        , "  }"
-        , "  print(show(csvRecords(bytesOf([97u8, 255u8, 10u8]), \",\")) + show(csvRecords(bytesOf([97u8, 10u8, 255u8]), \",\")) + show(csvRecords(bytesOf([97u8, 10u8, 255u8, 44u8]), \",\")) + show(csvRecords(bytesOf([195u8, 10u8]), \",\")))"
-        , "  let decode = jsonDecode"
-        , "  let encode = jsonEncode"
-        , "  let xml = xmlDecode"
-        , "  let csv = csvRecords"
-        , "  print(show(decode) + show(decode(\"[1]\")) + encode(&Json.Null, true) + show(xml(\"<q/>\")) + show(csv(\"a\\n\".toBytes(), \",\")) + show(encode))"
-        , "  print(show(csvRecords(\"a\\n\".toBytes(), \"\\\"\")))"
-        , "  0"
-        , "}"
-        ] )
+      , codecProgram
+        [ "  print(show(csvRecords(\"a\\n\".toBytes(), \"\\\"\")))" ] )
   , ( "a negative buffer size refuses at the call"
       , program
         [ "fn main() -> Int {"

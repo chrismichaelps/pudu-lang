@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: closed
 issue: 842
 aliases: [Native Builtin Kernel Delivery]
 ---
@@ -29,11 +29,12 @@ at -O2) passed clean with zero warnings. Cross-architecture test portability
 verified: raw byte float column tests use deterministic finite floats across
 ARM64 and x86_64, resolving CI shards 1 and 4.
 
-Not done: the ledger row stays Partial until independent review; Windows
-evidence for fixed seeds is pending as before.
+Resolved: the independent implementation and wiki-parity review was recorded
+on PR #1027 on 2026-11-26 (https://github.com/chrismichaelps/pudu-lang/pull/1027#pullrequestreview-6079573141).
+The Records, tuples, sums and collections row is Implemented. No next action
+remains for the ledger row.
 
-Exact next action: request the independent implementation and wiki-parity
-review of #842.
+Still open outside this handoff: Windows evidence for fixed seeds is pending as before; it does not gate the coverage ledger.
 
 ## Referenced by
 

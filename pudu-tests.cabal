@@ -125,6 +125,7 @@ test-suite pudu-test
     Pudu.Backend.StorePrograms
     Pudu.Backend.ForeignPrograms
     Pudu.Backend.KernelPrograms
+    Pudu.Backend.KernelCountedPrograms
     Pudu.Backend.AbstractionPrograms
     Pudu.Backend.HostPrograms
     Pudu.Backend.HostServicePrograms
