@@ -260,3 +260,9 @@ Use the existing linked-native conformance harness with explicit outputs for the
 ## Resolved Grill Log for Foundation conformance
 
 Run Objective-C Foundation conformance on macOS and record the platform skip elsewhere. Compare fixed output as well as interpreter/native diagnostics.
+
+## Ledger audit programs (#1022)
+
+The module conformance property runs `ledgerAuditPrograms` after `modulePrograms`, and the module refusal property runs `ledgerAuditRefusals` after `moduleRefusalPrograms`. See [[Backend Ledger Audit Programs]].
+
+Resolved Grill Log: the ledger programs join the existing module properties, so Partial claims run in both engines without a new property.

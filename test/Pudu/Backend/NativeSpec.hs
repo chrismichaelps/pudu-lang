@@ -43,6 +43,7 @@ import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
 import Pudu.Backend.SumPrograms (sumSuccessPrograms, sumRefusalPrograms)
+import Pudu.Backend.LedgerAuditPrograms (ledgerAuditPrograms, ledgerAuditRefusals)
 import Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, constantPrograms, constantModulePrograms, constantRefusalPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms, textRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
@@ -486,12 +487,12 @@ testBytesRefusals :: IO Property
 testBytesRefusals = conjoin <$> mapM (uncurry conformance) bytesRefusalPrograms
 
 testModuleConformance :: IO Property
-testModuleConformance = conjoin <$> mapM run modulePrograms
+testModuleConformance = conjoin <$> mapM run (modulePrograms <> ledgerAuditPrograms)
  where
   run (label, modules, source, expected) = conformanceWith modules (Just (expected, "", 0)) label source
 
 testModuleRefusals :: IO Property
-testModuleRefusals = conjoin <$> mapM (\(label, modules, source) -> conformanceWith modules Nothing label source) moduleRefusalPrograms
+testModuleRefusals = conjoin <$> mapM (\(label, modules, source) -> conformanceWith modules Nothing label source) (moduleRefusalPrograms <> ledgerAuditRefusals)
 
 testSumConformance :: IO Property
 testSumConformance = conjoin <$> mapM run sumSuccessPrograms

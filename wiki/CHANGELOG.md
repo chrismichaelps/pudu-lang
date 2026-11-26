@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-25 — In-place map and set updates
+
+- Map and set insert, put and remove on a value held once rewrite its own tree; the Maps benchmark went from 0.21 s to 0.09 s natively. refs #1019
+
+## 2026-11-25 — Server rendering without repeated work
+
+- Word-at-a-time escaping, kept closed markup, identity-kept rendered text, and a header-pair kernel. refs #1021
+
+## 2026-11-25 — Ledger audit probes
+
+- Two-engine programs for each Partial ledger claim; qualified calls through another module's callable constant compile natively. refs #1022 refs #1020
+- Native comparisons between a sequence's array held as a runtime choice and an empty array literal compare their elements, as the interpreter does. refs #1024
+
 ## 2026-11-25 — Borrowed local operands
 
 - Native operations that only read an operand read a local in its own slot instead of a retained copy. refs #1008

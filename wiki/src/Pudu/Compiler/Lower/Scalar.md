@@ -58,6 +58,7 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 - **Q:** Share one failure text for Bool and Unit? **A:** No; retain comparisonOnly versus generic-combine messages through shared factories.
 - **Q:** May print's effect-only Unit select a trap? **A:** No; carrier guards and exact scalar facts reject Result erasure. A Never operand may discard completed effects because no operator can consume its values.
 - **Q:** Can a trap precede the second operand? **A:** No; both operands finish first unless an operand transfers or fails. Logical right operands remain guarded.
+- **Q:** Why take the choice's array carrier rather than widen the literal into the choice? **A:** The literal holds no element, so any array type is honest for it; picking the carrier lets the comparison reach the ordinary array equality, and a choice holding two array carriers is left as it was, since the literal could not pick one.
 
 ## Grill Log
 
@@ -106,6 +107,13 @@ An empty array literal operand of a binary operator takes the other operand's
 array type. Checking can leave the literal's element open, defaulting it to
 Unit, when the other side's element came from solving a generic; an empty
 array holds no element, so the retyped literal is the same value.
+
+## Empty array comparisons (#1024)
+
+An empty array literal compared with `==` or `!=` takes the other operand's
+array type. When the other operand is held as a runtime choice, the literal
+takes the one array carrier that choice can hold, so `seq.toArray() == []`
+compares element-for-element instead of folding to `false`.
 
 ## Referenced by
 
