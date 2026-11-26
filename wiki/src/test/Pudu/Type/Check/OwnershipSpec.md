@@ -39,9 +39,14 @@ The first group checks codes:
 - a read-only temporary is E4005;
 - a field store is E4006;
 - an unbound droppable pattern part is E4007;
-- a wrong `Drop` member or receiver is E4008.
+- a wrong `Drop` member or receiver is E4008;
+- an owning task not awaited where it is made (`storedTask`) is E4010;
+- a droppable value at a type parameter (`generic`) is E4011;
+- a borrow at a type parameter (`genericBorrow`) is clean;
+- a bare and a qualified nullary variant (`nullary`) are clean.
 
-The second group asserts the exact contract for one fixture per code: code,
+The second group asserts the exact contract for one fixture per code, E4010
+and E4011 included: code,
 span start, message and help, through `diagnosticContract`.
 
 The third group checks that a `Drop` implementation with another member or a

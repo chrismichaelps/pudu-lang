@@ -37,10 +37,12 @@ its name, and a `main` that exercises the ways ownership ends:
 - a user `drop` on a record whose fields also need drop;
 - a closure whose parameter owns a value, dropped when the closure ends;
 - an async function and an async lambda whose parameters own values. Each is
-  awaited once, the task drops its parameters when the body ends, and the
-  parameters are dropped whether or not the body names them. Each await runs
-  the body again, which adopts its parameters again, as the interpreter's
-  per-await call does.
+  awaited where it is made, so the task runs once, drops its parameters when
+  the body ends, and drops them whether or not the body names them. An owning
+  task not awaited where it is made is E4010, so the corpus does not store one.
+- variants without a payload, bare (`Empty`) and qualified (`Mode.On`), built
+  as values of sums that need drop. The program prints `built`, then `drop
+  mode` twice, then `drop full`.
 
 The expected trace is written by hand. It fixes the order: newest declaration
 first within a scope, user `drop` before parts, parts in declaration order,

@@ -15,8 +15,9 @@ aliases: [Type Ownership]
 
 Check every body of a checked module for the ownership rules a value needing
 drop requires: one owner, a move at each by-value use, no use after a move,
-no partial move, no escape into a holder or closure, and no explicit `drop`
-call. Answer the spans of the uses that move and the binders that own, so both
+no partial move, no escape into a holder or closure, no explicit `drop`
+call, no owning task left unawaited where it is made, and no droppable value
+where a type parameter stands. Answer the spans of the uses that move and the binders that own, so both
 engines can act on the same facts.
 
 ## Interface
@@ -43,6 +44,23 @@ after an unconditional transfer.
 - A closure body sees the names it captures; capturing an owning value is
   E4004.
 - A `Drop` implementation is checked for shape before any body runs.
+- A call whose result is a Task and that passes an argument needing drop is
+  E4010 unless the call is the direct operand of `.await`. `ownedTask` tests
+  for such a call.
+- At a call to a named function whose scheme has type parameters, an argument
+  needing drop at a parameter whose written type mentions a type parameter is
+  E4011. `genericArguments` walks the parameters, `mentions` tests a written
+  type and does not look inside a borrow, so an `&T` parameter accepts a
+  borrow, and `genericOperand` refuses an argument whose type needs drop.
+  Constructors, named with a capital, keep what they are given whole and are
+  not checked.
+- A call to a user-declared method on a receiver whose nominal type arguments
+  need drop is E4011 (`genericReceiver`). `genericRefusal` builds the refusal
+  for both cases.
+- A name with no local binder (function, constructor, module value) is not
+  checked at its use, because a module value that needs drop is refused at its
+  declaration (E4004). A member of a type or module qualifier (`Mode.On`) is a
+  constructor or declaration, not a field move.
 
 ## Diagnostics
 
@@ -57,6 +75,8 @@ after an unconditional transfer.
 | E4007 | a pattern leaves a droppable part unbound |
 | E4008 | a `Drop` implementation has the wrong target, member, receiver or result |
 | E4009 | taking apart a type with its own `Drop` |
+| E4010 | a task that owns a value needing drop is not awaited where it is made |
+| E4011 | a value needing drop is used where a type parameter stands |
 
 Every refusal carries a help that names the safe alternative. The walk reports
 once per span and code.
@@ -75,6 +95,10 @@ move, because the use may see the moved value. A move inside a loop is refused
 on the next turn. A `let _ = value` is a statement whose subject is consumed
 and owned; it is not a binding named `_`.
 
+A nullary variant builds a value of a sum that needs drop, bare (`Empty`) or
+qualified (`Mode.On`). At a type parameter a borrow (`&T`) is allowed; a
+droppable value is not.
+
 ## Resolved Grill Log
 
 - **Q:** Why run ownership after type checking rather than during it? **A:**
@@ -88,6 +112,16 @@ and owned; it is not a binding named `_`.
   module value outlives every function, so there is no ownership end to drop
   at. _Rationale:_ a process-lifetime resource needs an explicit close, not an
   implicit one.
+- **Q:** Why must an owning task be awaited where it is made? **A:** Each
+  await runs the body again, so a stored task would drop its arguments on every
+  run, or never if it is not awaited. _Rationale:_ awaiting at the making site
+  runs the body once and keeps one owner. _Rejected:_ memoizing task results,
+  which changes cold task semantics.
+- **Q:** Why refuse a droppable value at a type parameter? **A:** The generic
+  body does not track values of a type parameter, so it can copy or lose one.
+  _Rationale:_ refusing the instantiation keeps one owner. _Rejected:_ treating
+  every type-parameter value as needing drop, which would refuse ordinary
+  generic code that copies values needing no drop.
 
 ## Referenced by
 

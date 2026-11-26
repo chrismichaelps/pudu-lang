@@ -47,7 +47,7 @@ the ownership check admits. A nominal type already being visited answers
 ## Negative Logic
 
 An unsettled or rigid type is not decided here. The ownership check refuses
-the instantiation instead of assuming a copy or a drop.
+the instantiation (E4011) instead of assuming a copy or a drop.
 
 A module's own `Drop` trait is not the prelude's; implementing it neither
 needs nor runs a drop.

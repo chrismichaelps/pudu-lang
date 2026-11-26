@@ -99,6 +99,10 @@ potential changes in scaling ahead of smaller per-operation costs. See
   the repeated ordered updates used by `MultiMap`.
 - Target instruction selection for lane operations, arithmetic sites on the
   success path, and registry contention while several workers are active.
+- Programs with a `Drop` implementation run every body on the tree walker:
+  compiled bodies and the pure-loop kernel are turned off program-wide once any
+  `impl Drop` exists. Evidence required: a measurement and per-function
+  admission.
 
 ## Grill Log
 

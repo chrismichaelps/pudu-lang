@@ -48,7 +48,7 @@ A value whose type implements `Drop`, or stores a part that does, needs drop.
 Ownership checking gives it one owner: a by-value use moves it, a read after a
 move is refused, a field cannot be moved out alone, a type with its own `drop`
 cannot be taken apart, and a holder, closure, module value or field store
-cannot keep it (E4001–E4009). The checker publishes the moving uses and owning
+cannot keep it (E4001–E4011). The checker publishes the moving uses and owning
 binders in the settled module, so the interpreter and native lowering read the
 same facts.
 
@@ -63,9 +63,10 @@ and stops, and the success corpus is counted for allocations.
 See [[Type Ownership]], [[Eval Drop]], [[Compiler Lower Drop]] and
 [[Native Emission Coverage]].
 
-Async function and async lambda parameters are owned and dropped by their task,
-on every run: the outer call only makes the task, and the task drops its
-parameters when its body ends.
+Async function and async lambda parameters are owned and dropped by their task.
+A task that owns such a value is awaited where it is made (E4010). A value that
+needs drop is not passed where a type parameter stands (E4011); a borrow is
+allowed there.
 
 ## Measurement
 

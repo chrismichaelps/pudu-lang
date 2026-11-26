@@ -14,8 +14,7 @@ Architect → Backend Engineer → Test Engineer. Branch
 
 ## Next action
 
-Open the #1028 pull request to dev with focused and full validation evidence,
-then request the independent wiki-parity review.
+Request the independent re-review of PR #1029 after the review fixes, then merge to dev.
 
 ## Delivered
 
@@ -36,9 +35,11 @@ drops immediately; a stop during cleanup still runs the remaining drops.
 Native: one glue function per needs-drop type and a per-function drop table
 that runs before frames unwind. `dropSuccessPrograms` and `dropStopPrograms`
 match interpreter traces, the success corpus is counted for allocations, and
-`OwnershipSpec` asserts the code, span, message and help of E4001–E4009.
+`OwnershipSpec` asserts the code, span, message and help of E4001–E4011.
 Async functions and async lambdas hand owned parameters to their task, which
-drops them when it ends.
+drops them when it ends. Review fixes add E4010 (an owning task is awaited
+where it is made), E4011 (a droppable value is not used where a type parameter
+stands), and payload-free variants of sums that need drop build.
 
 ## Referenced by
 
