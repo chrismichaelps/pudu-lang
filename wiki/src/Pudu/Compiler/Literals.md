@@ -175,3 +175,9 @@ carry no expression literals.
 ## Resolved Grill Log for Objective-C delegates
 
 Literal rewriting has instances for delegate syntax, so delegate declarations pass through the same rewrite as the other foreign forms.
+
+## Ownership moves (#1028)
+
+`resolveLiterals` takes the checker's move-span set. A marked bare local is wrapped in `UnaryExpression "::move"`, and a field shorthand `{name}` becomes the same marked local, so the engines see the move where the reader wrote the use. The operator is not source syntax.
+
+Resolved Grill Log: rewriting the settled syntax keeps a cache hit identical to a fresh check; the traversal does not guess a move from a name or a call shape.

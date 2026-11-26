@@ -110,7 +110,7 @@ pushLoop = pushLoopWith Nothing
 pushLoopWith :: Maybe CoreType -> Maybe (Located Text) -> LowerState -> (LowerState, CoreLoopId)
 pushLoopWith expected label state =
   let identity = CoreLoopId (lowerNextLoop state)
-      frame = LoopFrame identity (locatedValue <$> label) expected Set.empty
+      frame = LoopFrame identity (locatedValue <$> label) expected Set.empty (length (lowerScopes state))
    in (state{lowerNextLoop = lowerNextLoop state + 1, lowerLoops = frame : lowerLoops state}, identity)
 
 popLoop :: LowerState -> LowerState

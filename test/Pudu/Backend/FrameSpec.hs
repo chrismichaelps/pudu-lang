@@ -49,7 +49,7 @@ entry :: CoreBlock -> CoreFunction
 entry = CoreFunction "main" [] intType
 
 program :: CoreFunction -> [CoreFunction] -> CoreModule
-program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty Map.empty []
+program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty Map.empty [] Map.empty
 
 site :: IO Span
 site = emptySpan <$> newSource (SourceName "frames.pudu") "frame contracts"
@@ -81,7 +81,7 @@ testTraversalDefault = conjoin <$> traverse check
             template = CallableTemplate callable (NamedCallable ("Main", declaration) signature Nothing)
             context = (emptyContext "Main" "main" Map.empty [] Map.empty Map.empty Map.empty Map.empty)
               { contextObservedCallables = Map.singleton key template }
-            state = LowerState context 0 [[]] Map.empty 0 [] Nothing False Set.empty Nothing "main" [] [] []
+            state = LowerState context 0 [[]] Map.empty 0 [] Nothing False Set.empty Nothing "main" [] [] Set.empty []
             callback = CoreExpression at callable (CoreClosure key [])
             array = CoreArrayType intType
             values = CoreExpression at array (CoreArray [integer at 5])

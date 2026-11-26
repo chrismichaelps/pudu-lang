@@ -258,3 +258,12 @@ when no source function itself declares an exact integer.
 Resolved Grill Log (#999): **Q:** Why file scope instead of function-local storage? **A:** A kept value must outlive a single frame and be shared by every function that reads it. _Rejected:_ static locals per function, which would hold one copy per reader.
 
 Each kept cell holds its reference until the program ends. The first keep registers `pudu_constants_release` with `atexit` once, through `pudu_constants_arrange`, and that function releases every built cell by its type, so a kept value is never counted as memory the program lost and the allocation-balance tests stay exact. `emitConstants` records each cell's name and type, and `FrameConstantReady` carries the constant's type, so whichever read registers a cell first records the type its release needs. `constantRelease` in `Backend/Emit/Frame.hs` is rendered after the aggregate helpers because it calls their drop helpers. The full property suite passes 903 of 903.
+## Drop tables (#1028)
+
+A function with owned locals emits a static `pudu_drop` table naming each
+owned slot and the glue that drops it, and its metadata carries the table's
+count and address. The drop engine is emitted only when some function has
+drops, and the glue is found by name in the function table.
+
+Resolved Grill Log: the table is static data beside the function, so a stop
+that unwinds a frame reads the same table the compiler wrote.

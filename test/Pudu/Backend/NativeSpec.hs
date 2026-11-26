@@ -35,6 +35,7 @@ import Pudu.Backend.WordMapPrograms (wordMapSuccessPrograms, wordMapRefusalProgr
 import Pudu.Backend.StorePrograms (storeSuccessPrograms, storeModulePrograms, storeRefusalPrograms)
 import Pudu.Backend.ForeignPrograms (callbackCaller, optionalHandleLibrary, optionalHandlePrograms, foreignCallbackPrograms, foreignCrossingLibrary, foreignCrossingPrograms, objectiveCPrograms, objectiveCRefusalPrograms, foreignSuccessPrograms, foreignRefusalPrograms)
 import Pudu.Backend.KernelPrograms (kernelSuccessPrograms, kernelLibraryPrograms, kernelRefusalPrograms)
+import Pudu.Backend.DropPrograms (dropStopPrograms, dropSuccessPrograms)
 import Pudu.Backend.AbstractionPrograms (abstractionSuccessPrograms, abstractionRefusalPrograms)
 import Pudu.Backend.HostPrograms (hostLibraryPrograms, hostSuccessPrograms, hostRefusalPrograms)
 import Pudu.Backend.HostServicePrograms (hostServicePrograms, standardInputPrograms)
@@ -140,6 +141,9 @@ backendNativeProperties =
   , ("native pure kernels match hand-written answers and the interpreter", conjoin <$> mapM
       (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) (kernelSuccessPrograms <> kernelLibraryPrograms))
   , ("native pure kernels retain interpreter refusals", conjoin <$> mapM (uncurry conformance) kernelRefusalPrograms)
+  , ("native drops match written traces and the interpreter on every way a scope ends", conjoin <$> mapM
+      (\(label, source, expected) -> conformanceExpecting (Just (expected, "", 0)) label source) dropSuccessPrograms)
+  , ("native drops run before a stop is reported, as in the interpreter", conjoin <$> mapM (uncurry conformance) dropStopPrograms)
   , ("native foreign calls match the interpreter's bridge", conjoin <$> mapM (uncurry conformance) foreignSuccessPrograms)
   , ("native foreign calls stop as the interpreter's bridge does", conjoin <$> mapM (uncurry conformance) foreignRefusalPrograms)
   , ("native foreign callbacks match the interpreter's trampolines", conjoin <$> mapM

@@ -188,3 +188,15 @@ shared because two runs may execute at once.
 Resolved Grill Log: frame entry reads and clears the thread-local transfer mask
 and does not retain a transferred parameter; the dispatcher sets the mask from
 the call step before creating a heap frame. [[NATIVE-OWNERSHIP]]
+## Dropping on a stop (#1028)
+
+`pudu_function` carries `drop_count` and `drops`. `pudu_drop_frames` walks
+the active frames innermost first, each frame's table newest first, skips an
+empty slot, clears the slot, and runs the glue as a frame of its own with
+the transfer mask naming the one reference the glue owns. `pudu_drop_and_unwind`
+drops and then unwinds, and it is the cleanup hook only when the program has
+drops. A stop raised by a drop finds the cleanup already running, so the
+remaining drops are skipped and that stop is the one reported.
+
+Resolved Grill Log: the glue runs as a frame of its own, so a drop that
+stops or returns behaves like any other call.

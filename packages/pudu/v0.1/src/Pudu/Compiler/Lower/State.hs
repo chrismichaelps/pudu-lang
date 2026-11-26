@@ -62,6 +62,11 @@ data LowerContext = LowerContext
   , contextFunctions :: ![CoreFunction]
   {-| Lifted lambdas and function-value forwarders made so far. -}
   , contextClosures :: !(Map Text CoreClosureInfo)
+  {-| The drop glue functions made so far, by key. -}
+  , contextDrops :: !(Set Text)
+  {-| Each function's owned locals with the glue that drops them, in the
+      order they were bound, so a runtime stop drops what is still held. -}
+  , contextOwnedLocals :: !(Map Text [(Int, Text)])
   , contextKnownCallables :: !(Map Text CallableTemplate)
   , contextObservedCallables :: !(Map Text CallableTemplate)
   , contextActiveCallables :: !(Set Text)
@@ -122,6 +127,8 @@ data Instance = Instance
 data ModuleScope = ModuleScope
   { scopeTypes :: !LowerTypes
   , scopeFunctions :: !(Set Text)
+  {-| The binders and statements whose value needs drop, by span. -}
+  , scopeOwned :: !(Set Span)
   , scopeConstants :: !(Map Text (Maybe Frozen))
   {-| Each constant's written initializer, lowered where it is read when
       folding left no portable product. -}
@@ -181,6 +188,9 @@ data LowerState = LowerState
   {-| The task scopes open in the function being lowered, innermost first,
       each by how many loops were open around it. -}
   , lowerOpenScopes :: ![Int]
+  {-| The locals of the function being lowered that own a value needing
+      drop, by id; each is dropped where its scope ends unless it moved. -}
+  , lowerOwned :: !(Set Int)
   {-| The type arguments written on the function call being lowered, read
       once by the admission of its callee. -}
   , lowerTypeArguments :: ![CoreType]
@@ -215,6 +225,9 @@ data LoopFrame = LoopFrame
   , loopLabel :: !(Maybe Text)
   , loopExpectedBreakType :: !(Maybe CoreType)
   , loopBreakTypes :: !(Set CoreType)
+  {-| How many scopes were open around the loop: a transfer to it drops what
+      the scopes inside own. -}
+  , loopScopeDepth :: !Int
   }
 
 {-| @Compiler.Lower.Signature — a validated non-entry function: its parameter
@@ -257,6 +270,8 @@ emptyContext root entryName modules table instances methods traitMethods heads =
     , contextRefusals = []
     , contextFunctions = []
     , contextClosures = Map.empty
+    , contextDrops = Set.empty
+    , contextOwnedLocals = Map.empty
     }
 
 {-| Begin a function: a fresh scope stack with its parameters bound by name,
@@ -280,6 +295,7 @@ startFunction state parameters resultType =
     , lowerDeclaredResult = Nothing
     , lowerLoaned = []
     , lowerOpenScopes = []
+    , lowerOwned = Set.empty
     , lowerTypeArguments = []
     }
 

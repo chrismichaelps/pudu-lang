@@ -235,3 +235,11 @@ runs only the property with exactly that label; each run property reports its se
 line, which [[Test Parallel Runner]] uses to order the next run.
 
 Resolved Grill Log: database fixture conformance and standard library program evaluation register one property per fixture or program family, so no single property holds a parallel run.
+## Ownership properties (#1028)
+
+Register `moveProperties` from [[Type Check Ownership Spec]] with the backend
+outcomes, so the move, escape and `Drop`-shape properties run beside the
+native drop programs.
+
+Resolved Grill Log: the ownership properties are ordinary properties, so the
+runner's label filter and report cover them without a new entry point.

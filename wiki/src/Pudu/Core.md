@@ -563,3 +563,13 @@ Resolved Grill Log: `KeyedMultiMapAdd` is the keyed operation adding a value und
 - `CoreConstant name initial` wraps a folded constant whose type is boxed (array, map, set, store, tuple, record, sum). `name` is `<owner module>.<constant> : <type>`; `initial` is the already folded expression, built on the first read and kept for the rest of the run.
 
 Resolved Grill Log (#999): **Q:** Why a named node instead of re-inlining the folded value at each read? **A:** A name keys one run-wide kept value, so every read of a boxed constant is the same value and is not rebuilt. _Rejected:_ projecting the initializer at each read, which rebuilt aggregates per read.
+## Owned locals (#1028)
+
+`CoreModule` gains `coreModuleDrops`: each function's locals that own a value
+needing drop, by local id in the order they were bound, with the glue
+function that drops each. A runtime stop drops those still held before the
+frames unwind.
+
+Resolved Grill Log: the module carries the drops because the frames are
+built from it; a frame cannot know what a local owns without the lowering
+that adopted it.

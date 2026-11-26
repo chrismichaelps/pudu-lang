@@ -245,3 +245,16 @@ Resolved Grill Log: Identify a mutable declaration by its body key and source sp
 ## Stored mutable parameter layouts (#956)
 
 Resolved Grill Log: A mutable parameter is identified by the native body key and its parameter position. A generated wrapper can share this identity across member reads.
+## Ownership state (#1028)
+
+`ModuleScope` gains `scopeOwned`, the spans of the binders and statements
+whose value needs drop. `LowerContext` gains `contextDrops`, the glue
+functions made so far, and `contextOwnedLocals`, each function's owned locals
+with the glue that drops them. `LowerState` gains `lowerOwned`, the owned
+locals of the function being lowered, and `LoopFrame` gains `loopScopeDepth`,
+how many scopes were open around a loop, so a transfer to it drops what the
+scopes inside own. Starting a function clears `lowerOwned`.
+
+Resolved Grill Log: the scope depth is recorded with the loop rather than
+counted again at the transfer, so a nested loop drops exactly the scopes it
+opened.

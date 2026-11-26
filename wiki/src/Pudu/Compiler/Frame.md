@@ -62,3 +62,12 @@ Resolved Grill Log: label reachability treats both refusals the same way.
 ## Module exports (#899)
 
 Frame lowering copies the module's export keys through unchanged.
+## Owned locals in a frame (#1028)
+
+Each frame function carries `frameFunctionDrops`: the slots that own a value
+needing drop, newest first, with the glue function that drops each. The list
+comes from the module's owned locals and the local-to-slot map, reversed so a
+stop drops the newest binding first.
+
+Resolved Grill Log: the drop table is part of the frame, not of the program;
+a frame knows its own slots and the glue each one needs.

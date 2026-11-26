@@ -125,6 +125,7 @@ test-suite pudu-test
     Pudu.Backend.StorePrograms
     Pudu.Backend.ForeignPrograms
     Pudu.Backend.KernelPrograms
+    Pudu.Backend.DropPrograms
     Pudu.Backend.AbstractionPrograms
     Pudu.Backend.HostPrograms
     Pudu.Backend.HostServicePrograms
@@ -234,6 +235,7 @@ test-suite pudu-test
     Pudu.Type.Check.FunctionGenericSpec
     Pudu.Type.Check.TraitSpec
     Pudu.Type.Check.SystemSpec
+    Pudu.Type.Check.OwnershipSpec
     Pudu.Type.Check.ImportSpec
     Pudu.Type.InterfaceSpec
     Pudu.Type.FrontierSpec

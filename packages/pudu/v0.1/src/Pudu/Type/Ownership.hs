@@ -59,7 +59,7 @@ declaration (Located _ value) = case value of
     when owning $ refuse "E4004" (locatedSpan initializer)
       "a module value cannot hold a value that needs drop"
       "create the value inside the function that owns it"
-    expression Read initializer
+    expression Consume initializer
   _ -> pure ()
 
 checkBody :: Function -> Walk ()
@@ -203,7 +203,7 @@ useName mode at name = do
   when owning $ do
     found <- resolveBinder name
     case found of
-      Nothing -> moduleValue at
+      Nothing -> when (Set.notMember name constructors) (moduleValue at)
       Just (_, True) ->
         refuse "E4004" at (name <> " needs drop and cannot be captured by a closure")
           "pass it to the closure as an argument instead"

@@ -32,6 +32,7 @@ import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler.Lower.Dynamic (dynamicSums, runtimeCarriers)
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Ownership (ownedBinderKind)
 import Pudu.Compiler.Lower.Foreign (callbackSignatureOf)
 import Pudu.Compiler.Lower.Generic (substitute)
 import qualified Pudu.Foreign.Callback as Callback
@@ -94,6 +95,8 @@ data NativeModule = NativeModule
   {-| Its records and sums formed with its imports, when checking gave them. -}
   , nativeModuleShapes :: !(Maybe DeclaredShapes)
   , nativeModuleDynamicWidenings :: ![(Span, NominalId, Type)]
+  {-| The binders and statements whose value needs drop, as checking marked them. -}
+  , nativeModuleOwned :: !(Set.Set Span)
   }
 
 {-| Every module of a compiled program as native lowering reads it, the root
@@ -118,6 +121,7 @@ compiledNativeModule syntax result =
   NativeModule (moduleNameText (locatedValue (moduleName syntax))) syntax
     (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result) (compileMethods result)
     (compileShapes result) (compileDynamicWidenings result)
+    (Map.keysSet (Map.filter (== ownedBinderKind) (compileIntegerKinds result)))
 
 {-| Lower a program of one module. -}
 lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
@@ -127,7 +131,7 @@ lowerModule entryName types = lowerModuleFolded entryName types Map.empty
     never evaluates a constant initializer itself. -}
 lowerModuleFolded :: Text -> Maybe LowerTypes -> Map.Map Text Frozen -> Module -> LowerResult
 lowerModuleFolded entryName types constants parsed =
-  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants [] Nothing []]
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants [] Nothing [] Set.empty]
 
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
@@ -295,6 +299,7 @@ lowerRooted library entryName programModules@(rootModule : _)
         , ModuleScope
             { scopeTypes = maybe emptyTypes (withShapes records activeSums handles callbackTypes) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
+            , scopeOwned = nativeModuleOwned native
             , scopeConstants = Map.fromList
                 [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
                 | Located _ (BindingDeclaration _ _ name _ _) <- moduleDeclarations (nativeModuleSyntax native) ]
@@ -411,6 +416,7 @@ lowerRooted library entryName programModules@(rootModule : _)
               , lowerCurrentKey = entryKey
               , lowerLoaned = []
               , lowerOpenScopes = []
+              , lowerOwned = Set.empty
               , lowerTypeArguments = []
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
@@ -510,6 +516,7 @@ lowerRooted library entryName programModules@(rootModule : _)
               , coreModuleExports =
                   [ maybe key coreFunctionName (Map.lookup key wrappers)
                   | key <- exportKeys, any ((== key) . coreFunctionName) lowered ]
+              , coreModuleDrops = contextOwnedLocals (lowerContext state)
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals

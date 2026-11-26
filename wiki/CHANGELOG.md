@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-26 — User drop and moves on every exit path
+
+- Checker ownership walk, interpreter drop scopes, and native drop glue/drop tables; two-engine traces cover normal exit, return, break, continue, `?`, matches, replacement and stops. refs #1028
+- Async functions and async lambdas hand owned parameters to their task, which drops them when it ends. refs #1028
+
 ## 2026-11-25 — In-place map and set updates
 
 - Map and set insert, put and remove on a value held once rewrite its own tree; the Maps benchmark went from 0.21 s to 0.09 s natively. refs #1019

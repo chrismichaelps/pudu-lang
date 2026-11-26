@@ -181,7 +181,7 @@ emitFrameUnit form version sources logical = do
     { emittedSource = Text.unlines (header <> runtime <> frameTypes wide big decimal text boxes (Set.member "host_thread_spawn" selected)
     <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts <> textPieceRuntimeParts <> treeRuntimeParts <> rangeRuntimeParts <> bytesRuntimeParts <> hashRuntimeParts <> kernelRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> renderByteData (reverse (emitByteData emitted)) <> renderConstantCells (reverse (emitConstants emitted)) <> aggregates <> ownership <> constantRelease (reverse (emitConstants emitted)) <> callbackSection <> foreignWrappers (frameModuleLayouts source) (foreignsOf source) signatures unregistered <> delegateDefinitions (delegatesOf source) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) (startupCells entry)
+    <> metadata <> frameEngine owned (Set.member "host_thread_spawn" selected) (not (Set.null stacked)) dropping (startupCells entry)
     <> (if callbacks then frameCallbackEngine else [])
     <> concat [stackedCall (Set.member (frameFunctionName function) fast) identity function | (identity, function) <- indexed, Set.member (frameFunctionName function) stacked]
     -- Only a program that reads its arguments keeps them.
@@ -224,7 +224,13 @@ emitFrameUnit form version sources logical = do
         [] -> []
         slots -> ["static const pudu_owned pudu_owned_" <> textOfInt identity <> "[] = {"
           <> Text.intercalate ", " ["{" <> slotIndex slot <> ", " <> kindOf (frameSlotType slot) <> "}" | slot <- slots] <> "};"])
+      <> (case frameFunctionDrops function of
+        [] -> []
+        held -> ["static const pudu_drop pudu_drops_" <> textOfInt identity <> "[] = {"
+          <> Text.intercalate ", " ["{" <> slotIndex slot <> ", " <> textOfInt (functionIndex glue) <> "}" | (slot, glue) <- held] <> "};"])
     ownedSlots function = [slot | slot <- frameFunctionSlots function, ownedType (frameSlotType slot)]
+    dropping = any (not . null . frameFunctionDrops) (frameModuleFunctions source)
+    functionIndex name = maybe 0 id (lookup name [(frameFunctionName function, identity) | (identity, function) <- zip [0 :: Int ..] (frameModuleFunctions source)])
     kindOf kind = maybe "0" textOfInt (lookup kind (ownedKinds (aggregateTypes source)))
     definition (identity, function) =
       "  {" <> textOfInt (length (frameFunctionSlots function)) <> ", "
@@ -236,7 +242,9 @@ emitFrameUnit form version sources logical = do
         <> (if null (ownedSlots function) then "NULL" else "pudu_owned_" <> textOfInt identity)
         <> ", " <> kindOf (frameFunctionResult function) <> ", "
         <> (if maybe False closureHasEnvironment info then "1" else "0") <> ", "
-        <> (if lent then "0" else "1") <> ", " <> (if lent then "1" else "0") <> "},"
+        <> (if lent then "0" else "1") <> ", " <> (if lent then "1" else "0") <> ", "
+        <> textOfInt (length (frameFunctionDrops function)) <> ", "
+        <> (if null (frameFunctionDrops function) then "NULL" else "pudu_drops_" <> textOfInt identity) <> "},"
       where
         info = Map.lookup (frameFunctionName function) (frameModuleClosures source)
         -- A builtin or a method taken as a value: its depth belongs to the

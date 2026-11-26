@@ -658,3 +658,15 @@ Resolved Grill Log: a held member call passes the written member name to member 
 Named, module-qualified and method call sites route through `keepMarkup` in [[Compiler Lower Markup]] (#1021), which keeps a closed markup call. A qualified call through another module's callable constant, such as `Geo.DOUBLE(21)`, is a value call (#1020) and compiles natively instead of stopping.
 
 Resolved Grill Log: `keepMarkup` only wraps a call that resolution has already produced, so the order of local, constant and function lookup is unchanged.
+## Owned values and drops (#1028)
+
+A statement whose value checking marked as owned is dropped where the
+statement ends. `let _ = value` is a discard: the value is dropped where the
+statement ends rather than bound, and it is lowered apart from the tuple and
+record path, which would keep the subject in a root local a wildcard has no
+use for. An assignment over an owned local drops the old value before the
+store, with the new value already in hand. `return`, `break`, `continue` and
+`?` drop every open scope before they leave.
+
+Resolved Grill Log: a wildcard keeps nothing, so the statement owns the
+value; the tuple path publishes a root local for a pattern that binds no name.

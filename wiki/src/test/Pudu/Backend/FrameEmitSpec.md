@@ -93,3 +93,10 @@ instructions and the physical descriptor count.
 Resolved Grill Log: assert operand separation and owned retirement directly
 before relying on full native corpus parity. A smaller descriptor alone can
 hide an alias that changes program output.
+## Owned locals in a frame (#1028)
+
+A frame with owned locals keeps the drop slots fixed when the frame is
+compacted, so the emitted table still names the right slots.
+
+Resolved Grill Log: the compaction test builds a frame with a drop table,
+because a compacted frame with a moved drop slot would drop the wrong value.

@@ -336,3 +336,9 @@ Resolved Grill Log: each successful obligation records the full span,
 trait identity and payload type. Publication applies the final checker
 substitution. Retain rigid parameters for a later specialization and
 keep these facts local to this module's analysis.
+
+## Move and ownership facts (#1028)
+
+The checker state gains `producedMoves` and `producedOwned`; `recordMoves` stores the ownership walk's two span sets with the other products. `recordMethodReceiver` stores whether a selected method takes its receiver by value, and `recordExpression` on a pattern binder gives the walk its type.
+
+Resolved Grill Log: facts belong to the same check that produced the types; no second lookup or runtime inference reconstructs them.

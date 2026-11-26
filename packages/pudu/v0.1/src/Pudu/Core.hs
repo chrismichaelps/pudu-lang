@@ -67,6 +67,10 @@ data CoreModule = CoreModule
   {-| Keys of the root module's exported functions a library build lowered,
       in declaration order; empty for an executable. -}
   , coreModuleExports :: ![Text]
+  {-| Each function's locals that own a value needing drop, by local id in
+      the order they were bound, with the glue function that drops each. A
+      runtime stop drops those still held before frames unwind. -}
+  , coreModuleDrops :: !(Map Text [(Int, Text)])
   }
   deriving stock (Eq, Show)
 

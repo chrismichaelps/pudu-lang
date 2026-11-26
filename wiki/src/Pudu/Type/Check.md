@@ -298,3 +298,9 @@ See [[Bound Receiver Evidence Delivery]].
 Resolved Grill Log: the detailed module check returns proven dynamic
 widenings with its other checked facts. The diagnostics-only interface
 continues to answer the same types and diagnostics.
+
+## Ownership pass (#1028)
+
+After `finalizeIntegerLiterals` and `dischargeObligations`, `checkUnit` runs `checkOwnership` for the whole module and records its `(moves, owned)` pair with the other detailed products. The diagnostics-only entry point keeps its types and diagnostics contract.
+
+Resolved Grill Log: ownership is checked once, over the whole module, after every expression's type and every selected receiver is settled. A body is never walked on partial facts.

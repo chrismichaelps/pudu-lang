@@ -90,3 +90,9 @@ Resolved Grill Log: represent named sums independently of ordinary records and p
 `readPlace` fails an element step at that step's key span, so an element read through a method receiver (`items[0..9].length()`, `items[9].toText()`) reports where the same element read as a value does, and where native code reports it. Writes through a place keep the root span, the failure location assignment shares with native code (#649).
 
 Resolved Grill Log: a place recorded one span for its whole path, which blamed the root name for a bad key; each element step now keeps the span of the key it was read with.
+
+## Replacement drops (#1028)
+
+`storeName` asks `ownedName` whether the destination owns a value needing drop and, when it does, looks the old value up and drops it immediately before the store. `withFrameKeeping` now runs through `scopedFrame`, so the kept frame's drops share the ordinary scope cleanup.
+
+Resolved Grill Log: the new value is evaluated before the old one is dropped, and the store happens after the drop; a failed right side leaves the old value in place.

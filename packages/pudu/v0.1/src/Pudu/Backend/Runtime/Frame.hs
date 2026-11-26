@@ -41,6 +41,8 @@ frameTypes wide big decimal text boxes threads =
   ] else []) <>
   [ "/* A slot whose value the frame holds a reference to, and which kind it is. */"
   , "typedef struct { size_t slot; unsigned kind; } pudu_owned;"
+  , "/* A slot that owns a value needing drop, and the function that drops it. */"
+  , "typedef struct { size_t slot; size_t glue; } pudu_drop;"
   , "typedef struct pudu_frame {"
   , "  size_t pc; pudu_cell *slots; pudu_cell *arguments;"
   , "  struct pudu_frame *parent; size_t function; size_t destination; int has_destination;"
@@ -56,6 +58,7 @@ frameTypes wide big decimal text boxes threads =
   , "  size_t slots; size_t arguments; size_t pc; size_t parameter_count;"
   , "  const size_t *parameters; pudu_step (*body)(pudu_frame *);"
   , "  size_t owned_count; const pudu_owned *owned; unsigned result_kind; int environment; int counted; int blames;"
+  , "  size_t drop_count; const pudu_drop *drops;"
   , "} pudu_function;"
   , "static " <> local <> "pudu_frame *pudu_active_frame = NULL;"
   , "static " <> local <> "size_t pudu_frame_depth = 0;"
@@ -71,8 +74,8 @@ frameTypes wide big decimal text boxes threads =
 
 {-| With owned slots, `pudu_drop_cell` and `pudu_retain_cell` must already be
     written; [[Native Aggregate Emission]] writes them. -}
-frameEngine :: Bool -> Bool -> Bool -> Maybe Int -> [Text]
-frameEngine owned threads stacked startupCells =
+frameEngine :: Bool -> Bool -> Bool -> Bool -> Maybe Int -> [Text]
+frameEngine owned threads stacked drops startupCells =
   [ "enum { PUDU_CACHED_FRAME_CELLS = 64 };"
   , "static " <> local <> "pudu_frame *pudu_cached_frame = NULL;"
   , "static " <> local <> "size_t pudu_cached_cells = 0;"
@@ -201,10 +204,11 @@ frameEngine owned threads stacked startupCells =
   , "    }"
   , "  }"
   , "}"
-  , "static pudu_cell pudu_run_frames(size_t entry) {"
+  ] <> (if drops then dropEngine else []) <>
+  [ "static pudu_cell pudu_run_frames(size_t entry) {"
   , "  pudu_cell result;"
   , "  if (pudu_active_frame != NULL) pudu_invalid_frame();"
-  , "  pudu_cleanup_hook = pudu_unwind_frames;"
+  , "  pudu_cleanup_hook = " <> (if drops then "pudu_drop_and_unwind" else "pudu_unwind_frames") <> ";"
   , "  pudu_blame_hook = pudu_blamed_site;"
   ] <> maybe heapStartup fixedStartup startupCells <>
   [ "  if (pudu_process_cleanup_hook != NULL) pudu_process_cleanup_hook();"
@@ -314,4 +318,40 @@ retainArguments =
   , "      if (definition->parameters[j] == slot && ((transfer >> j) & 1u) != 0) moved = 1;"
   , "    if (!moved) pudu_retain_cell(frame->slots[slot], definition->owned[i].kind);"
   , "  }"
+  ]
+
+{-| What a stop does before frames unwind when a program owns values needing
+    drop: every frame, innermost first, drops the slots it still owns, newest
+    first, each through its glue run as a frame of its own. A stop raised by
+    one of those drops finds the cleanup already running, so the rest are
+    skipped and that stop is the one reported. -}
+dropEngine :: [Text]
+dropEngine =
+  [ "static int pudu_dropping = 0;"
+  , "static void pudu_drop_frames(void) {"
+  , "  if (pudu_dropping) return;"
+  , "  pudu_dropping = 1;"
+  , "  for (pudu_frame *frame = pudu_active_frame; frame != NULL; frame = frame->parent) {"
+  , "    const pudu_function *definition = &pudu_functions[frame->function];"
+  , "    for (size_t i = 0; i < definition->drop_count; ++i) {"
+  , "      pudu_cell *held = &frame->slots[definition->drops[i].slot];"
+  , "      if (held->box == NULL) continue;"
+  , "      pudu_cell given = *held;"
+  , "      held->box = NULL;"
+  , "      pudu_frame *saved = pudu_active_frame;"
+  , "      size_t depth = pudu_frame_depth;"
+  , "      pudu_active_frame = NULL;"
+  , "      pudu_transfer = 1u;"
+  , "      pudu_active_frame = pudu_new_frame(definition->drops[i].glue, &given, 1);"
+  , "      pudu_frame_depth = 1;"
+  , "      (void)pudu_run_active();"
+  , "      pudu_active_frame = saved;"
+  , "      pudu_frame_depth = depth;"
+  , "    }"
+  , "  }"
+  , "}"
+  , "static void pudu_drop_and_unwind(void) {"
+  , "  pudu_drop_frames();"
+  , "  pudu_unwind_frames();"
+  , "}"
   ]

@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Drop Moves Unwind Delivery]] — user `drop`, moves and cleanup on every exit path (#1028).
 - [[Native Ownership Delivery]] — caller move and argument transfer for native ownership (#995).
 - [[Native Operator Parity Delivery]] — join carriers, unary refusals and nested comparison evidence (#956).
 - [[Native Images Delivery]] — native images and application assets (#973).

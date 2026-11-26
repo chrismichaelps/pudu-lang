@@ -15,6 +15,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler.Lower.Arguments (methodArgumentBlame)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, printValued)
 import Pudu.Compiler.Lower.Default (couldReturnLoanFinals, suppliedArguments, withCallableArity)
+import Pudu.Compiler.Lower.Drop (adoptLocals, adoptOwned, closingScope, ownedLocals)
 import Pudu.Compiler.Lower.Dynamic (joinRuntimeArms, mapRuntimeChoice, preserveRuntimeResult, projectRuntimeValue, runtimeCarriers, runtimeResultType, settledMutableLayout)
 import Pudu.Compiler.Lower.Generic (admitCallee, runtimeCallSignature)
 import Pudu.Compiler.Lower.Intrinsic (specializeIntrinsicValue)
@@ -46,16 +47,17 @@ lowerLambda lower block = lowerLambdaWithInputs lower block []
 
 lowerLambdaWithInputs :: LowerExpression -> LowerBlock -> [CoreType] -> LowerState -> Span -> Function -> Lowered
 lowerLambdaWithInputs lower block supplied state at function = case typeForSpan (contextTypes (lowerContext state)) at of
-  Just kind -> liftFunction lower block state at kind "<fn>" True supplied function
+  Just kind -> liftFunction lower block state at kind "<fn>" True supplied Set.empty function
   Nothing -> halt at "a lambda without a native function type" state
 
 {-| The task an async body is until it is awaited: a function of nothing
     over the names the body mentions, lifted beside the body it was written
-    in and shown under the task's name. -}
-lowerTask :: LowerExpression -> LowerBlock -> LowerState -> Text -> CoreType -> Function -> Lowered
-lowerTask lower block state name kind function = case functionBody function of
+    in and shown under the task's name. The async function's owned parameters
+    (by local id) pass to the task, which drops them when its body ends. -}
+lowerTask :: LowerExpression -> LowerBlock -> LowerState -> Text -> CoreType -> Set.Set Int -> Function -> Lowered
+lowerTask lower block state name kind handed function = case functionBody function of
   Just (Located at _) ->
-    case liftFunction lower block state at kind ("<task " <> name <> ">") False [] function{functionAsync = False, functionParameters = []} of
+    case liftFunction lower block state at kind ("<task " <> name <> ">") False [] handed function{functionAsync = False, functionParameters = []} of
       (after, Just (task, made)) ->
         let key = taskResultKey (lowerCurrentKey state) at
             (offered, held) = adopted after at key task
@@ -64,9 +66,10 @@ lowerTask lower block state name kind function = case functionBody function of
   Nothing -> halt (locatedSpan (functionName function)) "a function without a body" state
 
 {-| A function lifted at a known type. A written lambda may lend `&mut`
-    parameters; a task has none. -}
-liftFunction :: LowerExpression -> LowerBlock -> LowerState -> Span -> CoreType -> Text -> Bool -> [CoreType] -> Function -> Lowered
-liftFunction lower block state at solved display lends supplied function = case solved of
+    parameters; a task has none. Captures of the locals in @handed@ are owned
+    by the lifted body. -}
+liftFunction :: LowerExpression -> LowerBlock -> LowerState -> Span -> CoreType -> Text -> Bool -> [CoreType] -> Set.Set Int -> Function -> Lowered
+liftFunction lower block state at solved display lends supplied handed function = case solved of
       CoreFunctionType checkedInputs checkedResult
         | length checkedInputs == length (functionParameters function) ->
             let loaned = if lends then maybe [] loanedInputs (typeFactAt (contextTypes (lowerContext state)) at) else []
@@ -94,8 +97,12 @@ liftFunction lower block state at solved display lends supplied function = case 
                   | null loaned = ownResult
                   | otherwise = CoreTupleType (ownResult : [input | (index, input) <- zip [0 ..] inputs, index `elem` loaned])
                 kind = CoreFunctionType inputs result
+                -- A handed parameter is captured even when the body never names
+                -- it, so the task still drops it.
+                handedNames = Set.fromList
+                  [ coreLocalName local | scope <- lowerScopes state, (_, local) <- scope, Set.member (coreLocalId local) handed ]
                 captured =
-                  [ local | name <- Set.toAscList (reachableNames function), Just local <- [lookupLocal state name] ]
+                  [ local | name <- Set.toAscList (reachableNames function <> handedNames), Just local <- [lookupLocal state name] ]
                 env = CoreLocal 0 "" kind
                 parameters =
                   [ CoreParameter (CoreLocal index (locatedValue (parameterName parameter)) input) (locatedSpan (parameterName parameter))
@@ -106,24 +113,43 @@ liftFunction lower block state at solved display lends supplied function = case 
                   {contextActiveCallables = Set.insert key (contextActiveCallables (lowerContext state))}
                 entered = (startFunction state{lowerContext = activeContext} (CoreParameter env at : parameters) (Just ownResult))
                   {lowerCurrentKey = key, lowerDeclaredResult = Nothing, lowerFlexibleResult = flexible}
-                (withCaptures, prologue) = foldl' capture (entered, []) (zip [0 ..] captured)
+                -- A parameter that owns a value needing drop is dropped when the
+                -- closure's body ends, as it is for a named function. An async
+                -- lambda's body ends as soon as its task is made, so its task
+                -- owns them instead.
+                bound = zip (map (locatedSpan . parameterName . locatedValue) (functionParameters function))
+                  (map coreParameterLocal parameters)
+                owning
+                  | functionAsync function = entered
+                  | otherwise = adoptLocals bound entered
+                (withCaptures, prologue) = foldl' capture (owning, []) (zip [0 ..] captured)
                 capture (current, done) (index, local) =
                   let (next, inner) = bindLocal current (coreLocalName local) (coreLocalType local)
+                      held
+                        | Set.member (coreLocalId local) handed = adoptOwned at inner next
+                        | otherwise = next
                       read' = CoreExpression at kind (CoreReadLocal env)
-                   in (next, done <> [CoreStatement at (CoreDeclare inner (CoreExpression at (coreLocalType local) (CoreCapture index read')))])
+                   in (held, done <> [CoreStatement at (CoreDeclare inner (CoreExpression at (coreLocalType local) (CoreCapture index read')))])
                 (afterLowering, loweredBody) = lowered (withLoanedParameters loaned parameters withCaptures)
-                (afterProjection, projected) = case loweredBody of
+                -- The body closed the scope it opened; the scope left is the
+                -- closure's own, holding its parameters, so it closes here.
+                (afterClosing, closedBody) = case loweredBody of
+                  Just coreBlock ->
+                    let (ready, closed) = closingScope at afterLowering coreBlock
+                     in (ready, Just closed)
+                  Nothing -> (afterLowering, Nothing)
+                (afterProjection, projected) = case closedBody of
                   Just coreBlock@CoreBlock{coreBlockResult = Just answer}
                     | flexible ->
-                        let (ready, carried) = projectRuntimeValue (contextTypes (lowerContext afterLowering)) afterLowering ownResult answer
+                        let (ready, carried) = projectRuntimeValue (contextTypes (lowerContext afterClosing)) afterClosing ownResult answer
                          in (ready, Just (coreBlock{coreBlockResult = Just carried}))
-                  _ -> (afterLowering, loweredBody)
+                  _ -> (afterClosing, closedBody)
                 (afterBody, body) = case projected of
                   Just coreBlock | not (null loaned) -> Just <$> closeLoaned afterProjection at coreBlock
                   _ -> (afterProjection, projected)
                 lowered current = case functionBody function of
                   -- An async lambda's body is the task it answers.
-                  Just _ | functionAsync function -> case lowerTask lower block current "<fn>" result function of
+                  Just _ | functionAsync function -> case lowerTask lower block current "<fn>" result (ownedLocals entered bound) function of
                     (next, Just (core, _)) -> (next, Just (CoreBlock [] (Just core)))
                     (next, Nothing) -> (next, Nothing)
                   Just (Located _ (BlockBody written)) ->
@@ -333,8 +359,8 @@ specializeTarget lower block supplied state at key template held = case callable
           { lowerScopes = [[(coreLocalName local, local) | local <- captures]]
           , lowerCurrentKey = parent
           , lowerContext = context{contextTypes = withShapesFrom (contextTypes context) types, contextModule = owner} }
-        (withOriginal, _) = liftFunction lower block lexical written solved "<fn>" True originalInputs function
-        (after, selected) = liftFunction lower block withOriginal written solved "<fn>" True supplied function
+        (withOriginal, _) = liftFunction lower block lexical written solved "<fn>" True originalInputs Set.empty function
+        (after, selected) = liftFunction lower block withOriginal written solved "<fn>" True supplied Set.empty function
         restored = state{lowerContext = (lowerContext after){contextTypes = contextTypes context, contextModule = contextModule context}}
      in case selected of
           Just (value@CoreExpression{coreExpressionShape = CoreClosure copy _}, _) ->

@@ -132,3 +132,12 @@ Resolved Grill Log. Use one result carrier for the returning arms
 of an if or match. Try the checked layout, then a shared aggregate
 layout, then the reachable runtime carriers. Project inside each
 arm. Transfers remain unmodified and consume no result slot.
+## Loop scope depth (#1028)
+
+`pushLoopWith` records how many scopes were open around the loop, so a
+`break` or `continue` that leaves it can drop what the scopes inside own
+before the loop's own scopes are joined.
+
+Resolved Grill Log: the depth is taken once, where the loop opens; the
+transfer then drops the scopes above it without guessing which scopes the
+loop opened.

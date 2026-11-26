@@ -32,6 +32,7 @@ tags: [moc, module]
 - [[Compiler Pipeline]] — the fixed lex, parse, resolve, type phase boundary and error gate.
 - [[src/Pudu/Compiler/_MOC|Program compiler modules]] — dependency discovery, module graph ordering, and cross-module interface orchestration.
 - [[Pudu Core]] — the checked, span-carrying [[Core IR]] module the native backend consumes.
+- [[Ownership Marks]] — the settled-syntax move and owned markers both engines read (#1028).
 - [[src/Pudu/Backend/_MOC|Backend modules]] — C11 emission, the embedded native runtime, and the bounded toolchain seam.
 - [[src/Pudu/Semantic/_MOC|Semantic modules]] — symbols, scopes, the prelude layering, and name resolution.
 - [[src/Pudu/Type/_MOC|Type modules]] — type formation, unification, and bidirectional checking.

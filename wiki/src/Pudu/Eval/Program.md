@@ -168,3 +168,9 @@ Resolved Grill Log: **Q:** Refuse entry parameters in checking? **A:** No;
 checking accepts them and tooling analyses such modules, so the run reports
 the call it makes. _Rejected:_ an unlocated abort, which had no diagnostic to
 render and ended the process with an internal error.
+
+## Drop installation (#1028)
+
+Module installation installs the drop runner when any `Drop` implementation is present, so a program without `Drop` pays nothing for drop scopes. The entry and every installed body share the same `Drop.<owner>.drop` lookup.
+
+Resolved Grill Log: drop support is a property of the program, not of a call site; a cached module and a fresh one install the same runner.

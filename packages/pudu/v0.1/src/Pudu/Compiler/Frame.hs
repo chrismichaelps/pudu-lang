@@ -48,6 +48,10 @@ lowerFrames source = do
               , frameFunctionSlots = Map.elems (buildSlots state)
               , frameFunctionEntry = FrameLabel 0
               , frameFunctionBlocks = Map.elems blocks
+              , frameFunctionDrops = reverse
+                  [ (slot, glue)
+                  | (local, glue) <- Map.findWithDefault [] (coreFunctionName function) (coreModuleDrops source)
+                  , Just slot <- [Map.lookup local (buildLocals state)] ]
               }
             else Left (FrameFault Nothing "a frame transfer without a closed destination")
 

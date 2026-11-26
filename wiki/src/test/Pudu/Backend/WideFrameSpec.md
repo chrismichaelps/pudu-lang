@@ -52,3 +52,10 @@ operation programs, five literal/layout/comparison cases and two nested overflow
 cleanup paths. Keep the separately generated C instrumentation warning-free
 under Clang and GCC. Resolved Grill Log: allocation counters prove zero live
 frames on normal/error exit; platform-unavailable LeakSanitizer is not evidence.
+## Owned locals in a frame (#1028)
+
+The wide-frame programs carry the module's owned locals, so the frames they
+build match the shape the lowering produces.
+
+Resolved Grill Log: the constructors keep the drop map explicit, so a later
+change to the frame shape cannot pass a test by accident.

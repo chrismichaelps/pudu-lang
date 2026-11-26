@@ -378,3 +378,13 @@ Resolved Grill Log: Observe the ordinary result of a loaned body separately from
 Resolved Grill Log: Replay lowering when a mutable binding demands a new layout. Each replay retains the known demands for later writes.
 
 Resolved Grill Log: every lowered function passes through [[Compiler Lower Tail Move]] before the module is assembled.
+## Owned values and drops (#1028)
+
+Lowering reads the checker's ownership facts from the settled module: the
+spans whose binder or statement owns a value needing drop, and the uses that
+move one. A local that owns a value is registered with the glue that drops it,
+a scope that ends drops what it still owns, and a transfer out of a scope
+drops before it leaves. [[Compiler Lower Drop]] holds the rules.
+
+Resolved Grill Log: ownership facts arrive in the settled module, so a cached
+module and a fresh one lower the same way.
