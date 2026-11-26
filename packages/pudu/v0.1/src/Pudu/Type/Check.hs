@@ -35,6 +35,7 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , CheckerProducts (..)
+  , recordMoves
   , DeclaredTypes (..)
   , bindName
   , bindConstructorName
@@ -125,6 +126,7 @@ import Pudu.Type.Interface.Graph (ImportTypes (..), consumerDefaults, consumerTr
 import Pudu.Foreign.Crossing (RecordLayouts, recordLayouts)
 import Pudu.Type.Check.Foreign (checkForeign, declareForeign)
 import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
+import Pudu.Type.Ownership (checkOwnership)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
@@ -135,7 +137,7 @@ checkModule = checkModuleWith emptyImportTypes
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, _, _, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, _, _, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -148,7 +150,7 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, OwnerSelection)], [(Span, ProviderSelection)], [(Span, NominalId, Type)], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [(Span, OwnerSelection)], [(Span, ProviderSelection)], [(Span, NominalId, Type)], (Set Span, Set Span), [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
@@ -159,6 +161,7 @@ checkModuleDetailed imported writable moduleValue =
       , producedOwners products
       , producedProviders products
       , producedDynamicWidenings products
+      , (producedMoves products, producedOwned products)
       , producedDiagnostics products
       )
 
@@ -219,6 +222,7 @@ checkUnit scope imported moduleValue = do
     (selectedDeclarations (moduleDeclarations moduleValue))
   finalizeIntegerLiterals
   dischargeObligations
+  when (scope == WholeModule) (checkOwnership moduleValue >>= recordMoves)
  where
   selectedDeclarations values = case scope of
     WholeModule -> values
