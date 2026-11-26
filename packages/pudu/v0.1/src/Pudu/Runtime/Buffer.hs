@@ -32,10 +32,17 @@ allocateBuffer n
 bufferSize :: BS.ByteString -> Int
 bufferSize = BS.length
 
+{-| Whether @width@ bytes from @offset@ lie inside @size@ bytes. The bound is
+    taken by subtracting from the size, so offsets near the Int maximum cannot
+    wrap past it. -}
+spanFits :: Int -> Int -> Int -> Bool
+spanFits size offset width =
+  offset >= 0 && width >= 0 && offset <= size && width <= size - offset
+
 {-| Read an unsigned 64-bit word at a byte offset in little-endian byte order. -}
 readWord64LE :: BS.ByteString -> Int -> Maybe Word64
 readWord64LE bs offset
-  | offset < 0 || offset + 8 > BS.length bs = Nothing
+  | not (spanFits (BS.length bs) offset 8) = Nothing
   | otherwise =
       let b0 = fromIntegral (BS.index bs offset)
           b1 = fromIntegral (BS.index bs (offset + 1))
@@ -59,7 +66,7 @@ readWord64LE bs offset
 {-| Write an unsigned 64-bit word at a byte offset in little-endian byte order. -}
 writeWord64LE :: BS.ByteString -> Int -> Word64 -> Maybe BS.ByteString
 writeWord64LE bs offset val
-  | offset < 0 || offset + 8 > BS.length bs = Nothing
+  | not (spanFits (BS.length bs) offset 8) = Nothing
   | otherwise =
       let (before, rest) = BS.splitAt offset bs
           after = BS.drop 8 rest
@@ -95,7 +102,7 @@ writeFloat64LE bs offset val = writeWord64LE bs offset (castDoubleToWord64 val)
 {-| Read an unsigned 32-bit integer at a byte offset in little-endian order. -}
 readWord32LE :: BS.ByteString -> Int -> Maybe Word32
 readWord32LE bs offset
-  | offset < 0 || offset + 4 > BS.length bs = Nothing
+  | not (spanFits (BS.length bs) offset 4) = Nothing
   | otherwise =
       let b0 = fromIntegral (BS.index bs offset)
           b1 = fromIntegral (BS.index bs (offset + 1))
@@ -106,7 +113,7 @@ readWord32LE bs offset
 {-| Write an unsigned 32-bit integer at a byte offset in little-endian order. -}
 writeWord32LE :: BS.ByteString -> Int -> Word32 -> Maybe BS.ByteString
 writeWord32LE bs offset val
-  | offset < 0 || offset + 4 > BS.length bs = Nothing
+  | not (spanFits (BS.length bs) offset 4) = Nothing
   | otherwise =
       let (before, rest) = BS.splitAt offset bs
           after = BS.drop 4 rest
@@ -122,8 +129,7 @@ writeWord32LE bs offset val
 {-| Fill a contiguous slice with a repeated byte value (vectorized memset). -}
 fillBytes :: BS.ByteString -> Int -> Int -> Word8 -> Maybe BS.ByteString
 fillBytes bs offset len val
-  | len < 0 || offset < 0 = Nothing
-  | offset + len > BS.length bs = Nothing
+  | not (spanFits (BS.length bs) offset len) = Nothing
   | otherwise =
       let (before, rest) = BS.splitAt offset bs
           after = BS.drop len rest
@@ -134,9 +140,7 @@ fillBytes bs offset len val
     Answers Just (-1) for LT, Just 0 for EQ, Just 1 for GT, or Nothing on out-of-bounds. -}
 compareBytes :: BS.ByteString -> Int -> BS.ByteString -> Int -> Int -> Maybe Int
 compareBytes bs1 off1 bs2 off2 len
-  | len < 0 || off1 < 0 || off2 < 0 = Nothing
-  | off1 + len > BS.length bs1 = Nothing
-  | off2 + len > BS.length bs2 = Nothing
+  | not (spanFits (BS.length bs1) off1 len && spanFits (BS.length bs2) off2 len) = Nothing
   | otherwise =
       let s1 = BS.take len (BS.drop off1 bs1)
           s2 = BS.take len (BS.drop off2 bs2)
@@ -145,9 +149,7 @@ compareBytes bs1 off1 bs2 off2 len
 {-| Copy a contiguous range of bytes from source to destination buffer. -}
 copyBytes :: BS.ByteString -> Int -> BS.ByteString -> Int -> Int -> Maybe BS.ByteString
 copyBytes src srcOff dst dstOff len
-  | len < 0 || srcOff < 0 || dstOff < 0 = Nothing
-  | srcOff + len > BS.length src = Nothing
-  | dstOff + len > BS.length dst = Nothing
+  | not (spanFits (BS.length src) srcOff len && spanFits (BS.length dst) dstOff len) = Nothing
   | otherwise =
       let slice = BS.take len (BS.drop srcOff src)
           (before, rest) = BS.splitAt dstOff dst
@@ -158,8 +160,8 @@ copyBytes src srcOff dst dstOff len
     Answers the 0-based word index if found. -}
 scanWord64 :: BS.ByteString -> Int -> Int -> Word64 -> Maybe Int
 scanWord64 bs startByte count needle
-  | startByte < 0 || count < 0 = Nothing
-  | startByte + (count * 8) > BS.length bs = Nothing
+  | startByte < 0 || count < 0 || startByte > BS.length bs = Nothing
+  | count > (BS.length bs - startByte) `div` 8 = Nothing
   | otherwise = go 0
  where
   go i

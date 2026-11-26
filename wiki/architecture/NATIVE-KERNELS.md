@@ -44,7 +44,11 @@ host outcome channel for decoder errors and E7001 for writer refusal.
 - RSA and ECDSA verdicts agree with OpenSSL signatures at 1024, 2048 and
   3072 bits and on P-256, including malformed and high-s signatures.
 - Buffer, column, flat-table and codec programs match the interpreter byte for
-  byte, refusals included, under the counted-allocation harness.
+  byte, refusals included ([[Backend Native Tests]]).
+- The buffer, column, sort, flat-table, binary and JSON/XML/CSV codec programs
+  that finish normally run under the counted-allocation harness with no live
+  block at exit; buffer bounds reject offsets near the Int maximum in both
+  engines (#1023).
 - Sort indices match the interpreter's list sort over 64 NaN-laden columns.
 
 ## Resolved Grill Log

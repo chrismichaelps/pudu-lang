@@ -424,3 +424,7 @@ dependency is added.
 The test suite now depends on `time` for the ledger's day arithmetic and lists
 Pudu.Backend.LedgerSpec ([[Backend Ledger Spec]]) in other-modules. Resolved Grill Log: the
 ledger properties run in the complete suite with the existing dependency set plus `time`.
+
+## Counted kernel programs
+
+Register Pudu.Backend.KernelCountedPrograms after Pudu.Backend.KernelPrograms in other-modules ([[Backend Kernel Counted Programs]]); no new dependency.
