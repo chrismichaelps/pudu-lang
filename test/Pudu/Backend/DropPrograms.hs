@@ -140,6 +140,16 @@ dropSuccessPrograms =
         ]
     , lines'
         [ "made", "task used", "drop used", "drop ignored", "lambda lam", "drop lam", "sum 6" ] )
+  , ( "an awaited result that needs drop belongs to the scope that awaited it"
+    , program
+        [ "async fn mk() -> Res { Res{name: \"awaited\"} }"
+        , "async fn main() -> Result[Int, Str] {"
+        , "  let a = mk().await"
+        , "  let _ = print(\"after\")"
+        , "  Ok(0)"
+        , "}"
+        ]
+    , lines' [ "after", "drop awaited" ] )
   , ( "variants without a payload build values of sums that need drop, bare and qualified"
     , program
         [ "type Slot = | Empty | Full(Res)"

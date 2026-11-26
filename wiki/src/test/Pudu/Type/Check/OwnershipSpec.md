@@ -50,12 +50,21 @@ The first group checks codes:
   `dup(3)` and `make(|| 4)`);
 - an owning async method called on a droppable receiver and not awaited where
   it is made (`selfTask`, `r.keep()`) is E4010;
+- a dereference that would move a value needing drop out of a borrow
+  (`derefMove`, `let c = *b`) is E4012;
+- a pattern over a borrow that binds a part needing drop (`borrowedMatch`,
+  `match b { case Some(x) => ... }`) is E4012;
+- a trait default inherited by an implementation whose target needs drop
+  (`traitDefault`, `impl Twice for Res {}`) is E4011 at the implementation;
+- an async result that needs drop, awaited where it is made (`awaitedResult`,
+  `let a = mk().await`), is clean;
 - a bare and a qualified nullary variant (`nullary`) are clean.
 
-The second group asserts the exact contract for one fixture per code, E4010
-and E4011 included: code,
+The second group asserts the exact contract for one fixture per code, E4010,
+E4011 and E4012 included: code,
 span start, message and help, through `diagnosticContract`. The E4011 needle is
-the `dup(...)` call.
+the `dup(...)` call; the E4012 needles are the `*b` dereference and the `x`
+bound by the pattern over a borrow.
 
 The third group checks that a `Drop` implementation with another member or a
 shared `self` is E4008.
@@ -70,7 +79,9 @@ second diagnostic fails the contract property.
 
 The field-store fixture writes into a mutable record field, not a local. The
 pattern fixture matches `Some(_)` over `Option[Res]` so the wildcard is the
-unbound part, not the whole value.
+unbound part, not the whole value. The borrowed fixtures borrow a value and
+then try to take a part of it, so the refusal is about the borrow and not
+about the borrower's own owner.
 
 ## Resolved Grill Log
 

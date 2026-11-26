@@ -77,6 +77,7 @@ immediate calls do: self unifies before it is removed, and default arity survive
 
 - Every rule is the one [[grammar/pudu]] states for that construct; nothing here invents a coercion the language does not have.
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
+- An instantiation records the type chosen for every parameter of the scheme, `Self` included. A trait member's receiver is a type parameter like any other, so one body written for `Self` cannot hold a value needing drop; [[Type Ownership]] refuses that instantiation.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.
 - These rules never recurse into sub-expressions; the walk in [[Type Check]] owns that, which is what keeps the two modules free of a cycle.
 - Qualified value paths are looked up in full rather than by final segment. Trait and concrete-receiver method lookup use canonical `NominalId` keys, keeping same-basename declarations in different modules distinct.

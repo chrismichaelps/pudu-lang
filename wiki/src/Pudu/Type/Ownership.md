@@ -53,10 +53,20 @@ after an unconditional transfer.
   reference's span, each one that chose a type needing drop with E4011. This
   covers a direct call, a qualified call (`G.dup`, `Option.unwrapOr`), a
   function value (`let f = dup`), a method with its own type parameters, and a
-  generic whose body produces the value. The `Self` parameter is not checked;
-  the receiver move rules own it.
+  generic whose body produces the value. `Self` is a type parameter like any
+  other: an instantiation that chose a type needing drop for it is E4011 too.
+  A trait default is one body written for `Self` and the trait's parameters,
+  so an implementation that inherits one records that instantiation at its own
+  target and is refused there.
 - A borrow does not exempt the instantiation, because a generic body can copy a
   value of a type parameter out through `&T`.
+- Nothing moves out of a borrow. A dereference whose result needs drop is
+  E4012, and a pattern over a borrow that binds a part needing drop is E4012
+  at the binder: the owner of the borrowed value still owns it, so a copy out
+  of it would be a second owner.
+- An awaited call is owned by the scope that awaits it. The task it came from
+  is not a holder here: `mk().await` yields the result and the awaiting scope
+  drops it, so the value is not refused as something a task keeps.
 - A call to a user-declared method on a receiver whose nominal type arguments
   need drop is E4011 (`genericReceiver`).
 - A name with no local binder (function, constructor, module value) is not
@@ -79,6 +89,7 @@ after an unconditional transfer.
 | E4009 | taking apart a type with its own `Drop` |
 | E4010 | a task that owns a value needing drop is not awaited where it is made |
 | E4011 | a type that needs drop stands for a type parameter |
+| E4012 | a value that needs drop is moved out of a borrow |
 
 Every refusal carries a help that names the safe alternative. The walk reports
 once per span and code.
@@ -102,6 +113,14 @@ qualified (`Mode.On`). At a type parameter neither a borrow (`&T`) nor a value i
 exempt: a type that needs drop cannot stand for a type parameter at any
 instantiation. An async method taking `self` by value is an owning task when its
 receiver needs drop, so it must be awaited where it is made (E4010).
+
+A dereference of a borrow (`*b`) whose result needs drop is E4012, and so is a
+pattern over a borrow that binds a part needing drop: the owner still owns the
+borrowed value, so a copy out of it would be a second owner. A trait default
+inherited by an implementation whose target needs drop is E4011 at the
+implementation, because the default body is written once for any type. An
+awaited result that needs drop belongs to the awaiting scope and is dropped
+when that scope ends.
 
 ## Resolved Grill Log
 
@@ -128,6 +147,23 @@ receiver needs drop, so it must be awaited where it is made (E4010).
   needing drop, which would refuse ordinary generic code that copies values
   needing no drop. _Rejected:_ exempting borrows, since a generic body can copy
   a value out through `&T`.
+- **Q:** Is `Self` exempt because the receiver's own move rules own it? **A:**
+  No. The receiver rules decide who owns the value at the call; they do not
+  decide what a body written once for `Self` may hold. _Rationale:_ a trait
+  default runs for every implementing type, so it cannot track a value of a
+  type it does not know. _Rejected:_ keeping `Self` out of the recorded
+  instantiation, which let a default hand out a value it never owns.
+- **Q:** Why refuse a move out of a borrow instead of copying the value? **A:**
+  The owner of the borrowed value still owns it, and a copy would be a second
+  owner of one value that needs drop. _Rationale:_ the borrow rules already
+  say a borrow is for reading. _Rejected:_ dropping the copy at the end of the
+  borrowing scope, which would run a destructor for a value the owner also
+  destroys.
+- **Q:** Why is an awaited result owned by the awaiting scope? **A:** The await
+  is the point where the task's result becomes the caller's value. _Rationale:_
+  the value exists once, and the scope that holds it is where it is dropped.
+  _Rejected:_ refusing it as a task that keeps a value needing drop, which
+  refused the only spelling that hands the result over at all.
 
 ## Referenced by
 

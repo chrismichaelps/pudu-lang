@@ -464,13 +464,8 @@ instantiateAs recorded spanValue scheme
       replacements <- mapM (\(name, _) -> (,) name <$> freshVariable) (schemeParams scheme)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       recordStaticSelection spanValue scheme replacements
-      when recorded (recordInstantiation spanValue (chosenTypes replacements))
+      when recorded (recordInstantiation spanValue (map snd replacements))
       pure (substitute replacements (schemeType scheme))
-
-{-| The types chosen for a scheme's own parameters. `Self` is a trait
-    member's receiver, which ownership checking treats as the receiver it is. -}
-chosenTypes :: [(Text, Type)] -> [Type]
-chosenTypes replacements = [chosen | (name, chosen) <- replacements, name /= "Self"]
 
 {-| Instantiate a scheme with the types the caller wrote.
 
@@ -502,7 +497,7 @@ instantiateWith spanValue scheme arguments
       let replacements = zip (map fst (schemeParams scheme)) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       recordStaticSelection spanValue scheme replacements
-      recordInstantiation spanValue (chosenTypes replacements)
+      recordInstantiation spanValue (map snd replacements)
       pure (substitute replacements (schemeType scheme))
 
 obligationsFor :: Span -> [(Text, Type)] -> (Text, [Type]) -> Checker ()

@@ -47,10 +47,10 @@ Only counted aggregates move: arrays, maps, sets, stores and records. A typed fa
 A value whose type implements `Drop`, or stores a part that does, needs drop.
 Ownership checking gives it one owner: a by-value use moves it, a read after a
 move is refused, a field cannot be moved out alone, a type with its own `drop`
-cannot be taken apart, and a holder, closure, module value or field store
-cannot keep it (E4001–E4011). The checker publishes the moving uses and owning
-binders in the settled module, so the interpreter and native lowering read the
-same facts.
+cannot be taken apart, a holder, closure, module value or field store cannot
+keep it, and nothing moves out of a borrow (E4001–E4012). The checker publishes
+the moving uses and owning binders in the settled module, so the interpreter
+and native lowering read the same facts.
 
 The interpreter drops an owned value when its scope ends, on `Done`, `Unwound`
 and `Aborted`, newest first. A type's own `drop` runs first with the value
@@ -67,7 +67,12 @@ Async function and async lambda parameters are owned and dropped by their task.
 A task that owns such a value is awaited where it is made (E4010), including an
 async method taking `self` by value on a receiver that needs drop. A type that
 needs drop cannot stand for a type parameter at any instantiation (called,
-qualified, taken as a value, or as a method), borrows included (E4011).
+qualified, taken as a value, or as a method), borrows included (E4011); `Self`
+is a type parameter too, so a trait default inherited by an implementation
+whose target needs drop is refused at that implementation.
+
+An awaited result belongs to the scope that awaited it: the task hands the
+value over, and that scope drops it when it ends.
 
 ## Measurement
 

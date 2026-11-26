@@ -49,7 +49,7 @@ import Pudu.Type.Env
   , Checker
   , DeclaredTypes (..)
   , bindName
-  , recordProvider, recordProviderSelection, recordImplementationOwner
+  , recordProvider, recordProviderSelection, recordImplementationOwner, recordInstantiation
   , recordDynamicWidening
   , recordDeclaredMethod
   , ambiguousProviders
@@ -193,9 +193,16 @@ declareMethodsWith rejectCollision declared traits defaults value = do
               replacements =
                 ("Self", NominalType owner (selfArguments (map fst (implRigid value)) value))
                   : zip (map fst (traitRigid declaredTrait)) arguments
+              inherited = inheritedMembers defaults identity declaredTrait value
+          -- An inherited default is one body over `Self` and the trait's
+          -- parameters; ownership checking refuses this implementation when
+          -- what it gives them needs drop. Installed interfaces were checked
+          -- in their own module.
+          unless (rejectCollision || null inherited) $
+            recordInstantiation (locatedSpan (implTarget value)) (map snd replacements)
           mapM_
             (declareMethod rejectCollision declared value owner (Just (identity, replacements)))
-            (inheritedMembers defaults identity declaredTrait value)
+            inherited
 
 implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
 implTraitName declared value = case locatedValue (implTrait value) of

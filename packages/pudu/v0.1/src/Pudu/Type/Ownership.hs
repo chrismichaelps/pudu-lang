@@ -98,7 +98,7 @@ statement (Located _ value) = case value of
   ContinueStatement label -> continueTo (fmap locatedValue label)
   LetElseStatement pattern subject fallback -> do
     subjectType <- consumeSubject subject
-    checkPattern subjectType pattern
+    patternOver subjectType pattern
     branches [block Read fallback, pure ()]
     mapM_ bindBinder (patternBindings pattern)
   LetPatternStatement _ (Located _ WildcardPattern) _ subject -> do
@@ -107,9 +107,27 @@ statement (Located _ value) = case value of
     when owning (ownTemporary (locatedSpan subject))
   LetPatternStatement _ pattern _ subject -> do
     subjectType <- consumeSubject subject
-    checkPattern subjectType pattern
+    patternOver subjectType pattern
     mapM_ bindBinder (patternBindings pattern)
   InvalidStatement -> pure ()
+
+{-| A pattern checked against its subject. Over a borrow, a name bound to a
+    part that needs drop would own what the borrow's owner still owns. -}
+patternOver :: Maybe Type -> Located Pattern -> Walk ()
+patternOver subjectType pattern = do
+  checkPattern subjectType pattern
+  case subjectType of
+    Just (ReferenceTypeValue _ _) ->
+      forM_ (patternBindings pattern) $ \binder -> do
+        owning <- needs (locatedSpan binder)
+        when owning (borrowedMove (locatedSpan binder))
+    _ -> pure ()
+
+{-| Nothing moves out of a borrow: its owner still owns the value. -}
+borrowedMove :: Span -> Walk ()
+borrowedMove at = refuse "E4012" at
+  "a value that needs drop cannot be moved out of a borrow"
+  "borrow it again with &, or move the value that owns it"
 
 consumeSubject :: Located Expression -> Walk (Maybe Type)
 consumeSubject subject = do
@@ -126,6 +144,10 @@ expression mode located@(Located at value) = do
     LiteralExpression _ -> pure ()
     UnaryExpression operator operand
       | operator `elem` ["&", "&mut"] -> place operand
+      | operator == "*" -> do
+          owning <- needs at
+          when (owning && mode == Consume) (borrowedMove at)
+          place operand
       | otherwise -> expression Read operand
     BinaryExpression target "=" source -> do
       expression Consume source
@@ -138,7 +160,7 @@ expression mode located@(Located at value) = do
     IndexExpression base index -> place base >> expression Read index
     RangeExpression low _ high -> mapM_ (expression Read) low >> mapM_ (expression Read) high
     TryExpression operand -> expression Consume operand
-    AwaitExpression operand@(Located _ (CallExpression callee arguments)) -> holding operand >> call callee arguments
+    AwaitExpression (Located _ (CallExpression callee arguments)) -> call callee arguments
     AwaitExpression operand -> expression Read operand
     TupleExpression members -> mapM_ (expression Consume) members
     ArrayExpression members -> mapM_ (expression Consume) members
@@ -162,7 +184,7 @@ expression mode located@(Located at value) = do
       branches [block mode consequent, mapM_ (expression mode) alternative]
     IfLetExpression pattern subject consequent alternative -> do
       subjectType <- consumeSubject subject
-      checkPattern subjectType pattern
+      patternOver subjectType pattern
       branches
         [ withScope (mapM_ bindBinder (patternBindings pattern) >> block mode consequent)
         , mapM_ (expression mode) alternative
@@ -175,7 +197,7 @@ expression mode located@(Located at value) = do
     WhileLetExpression label pattern subject body ->
       loopWith (fmap locatedValue label) Conditional $ do
         subjectType <- consumeSubject subject
-        checkPattern subjectType pattern
+        patternOver subjectType pattern
         withScope (mapM_ bindBinder (patternBindings pattern) >> block Read body)
     LoopExpression label body -> loopWith (fmap locatedValue label) Unconditional (block Read body)
     ForExpression label pattern source body -> do
@@ -187,7 +209,7 @@ expression mode located@(Located at value) = do
 
 arm :: Mode -> Maybe Type -> Located MatchArm -> Walk ()
 arm mode subjectType (Located _ value) = withScope $ do
-  checkPattern subjectType (armPattern value)
+  patternOver subjectType (armPattern value)
   mapM_ bindBinder (patternBindings (armPattern value))
   mapM_ (expression Read) (armGuard value)
   expression mode (armBody value)

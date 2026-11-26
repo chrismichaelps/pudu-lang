@@ -40,6 +40,8 @@ its name, and a `main` that exercises the ways ownership ends:
   awaited where it is made, so the task runs once, drops its parameters when
   the body ends, and drops them whether or not the body names them. An owning
   task not awaited where it is made is E4010, so the corpus does not store one.
+- an awaited result that needs drop. The task's result becomes the awaiting
+  scope's value, and that scope drops it when it ends.
 - variants without a payload, bare (`Empty`) and qualified (`Mode.On`), built
   as values of sums that need drop. The program prints `built`, then `drop
   mode` twice, then `drop full`.

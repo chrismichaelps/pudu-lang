@@ -35,14 +35,19 @@ drops immediately; a stop during cleanup still runs the remaining drops.
 Native: one glue function per needs-drop type and a per-function drop table
 that runs before frames unwind. `dropSuccessPrograms` and `dropStopPrograms`
 match interpreter traces, the success corpus is counted for allocations, and
-`OwnershipSpec` asserts the code, span, message and help of E4001–E4011.
+`OwnershipSpec` asserts the code, span, message and help of E4001–E4012.
 Async functions and async lambdas hand owned parameters to their task, which
 drops them when it ends. Review fixes add E4010 (an owning task is awaited
 where it is made), E4011 (a type that needs drop cannot stand for a type parameter), and
 payload-free variants of sums that need drop build. A second independent review
 found call-shape bypasses (function values, qualified calls, method type
 parameters, borrows); E4011 is now decided at every instantiation of a generic
-value, which closes them.
+value, which closes them. A third review found the ways a value can be dropped
+twice: a dereference or a pattern over a borrow moved one out of its owner
+(E4012), and a trait default could stand for a type that needs drop, which is
+now refused at the implementation that inherits it. The same review found a
+false refusal: an awaited result that needs drop belongs to the scope that
+awaited it, and is dropped when that scope ends.
 
 ## Referenced by
 

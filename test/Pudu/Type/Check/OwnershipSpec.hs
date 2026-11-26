@@ -64,6 +64,17 @@ testOwnership = do
   genericProduced <- inMain ["let n = make(|| Res{name: \"m\"})"]
   genericPlain <- inMain ["let p = dup(3)", "let n = make(|| 4)"]
   selfTask <- inMain ["let r = Res{name: \"s\"}", "let t = r.keep()"]
+  derefMove <- inMain ["let r = Res{name: \"r\"}", "let b = &r", "let c = *b"]
+  borrowedMatch <- inMain
+    ["let o = Some(Res{name: \"o\"})", "let b = &o", "match b {", "  case Some(x) => { }", "  case None => { }", "}"]
+  traitDefault <- codes (resource <>
+    [ "trait Twice { fn twice(self: &Self) -> (Self, Self) { (*self, *self) } }"
+    , "impl Twice for Res {}"
+    , "fn main() -> Int {", "  let r = Res{name: \"r\"}", "  let p = r.twice()", "  0", "}" ])
+  awaitedResult <- codes (resource <>
+    [ "async fn mk() -> Res { Res{name: \"m\"} }"
+    , "async fn run() -> Int {", "  let a = mk().await", "  0", "}"
+    , "fn main() -> Int { 0 }" ])
   nullary <- inMain ["let s = Empty", "let f = Full(Res{name: \"f\"})"]
   pure $ conjoin
     [ counterexample "borrowing and moving once is clean" (clean === [])
@@ -73,6 +84,10 @@ testOwnership = do
     , counterexample "a generic producing the value inside its body is refused" (genericProduced === ["E4011"])
     , counterexample "a generic over values that need no drop is clean" (genericPlain === [])
     , counterexample "a task taking self that needs drop is awaited where it is made" (selfTask === ["E4010"])
+    , counterexample "a dereference does not move a value that needs drop out of a borrow" (derefMove === ["E4012"])
+    , counterexample "a pattern over a borrow does not bind a part that needs drop" (borrowedMatch === ["E4012"])
+    , counterexample "a trait default does not stand for a type that needs drop" (traitDefault === ["E4011"])
+    , counterexample "an async result that needs drop is owned when awaited where it is made" (awaitedResult === [])
     , counterexample "a task holding a value that needs drop is awaited where it is made" (storedTask === ["E4010"])
     , counterexample "variants without a payload build sums that need drop" (nullary === [])
     , counterexample "a use after a move is refused" (afterMove === ["E4001"])
@@ -142,6 +157,14 @@ testContracts = do
     ["let p = dup(Res{name: \"d\"})"]
     "dup(Res{name: \"d\"})" "E4011" "a type that needs drop cannot stand for a type parameter"
     "write the function or method for the type itself"
+  derefMove <- contractMain
+    ["let r = Res{name: \"r\"}", "let b = &r", "let c = *b"]
+    "*b" "E4012" "a value that needs drop cannot be moved out of a borrow"
+    "borrow it again with &, or move the value that owns it"
+  borrowedMatch <- contractMain
+    ["let o = Some(Res{name: \"o\"})", "let b = &o", "match b {", "  case Some(x) => { }", "  case None => { }", "}"]
+    "x" "E4012" "a value that needs drop cannot be moved out of a borrow"
+    "borrow it again with &, or move the value that owns it"
   wrongMember <- contract
     [ "module M", "type Res = { name: Str }"
     , "impl Drop for Res {", "  fn other(self: &Self) -> () { }", "}" ]
@@ -165,6 +188,8 @@ testContracts = do
     , counterexample "a wildcard part names the wildcard" partBehind
     , counterexample "a stored owning task names the call" storedTask
     , counterexample "a value at a type parameter names the argument" generic
+    , counterexample "a move out of a borrow names the dereference" derefMove
+    , counterexample "a pattern over a borrow names the binding" borrowedMatch
     , counterexample "a wrong Drop member names the member" wrongMember
     , counterexample "a wrong self names the member" wrongSelf
     ]
