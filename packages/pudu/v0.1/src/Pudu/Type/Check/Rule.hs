@@ -53,6 +53,7 @@ import Pudu.Type.Env
   , recordTraitMethodOwner
   , isStaticTrait
   , recordSelection
+  , recordInstantiation
   , useCapability
   , insideUnsafe
   , useUnsafeRegion
@@ -153,7 +154,7 @@ bindingType spanValue binding = case binding of
       Just value -> pure value
       Nothing -> do
         recordVariantOwner spanValue owner label []
-        instantiate spanValue scheme
+        instantiateAs False spanValue scheme
 
 namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 namespaceNameType spanValue names = do
@@ -451,13 +452,25 @@ tryType spanValue targetType declaredResult = do
     obligations its bounds impose, so a call proves what the declaration
     demanded once the argument types are known. -}
 instantiate :: Span -> Scheme -> Checker Type
-instantiate spanValue scheme
+instantiate = instantiateAs True
+
+{-| Instantiation, recorded for ownership checking unless it is a
+    constructor's: a constructor keeps what it is given whole, and its
+    instantiated type drops it. -}
+instantiateAs :: Bool -> Span -> Scheme -> Checker Type
+instantiateAs recorded spanValue scheme
   | null (schemeParams scheme) = pure (schemeType scheme)
   | otherwise = do
       replacements <- mapM (\(name, _) -> (,) name <$> freshVariable) (schemeParams scheme)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       recordStaticSelection spanValue scheme replacements
+      when recorded (recordInstantiation spanValue (chosenTypes replacements))
       pure (substitute replacements (schemeType scheme))
+
+{-| The types chosen for a scheme's own parameters. `Self` is a trait
+    member's receiver, which ownership checking treats as the receiver it is. -}
+chosenTypes :: [(Text, Type)] -> [Type]
+chosenTypes replacements = [chosen | (name, chosen) <- replacements, name /= "Self"]
 
 {-| Instantiate a scheme with the types the caller wrote.
 
@@ -489,6 +502,7 @@ instantiateWith spanValue scheme arguments
       let replacements = zip (map fst (schemeParams scheme)) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       recordStaticSelection spanValue scheme replacements
+      recordInstantiation spanValue (chosenTypes replacements)
       pure (substitute replacements (schemeType scheme))
 
 obligationsFor :: Span -> [(Text, Type)] -> (Text, [Type]) -> Checker ()

@@ -22,8 +22,9 @@ calls, pattern ownership and the shape of a `Drop` implementation.
 
 ## Algorithm
 
-The spec compiles complete modules with a `Res` type that implements `Drop`
-and a `Holder` record with a droppable field.
+The spec compiles complete modules with a `Res` type that implements `Drop`,
+a `Holder` record with a droppable field, a generic `make[T](f: fn() -> T)`,
+and a trait `Keep` with `async fn keep(self: Self)` implemented for `Res`.
 
 The first group checks codes:
 
@@ -41,13 +42,20 @@ The first group checks codes:
 - an unbound droppable pattern part is E4007;
 - a wrong `Drop` member or receiver is E4008;
 - an owning task not awaited where it is made (`storedTask`) is E4010;
-- a droppable value at a type parameter (`generic`) is E4011;
-- a borrow at a type parameter (`genericBorrow`) is clean;
+- a droppable value at a type parameter is E4011 at each instantiation: a
+  direct call (`generic`), a borrow (`genericBorrow`, `peek(&r)`), a function
+  value (`genericValue`, `let f = dup; f(Res)`), and a value a closure produces
+  (`genericProduced`, `make(|| Res{...})`);
+- a generic call at a type that needs no drop is clean (`genericPlain`:
+  `dup(3)` and `make(|| 4)`);
+- an owning async method called on a droppable receiver and not awaited where
+  it is made (`selfTask`, `r.keep()`) is E4010;
 - a bare and a qualified nullary variant (`nullary`) are clean.
 
 The second group asserts the exact contract for one fixture per code, E4010
 and E4011 included: code,
-span start, message and help, through `diagnosticContract`.
+span start, message and help, through `diagnosticContract`. The E4011 needle is
+the `dup(...)` call.
 
 The third group checks that a `Drop` implementation with another member or a
 shared `self` is E4008.

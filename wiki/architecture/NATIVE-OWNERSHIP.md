@@ -64,9 +64,10 @@ See [[Type Ownership]], [[Eval Drop]], [[Compiler Lower Drop]] and
 [[Native Emission Coverage]].
 
 Async function and async lambda parameters are owned and dropped by their task.
-A task that owns such a value is awaited where it is made (E4010). A value that
-needs drop is not passed where a type parameter stands (E4011); a borrow is
-allowed there.
+A task that owns such a value is awaited where it is made (E4010), including an
+async method taking `self` by value on a receiver that needs drop. A type that
+needs drop cannot stand for a type parameter at any instantiation (called,
+qualified, taken as a value, or as a method), borrows included (E4011).
 
 ## Measurement
 

@@ -96,7 +96,7 @@ immediate calls do: self unifies before it is removed, and default arity survive
 - **Requires:** [[Float Literal]], [[Integer Literal]], [[Semantic Prelude]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
-`instantiate` and `instantiateWith` record a static selection when a non-`Self` parameter is bounded by a static trait: every parameter's chosen type, in the scheme's order.
+`instantiate` is `instantiateAs True`. `instantiateAs :: Bool -> Span -> Scheme -> Checker Type` records the instantiation when its Bool is True, keyed by the reference's span, with the type chosen for each parameter in the scheme's order. `instantiateWith`, which takes caller-written type arguments, records too. The constructor branch of `bindingType` calls `instantiateAs False`, so a constructor records nothing. `chosenTypes` leaves out the `Self` parameter, which is a trait member's receiver and is handled by the receiver move rules.
 
 ## Algorithm
 
@@ -163,6 +163,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   checker's environment holds other modules' declarations by bare name, so `ByteSeq.sha256Hex`
   suggested a name the resolver then refused (#415). Only a prelude value is suggested.
 - **Q:** Record a trait member's `Self`? **A:** No; the owner the call names settles it.
+- **Q:** Why are constructors and `Self` not recorded? **A:** A constructor keeps what it is given whole, so the instantiation does not discard a value needing drop. `Self` is the receiver, which the move rules already track. _Rationale:_ recording either would ask the instantiation check to decide something the move rules decide at the use.
 
 ## Carrier of `?` in function literals (#678)
 

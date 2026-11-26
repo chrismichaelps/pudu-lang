@@ -15,6 +15,7 @@ tags: [changelog]
 - Checker ownership walk, interpreter drop scopes, and native drop glue/drop tables; two-engine traces cover normal exit, return, break, continue, `?`, matches, replacement and stops. refs #1028
 - Async functions and async lambdas hand owned parameters to their task, which drops them when it ends. refs #1028
 - Owning tasks are awaited where they are made (E4010); a value that needs drop is not used where a type parameter stands (E4011); payload-free variants of sums that need drop build. refs #1028
+- E4011 is decided at every instantiation of a generic value, so function values, qualified calls, method type parameters and borrows cannot carry a value that needs drop into a generic body; an async method taking self by value is covered by E4010. refs #1028
 
 ## 2026-11-25 — In-place map and set updates
 

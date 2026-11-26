@@ -38,8 +38,11 @@ match interpreter traces, the success corpus is counted for allocations, and
 `OwnershipSpec` asserts the code, span, message and help of E4001–E4011.
 Async functions and async lambdas hand owned parameters to their task, which
 drops them when it ends. Review fixes add E4010 (an owning task is awaited
-where it is made), E4011 (a droppable value is not used where a type parameter
-stands), and payload-free variants of sums that need drop build.
+where it is made), E4011 (a type that needs drop cannot stand for a type parameter), and
+payload-free variants of sums that need drop build. A second independent review
+found call-shape bypasses (function values, qualified calls, method type
+parameters, borrows); E4011 is now decided at every instantiation of a generic
+value, which closes them.
 
 ## Referenced by
 

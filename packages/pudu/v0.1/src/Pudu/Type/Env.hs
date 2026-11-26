@@ -45,6 +45,7 @@ module Pudu.Type.Env
   , lookupField
   , lookupDeclaredName
   , finalExpressionTypes
+  , finalInstantiations
   , lookupOwnerVariants
   , lookupTypeParams
   , lookupName
@@ -70,6 +71,7 @@ module Pudu.Type.Env
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordInstantiation
   , recordProvider
   , recordProviderSelection
   , recordDynamicWidening
@@ -302,6 +304,10 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  {-| Every instantiation of a generic value other than a constructor, by the
+      span of the reference, with the types it chose for the parameters.
+      Ownership checking refuses one that chose a type needing drop. -}
+  , stateInstantiationsRev :: ![(Span, [Type])]
   , stateProvidersRev :: ![(Span, ProviderSelection)]
   , stateDynamicWideningsRev :: ![(Span, NominalId, Type)]
   , stateOwnersRev :: ![(Span, OwnerSelection)]
@@ -471,6 +477,7 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateInstantiationsRev = []
     , stateProvidersRev = []
     , stateDynamicWideningsRev = []
     , stateOwnersRev = []
@@ -660,6 +667,10 @@ patternTests = Checker $ \state -> (statePatternTests state, state)
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
   Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
+recordInstantiation :: Span -> [Type] -> Checker ()
+recordInstantiation spanValue chosen =
+  Checker $ \state -> ((), state{stateInstantiationsRev = (spanValue, chosen) : stateInstantiationsRev state})
 
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =
@@ -969,6 +980,14 @@ finalExpressionTypes =
   Checker $ \state ->
     ( Map.fromList
         [(at, resolveFinal (stateSubstitution state) value) | (at, value) <- reverse (stateTypes state)]
+    , state
+    )
+
+{-| Every recorded instantiation with inference settled, in checking order. -}
+finalInstantiations :: Checker [(Span, [Type])]
+finalInstantiations =
+  Checker $ \state ->
+    ( [(at, map (resolveFinal (stateSubstitution state)) chosen) | (at, chosen) <- reverse (stateInstantiationsRev state)]
     , state
     )
 

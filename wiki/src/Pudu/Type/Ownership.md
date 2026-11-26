@@ -45,18 +45,20 @@ after an unconditional transfer.
   E4004.
 - A `Drop` implementation is checked for shape before any body runs.
 - A call whose result is a Task and that passes an argument needing drop is
-  E4010 unless the call is the direct operand of `.await`. `ownedTask` tests
-  for such a call.
-- At a call to a named function whose scheme has type parameters, an argument
-  needing drop at a parameter whose written type mentions a type parameter is
-  E4011. `genericArguments` walks the parameters, `mentions` tests a written
-  type and does not look inside a borrow, so an `&T` parameter accepts a
-  borrow, and `genericOperand` refuses an argument whose type needs drop.
-  Constructors, named with a capital, keep what they are given whole and are
-  not checked.
+  E4010 unless the call is the direct operand of `.await`. A receiver taken by
+  value counts as an argument, so an async method taking `self` by value on a
+  receiver needing drop is E4010 too. `ownedTask` tests for such a call.
+- Every recorded instantiation of a generic value other than a constructor
+  (`finalInstantiations`) is checked. `genericInstantiation` refuses, at the
+  reference's span, each one that chose a type needing drop with E4011. This
+  covers a direct call, a qualified call (`G.dup`, `Option.unwrapOr`), a
+  function value (`let f = dup`), a method with its own type parameters, and a
+  generic whose body produces the value. The `Self` parameter is not checked;
+  the receiver move rules own it.
+- A borrow does not exempt the instantiation, because a generic body can copy a
+  value of a type parameter out through `&T`.
 - A call to a user-declared method on a receiver whose nominal type arguments
-  need drop is E4011 (`genericReceiver`). `genericRefusal` builds the refusal
-  for both cases.
+  need drop is E4011 (`genericReceiver`).
 - A name with no local binder (function, constructor, module value) is not
   checked at its use, because a module value that needs drop is refused at its
   declaration (E4004). A member of a type or module qualifier (`Mode.On`) is a
@@ -76,7 +78,7 @@ after an unconditional transfer.
 | E4008 | a `Drop` implementation has the wrong target, member, receiver or result |
 | E4009 | taking apart a type with its own `Drop` |
 | E4010 | a task that owns a value needing drop is not awaited where it is made |
-| E4011 | a value needing drop is used where a type parameter stands |
+| E4011 | a type that needs drop stands for a type parameter |
 
 Every refusal carries a help that names the safe alternative. The walk reports
 once per span and code.
@@ -96,8 +98,10 @@ on the next turn. A `let _ = value` is a statement whose subject is consumed
 and owned; it is not a binding named `_`.
 
 A nullary variant builds a value of a sum that needs drop, bare (`Empty`) or
-qualified (`Mode.On`). At a type parameter a borrow (`&T`) is allowed; a
-droppable value is not.
+qualified (`Mode.On`). At a type parameter neither a borrow (`&T`) nor a value is
+exempt: a type that needs drop cannot stand for a type parameter at any
+instantiation. An async method taking `self` by value is an owning task when its
+receiver needs drop, so it must be awaited where it is made (E4010).
 
 ## Resolved Grill Log
 
@@ -119,9 +123,11 @@ droppable value is not.
   which changes cold task semantics.
 - **Q:** Why refuse a droppable value at a type parameter? **A:** The generic
   body does not track values of a type parameter, so it can copy or lose one.
-  _Rationale:_ refusing the instantiation keeps one owner. _Rejected:_ treating
-  every type-parameter value as needing drop, which would refuse ordinary
-  generic code that copies values needing no drop.
+  _Rationale:_ every instantiation is checked, so the generic body never holds
+  a value that needs drop. _Rejected:_ treating every type-parameter value as
+  needing drop, which would refuse ordinary generic code that copies values
+  needing no drop. _Rejected:_ exempting borrows, since a generic body can copy
+  a value out through `&T`.
 
 ## Referenced by
 

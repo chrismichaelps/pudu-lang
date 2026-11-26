@@ -28,6 +28,10 @@ resource =
   , "fn dup[T](x: T) -> (T, T) { (x, x) }"
   , "fn peek[T](x: &T) -> Int { 0 }"
   , "async fn hold(r: Res) -> Int { 1 }"
+  , "fn make[T](f: fn() -> T) -> Int { let x = f()"
+  , "  0 }"
+  , "trait Keep { async fn keep(self: Self) -> Int }"
+  , "impl Keep for Res { async fn keep(self: Self) -> Int { 1 } }"
   , "type Slot = | Empty | Full(Res)"
   ]
 
@@ -56,11 +60,19 @@ testOwnership = do
   generic <- inMain ["let p = dup(Res{name: \"d\"})"]
   genericBorrow <- inMain ["let r = Res{name: \"r\"}", "let _ = peek(&r)"]
   storedTask <- inMain ["let t = hold(Res{name: \"t\"})"]
+  genericValue <- inMain ["let f = dup", "let p = f(Res{name: \"v\"})"]
+  genericProduced <- inMain ["let n = make(|| Res{name: \"m\"})"]
+  genericPlain <- inMain ["let p = dup(3)", "let n = make(|| 4)"]
+  selfTask <- inMain ["let r = Res{name: \"s\"}", "let t = r.keep()"]
   nullary <- inMain ["let s = Empty", "let f = Full(Res{name: \"f\"})"]
   pure $ conjoin
     [ counterexample "borrowing and moving once is clean" (clean === [])
     , counterexample "a type parameter does not take a value that needs drop" (generic === ["E4011"])
-    , counterexample "a type parameter takes a borrow of one" (genericBorrow === [])
+    , counterexample "a borrow does not let a type parameter stand for one" (genericBorrow === ["E4011"])
+    , counterexample "a generic taken as a value is refused where it is named" (genericValue === ["E4011"])
+    , counterexample "a generic producing the value inside its body is refused" (genericProduced === ["E4011"])
+    , counterexample "a generic over values that need no drop is clean" (genericPlain === [])
+    , counterexample "a task taking self that needs drop is awaited where it is made" (selfTask === ["E4010"])
     , counterexample "a task holding a value that needs drop is awaited where it is made" (storedTask === ["E4010"])
     , counterexample "variants without a payload build sums that need drop" (nullary === [])
     , counterexample "a use after a move is refused" (afterMove === ["E4001"])
@@ -128,8 +140,8 @@ testContracts = do
     "write .await on the call, or pass a borrow of the value"
   generic <- contractMain
     ["let p = dup(Res{name: \"d\"})"]
-    "Res{name: \"d\"}" "E4011" "a value that needs drop cannot be used where a type parameter stands"
-    "pass a borrow of the value, or write the function for its type"
+    "dup(Res{name: \"d\"})" "E4011" "a type that needs drop cannot stand for a type parameter"
+    "write the function or method for the type itself"
   wrongMember <- contract
     [ "module M", "type Res = { name: Str }"
     , "impl Drop for Res {", "  fn other(self: &Self) -> () { }", "}" ]
