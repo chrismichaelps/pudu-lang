@@ -5,6 +5,7 @@ module Pudu.Eval
   ( EvalOutcome (..)
   , awaitTask
   , callClosure
+  , callNeeds
   , evaluate
   , evaluateBlockInFrame
   , outcomeOf
@@ -37,6 +38,10 @@ import Pudu.Eval.Env
   , Unwind (..)
   , withFrame
   , withNewFrame
+  , adopt
+  , adoptNames
+  , releaseTemporary
+  , updateExisting
   )
 import Pudu.Eval.Runtime (withRuntimeEnv)
 import Pudu.Eval.Compile (Walker (..), blockIntroducesBindings, compileBody)
@@ -69,6 +74,8 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Pattern (patternBindings)
+import Pudu.Ownership (moveOperator)
 import Pudu.Frontend.Syntax.Tree
   ( Literal (IntegerValue, ResolvedInteger)
   , Block (..)
@@ -77,6 +84,7 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , MatchArm (..)
+  , Pattern (WildcardPattern)
   , Statement (..)
   )
 import Data.IORef (IORef, newIORef)
@@ -148,8 +156,9 @@ evaluateStatement (Located _ statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name _ value)) -> do
     evaluated <- evaluate value
     bind (locatedValue name) evaluated
+    adopt name
   DeclarationStatement _ -> pure ()
-  ExpressionStatement expression -> evaluate expression >> pure ()
+  ExpressionStatement expression -> evaluate expression >>= releaseTemporary (locatedSpan expression)
   ReturnStatement Nothing -> unwind (ReturnUnwind UnitValue)
   ReturnStatement (Just expression) -> do
     value <- evaluate expression
@@ -164,16 +173,18 @@ evaluateStatement (Located _ statement) = case statement of
   LetElseStatement pattern' subject fallback -> do
     value <- evaluate subject
     case matchPattern pattern' value of
-      Just bindings -> mapM_ (uncurry bind) bindings
+      Just bindings -> mapM_ (uncurry bind) bindings >> adoptNames (patternBindings pattern')
       Nothing -> evaluateBlock fallback >> pure ()
   {-| A destructuring binding has no fallback, because the parser admitted only
       a pattern that tests nothing a binding could not answer. What is left is a
       sequence's length, and a sequence of the wrong length is reported here —
       where the binding is, with the pattern the reader wrote beside it. -}
+  LetPatternStatement _ (Located _ WildcardPattern) _ subject ->
+    evaluate subject >>= releaseTemporary (locatedSpan subject)
   LetPatternStatement _ pattern' _ subject -> do
     value <- evaluate subject
     case matchPattern pattern' value of
-      Just bindings -> mapM_ (uncurry bind) bindings
+      Just bindings -> mapM_ (uncurry bind) bindings >> adoptNames (patternBindings pattern')
       Nothing ->
         abortAt (Just (locatedSpan pattern')) "E7013"
           ("this pattern does not match the " <> valueKind value <> " it was given")
@@ -257,7 +268,9 @@ evaluateHere (Located spanValue expression) = case expression of
     ResolvedInteger kind number -> pure (IntValue kind number)
     _ -> pure (literalValue literal)
   NameExpression names -> readPath spanValue names
-  UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
+  UnaryExpression operator operand
+    | operator == moveOperator -> moveOut operand
+    | otherwise -> evaluate operand >>= applyUnary spanValue operator
   BinaryExpression left operator right -> applyBinary spanValue left operator right
   CallExpression callee arguments -> evaluateCall callNeeds spanValue callee arguments
   MemberExpression target member -> do
@@ -367,7 +380,7 @@ evaluateHere (Located spanValue expression) = case expression of
   IfLetExpression pattern' subject thenBlock elseBranch -> do
     value <- evaluate subject
     case matchPattern pattern' value of
-      Just bindings -> withFrame bindings $ case elseBranch of
+      Just bindings -> withFrame bindings $ adoptNames (patternBindings pattern') >> case elseBranch of
         Nothing -> evaluateBlock thenBlock >> pure UnitValue
         Just _ -> evaluateBlock thenBlock
       Nothing -> case elseBranch of
@@ -391,6 +404,16 @@ evaluateHere (Located spanValue expression) = case expression of
     abortAt (Just spanValue) "E7001" "compile-time loop reached evaluation unexpanded" Nothing
   InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
 
+{-| A use that moves a value needing drop reads it and leaves its binding
+    holding nothing, so the scope that declared it does not drop it again. -}
+moveOut :: Located Expression -> Evaluator Value
+moveOut operand@(Located at held) = case held of
+  NameExpression (name :| []) -> do
+    value <- readPath at (name :| [])
+    _ <- updateExisting name UnitValue
+    pure value
+  _ -> evaluate operand
+
 evaluateFieldInit :: Span -> Located FieldInit -> Evaluator (Text, Value)
 evaluateFieldInit recordSpan (Located _ field) = do
   let name = locatedValue (fieldInitName field)
@@ -413,7 +436,7 @@ evaluateArms spanValue subject arms = case arms of
     Just bindings -> do
       guarded <- withFrame bindings (evaluateGuard (armGuard arm))
       if guarded
-        then withFrame bindings (evaluate (armBody arm))
+        then withFrame bindings (adoptNames (patternBindings (armPattern arm)) >> evaluate (armBody arm))
         else evaluateArms spanValue subject rest
 
 evaluateGuard :: Maybe (Located Expression) -> Evaluator Bool

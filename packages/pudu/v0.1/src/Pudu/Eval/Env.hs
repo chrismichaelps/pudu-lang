@@ -37,6 +37,17 @@ module Pudu.Eval.Env
   , effectsAdmitted
   , emptyEnv
   , integerKindAt
+  , Held (..)
+  , installDrops
+  , dropping
+  , ownsAt
+  , registerOwned
+  , ownedName
+  , dropNow
+  , adopt
+  , adoptNames
+  , releaseTemporary
+  , scopedFrame
   , tally
   , withTally
   , withIntegerKinds
@@ -98,6 +109,10 @@ import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Control.Monad (forM_, when)
+import Data.Maybe (listToMaybe)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Ownership (ownedBinderKind)
 import Pudu.Source (Span)
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
@@ -148,7 +163,16 @@ data Env = Env
   , envCallbackAncestry :: !(Set CallbackKey)
   , envNativeCallbacks :: !NativeCallbackCache
   , envCallbackStore :: !(CallbackStore Value Diagnostic)
+  {-| How a value that needs drop is dropped, once the program implements
+      `Drop`. `Nothing` keeps every scope free of drop bookkeeping. -}
+  , envDropValue :: !(Maybe (Value -> Evaluator ()))
+  {-| What each open scope owns, innermost first, newest entry first. -}
+  , envDropScopes :: ![IORef [Held]]
   }
+
+{-| An owned binding of a scope: a name read from the scope's frame when it
+    ends, or the value of an earlier binding the same name shadowed. -}
+data Held = HeldName !Text | HeldValue !Value
 
 currentHandleStore :: Evaluator HandleStore
 currentHandleStore = Evaluator $ \env -> pure (Done (envHandleStore env) env)
@@ -370,6 +394,8 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     , envCallbackAncestry = Set.empty
     , envNativeCallbacks = nativeCallbacks
     , envCallbackStore = callbackStore
+    , envDropValue = Nothing
+    , envDropScopes = []
     }
 
 bind :: Text -> Value -> Evaluator ()
@@ -630,6 +656,134 @@ withIntegerKinds :: Map Span Text -> Evaluator ()
 withIntegerKinds kinds =
   Evaluator $ \env -> pure (Done () env{envIntegerKinds = kinds})
 
+{-| Run drops at the end of every scope from here on. -}
+installDrops :: (Value -> Evaluator ()) -> Evaluator ()
+installDrops release = Evaluator $ \env -> pure (Done () env{envDropValue = Just release})
+
+dropping :: Evaluator Bool
+dropping = Evaluator $ \env -> pure (Done (maybe False (const True) (envDropValue env)) env)
+
+{-| Whether checking marked the binder or statement at this span as owning a
+    value that needs drop. -}
+ownsAt :: Span -> Evaluator Bool
+ownsAt spanValue = (== Just ownedBinderKind) <$> integerKindAt spanValue
+
+{-| The innermost scope owns the binding just made under this name. A binding
+    it already owned under the name is kept by value, since the name now reads
+    the new one. -}
+registerOwned :: Text -> Evaluator ()
+registerOwned name = Evaluator $ \env -> case (envDropScopes env, envFrames env) of
+  (scope : _, frame : _) -> do
+    held <- readIORef scope
+    shadowed <- if any (named name) held then frameLookup name frame else pure Nothing
+    let kept = map (\entry -> if named name entry then maybe entry HeldValue shadowed else entry) held
+    writeIORef scope (HeldName name : kept)
+    pure (Done () env)
+  _ -> pure (Done () env)
+ where
+  named wanted entry = case entry of
+    HeldName found -> found == wanted
+    HeldValue _ -> False
+
+{-| Whether the nearest scope binding this name owns its value. -}
+ownedName :: Text -> Evaluator Bool
+ownedName name = Evaluator $ \env -> do
+  held <- mapM readIORef (envDropScopes env)
+  pure (Done (any (any isNamed) held) env)
+ where
+  isNamed entry = case entry of
+    HeldName found -> found == name
+    HeldValue _ -> False
+
+{-| A binding just made owns its value when checking marked its binder. -}
+adopt :: Located Text -> Evaluator ()
+adopt name = adoptNames [name]
+
+{-| The bindings a pattern or a parameter list just made, owned where marked. -}
+adoptNames :: [Located Text] -> Evaluator ()
+adoptNames names = do
+  active <- dropping
+  when active $ forM_ names $ \(Located at name) -> do
+    owns <- ownsAt at
+    when owns (registerOwned name)
+
+{-| A statement's value that checking marked as owned is dropped where the
+    statement ends. -}
+releaseTemporary :: Span -> Value -> Evaluator ()
+releaseTemporary at value = do
+  active <- dropping
+  when active $ do
+    owns <- ownsAt at
+    when owns (dropNow value)
+
+{-| Drop a value now: a temporary nothing took, or an owned value replaced. -}
+dropNow :: Value -> Evaluator ()
+dropNow value = Evaluator $ \env -> case envDropValue env of
+  Nothing -> pure (Done () env)
+  Just release -> let Evaluator run = release value in run env
+
+{-| Run in a new innermost frame, answering its final bindings beside the
+    result. While drops run, the frame holds cells so a stop still sees the
+    values moves and assignments left, and every outcome drops what the scope
+    owns in reverse order before the frame closes. A stop raised while the
+    scope is being cleaned up after another stop is the one reported. -}
+scopedFrame :: [(Text, Value)] -> Evaluator a -> Evaluator (a, Map Text Value)
+scopedFrame bindings (Evaluator action) = Evaluator $ \env -> case envDropValue env of
+  Nothing -> do
+    outcome <- action env{envFrames = MapFrame (Map.fromList bindings) : envFrames env}
+    case outcome of
+      Done value next -> do
+        final <- maybe (pure Map.empty) frameSnapshot (listToMaybe (envFrames next))
+        pure (Done (value, final) (dropInnermostFrame next))
+      Unwound transfer next -> pure (Unwound transfer (dropInnermostFrame next))
+      Aborted stop -> pure (Aborted stop)
+  Just release -> do
+    cells <- traverse newIORef (Map.fromList bindings) >>= newIORef
+    scope <- newIORef []
+    let entered = env{envFrames = CellFrame cells : envFrames env, envDropScopes = scope : envDropScopes env}
+        leave next = (dropInnermostFrame next){envDropScopes = drop 1 (envDropScopes next)}
+    outcome <- action entered
+    case outcome of
+      Done value next -> do
+        final <- maybe (pure Map.empty) frameSnapshot (listToMaybe (envFrames next))
+        cleaned <- dropScope release scope next False
+        pure $ case cleaned of
+          Right after -> Done (value, final) (leave after)
+          Left stop -> Aborted stop
+      Unwound transfer next -> do
+        cleaned <- dropScope release scope next False
+        pure $ case cleaned of
+          Right after -> Unwound transfer (leave after)
+          Left stop -> Aborted stop
+      Aborted stop -> do
+        cleaned <- dropScope release scope entered True
+        pure (Aborted (either id (const stop) cleaned))
+
+{-| Drop what a scope owns, newest first. Once one drop stops, the rest still
+    run, and a second stop ends the cleanup. -}
+dropScope :: (Value -> Evaluator ()) -> IORef [Held] -> Env -> Bool -> IO (Either Diagnostic Env)
+dropScope release scope env stopping = do
+  held <- readIORef scope
+  writeIORef scope []
+  current <- maybe (pure Map.empty) frameSnapshot (listToMaybe (envFrames env))
+  let values = [value | entry <- held, Just value <- [heldValue current entry]]
+  go values env stopping Nothing
+ where
+  heldValue current entry = case entry of
+    HeldName name -> Map.lookup name current
+    HeldValue value -> Just value
+  go values at alreadyStopped first = case values of
+    [] -> pure (maybe (Right at) Left first)
+    value : rest -> do
+      let Evaluator run = release value
+      outcome <- run at
+      case outcome of
+        Done () next -> go rest next alreadyStopped first
+        Unwound _ next -> go rest next alreadyStopped first
+        Aborted stop
+          | alreadyStopped -> pure (Left stop)
+          | otherwise -> go rest at True (Just stop)
+
 integerKindAt :: Span -> Evaluator (Maybe Text)
 integerKindAt spanValue =
   Evaluator $ \env -> pure (Done (Map.lookup spanValue (envIntegerKinds env)) env)
@@ -680,8 +834,10 @@ variantOwner variant =
   Evaluator $ \env -> pure (Done (Map.lookup variant (envVariantOwners env)) env)
 
 withFrame :: [(Text, Value)] -> Evaluator a -> Evaluator a
-withFrame bindings (Evaluator action) =
-  Evaluator $ \env -> do
+withFrame bindings scoped@(Evaluator action) =
+  Evaluator $ \env -> if maybe False (const True) (envDropValue env)
+    then let Evaluator run = fst <$> scopedFrame bindings scoped in run env
+    else do
     outcome <- action env{envFrames = MapFrame (Map.fromList bindings) : envFrames env}
     pure $ case outcome of
       Done value next -> Done value (dropInnermostFrame next)
@@ -787,7 +943,9 @@ dropInnermostFrame env = case envFrames env of
   _ -> env
 
 withNewFrame :: Evaluator a -> Evaluator a
-withNewFrame (Evaluator action) = Evaluator $ \env -> do
+withNewFrame scoped@(Evaluator action) = Evaluator $ \env -> if maybe False (const True) (envDropValue env)
+  then let Evaluator run = fst <$> scopedFrame [] scoped in run env
+  else do
   cells <- newIORef Map.empty
   outcome <- action env{envFrames = CellFrame cells : envFrames env}
   pure $ case outcome of

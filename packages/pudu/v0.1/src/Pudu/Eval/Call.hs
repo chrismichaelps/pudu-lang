@@ -9,6 +9,7 @@ module Pudu.Eval.Call
   , applyFunction
   , awaitTask
   , callClosure
+  , callClosureLending
   , callMember
   , evaluateCall
   , evaluateCallee
@@ -73,6 +74,7 @@ import Pudu.Eval.Foreign.Callback (callCallbackValue)
 import Pudu.Eval.Compile.Cache (compiledBody)
 import Pudu.Eval.Env
   ( tally
+  , adoptNames
   , compiledBodies
   , currentConcurrentStore
   , withCaptured
@@ -386,7 +388,8 @@ scopeTo environment = \value -> case value of
 runClosure :: CallNeeds -> Closure -> [(Text, Value)] -> Maybe Span -> Evaluator Value
 runClosure needs closure bindings callSpan = do
   deeper <- descend callSpan
-  outcome <- withCaptured (closureCaptured closure) $ withFrame bindings $ closureOutcome needs closure
+  outcome <- withCaptured (closureCaptured closure) $ withFrame bindings $
+    adoptParameters closure >> closureOutcome needs closure
   ascend deeper
   settled callSpan outcome
 
@@ -398,10 +401,16 @@ runClosureKeeping
 runClosureKeeping needs closure bindings kept callSpan = do
   deeper <- descend callSpan
   (outcome, finals) <-
-    withCaptured (closureCaptured closure) $ withFrameKeeping bindings kept $ closureOutcome needs closure
+    withCaptured (closureCaptured closure) $ withFrameKeeping bindings kept $
+      adoptParameters closure >> closureOutcome needs closure
   ascend deeper
   result <- settled callSpan outcome
   pure (result, finals)
+
+{-| Parameters that own a value needing drop are dropped when the call ends. -}
+adoptParameters :: Closure -> Evaluator ()
+adoptParameters closure =
+  adoptNames (map (parameterName . locatedValue) (functionParameters (closureFunction closure)))
 
 closureOutcome :: CallNeeds -> Closure -> Evaluator (Either Unwind Value)
 closureOutcome needs closure = catchUnwind $ case functionBody (closureFunction closure) of
