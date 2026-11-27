@@ -14,8 +14,9 @@ aliases: [Runtime Benchmark Entry]
 
 Preserve `bench/eval.sh <pudu>` as the runtime benchmark entry point. Forward
 all arguments to [[Runtime Benchmark]] using Node; its defaults measure the
-same seven fixtures in tree and compiled modes with five samples per case.
-Optional arguments and exact refusal behavior belong to that one harness.
+same seven fixtures in tree and compiled modes with five samples per case, and
+`--modes native` adds a built executable's runtime. Optional arguments and
+exact refusal behavior belong to that one harness.
 
 ## Algorithm and dependencies
 

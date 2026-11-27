@@ -44,8 +44,15 @@ Only counted aggregates move: arrays, maps, sets, stores and records. A typed fa
 
 ## Measurement
 
-`bench/eval/MultiMap.pudu` at -O2: native 3446 ms, evaluator 830 ms before this
-work.
+`bench/eval/MultiMap.pudu` with the optimized compiler (-O2) on Apple Silicon,
+five samples: native 542 ms minimum / 548 ms median (executable runtime only),
+tree 699/700 ms and compiled 702/703 ms (startup, checking and runtime). Before
+the ownership work the fixture measured native 3446 ms against evaluator
+830 ms. Maps measured 93 ms natively against 791/797 ms tree and 594/599 ms
+compiled, and Records 41/42 ms against 435/439 ms and 437/444 ms (three samples
+each). Every native row is now below both evaluators. [[Runtime Benchmark]]
+builds each native fixture once, reports that build beside the samples, and
+labels the two scopes.
 
 ## Referenced by
 

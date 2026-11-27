@@ -13,12 +13,15 @@ aliases: [Runtime Benchmark]
 ## Purpose and interface
 
 Measure `pudu run` process startup, checking and execution together in actual
-milliseconds. `node bench/eval.mjs <pudu>` defaults to Arrays, Calls, Iterate,
-Loop, Maps, MultiMap and Records, both tree/compiled, and five raw samples.
-Options are `--samples <positive integer>`, `--lib <library>`, `--json`,
-`--benchmarks <comma-separated names>`, `--modes <tree,compiled>` and
+milliseconds, and optionally a built native executable's runtime on the same
+fixtures. `node bench/eval.mjs <pudu>` defaults to Arrays, Calls, Iterate, Loop,
+Maps, MultiMap and Records, both tree/compiled, and five raw samples. Options
+are `--samples <positive integer>`, `--lib <library>`, `--json`,
+`--benchmarks <comma-separated names>`, `--modes <tree,compiled,native>` and
 `--timeout-ms <positive integer>`. A caller supplies an ordinary optimized
-binary; the harness never builds or profiles one implicitly.
+binary; the harness never builds or profiles one implicitly. Native mode asks
+that binary for a fixture executable, so its build cost is reported once per
+fixture rather than folded into a sample.
 
 ## Algorithm and identities
 
@@ -28,13 +31,20 @@ For every sample bracket synchronous subprocess launch/completion with
 `process.hrtime.bigint()`, then divide nanoseconds by one million. Force
 PUDU_CACHE=off, explicit PUDU_EVAL and absolute PUDU_LIB. Invoke RTS -s and retain
 allocation, maximum residency and total RTS CPU/elapsed time alongside wall time.
-No startup subtraction, concurrency or user-cache reuse is permitted.
+In native mode, build each fixture once with `pudu build <fixture> --native -o
+<scratch>` into a temporary directory removed after the report; record build
+time, binary SHA256 and bytes, then time only the executable. Native samples
+carry wall time but no RTS statistics. No startup subtraction, concurrency or
+user-cache reuse is permitted.
 
 Require exit zero and stdout exactly equal to the established newline-terminated
 result: Arrays 249999500000; Calls 196418; Iterate 2399960; Loop 26999982;
 Maps 68749875000; MultiMap 640000; Records 0. Unexpected diagnostics, missing RTS
-statistics, signal, spawn failure, timeout and any output difference fail.
-Store every sample with minimum and median, labelled checking plus runtime.
+statistics, signal, spawn failure, timeout and any output difference fail. A
+failed native build, a build that writes no executable, a native exit, signal or
+output difference also fail without a report. Store every sample with minimum
+and median; tree and compiled rows are labelled startup plus checking plus
+runtime, native rows runtime only.
 JSON records timestamp, binary SHA256/bytes/path/version, per-fixture SHA256/path,
 absolute library, Node, host OS/architecture/CPU/count and available GHC/Cabal
 versions. These host tool versions alone do not prove the binary's build flags.
@@ -58,8 +68,13 @@ median average. Human output names milliseconds, min and median explicitly.
   need identical policy. _Rejected:_ uncontrolled cold/warm mixing.
 - **Q:** Report only the minimum? **A:** Keep raw points plus min and median.
   _Rationale:_ noise and spread remain reviewable. _Rejected:_ opaque best case.
-- **Q:** Call this native performance? **A:** Name process/checking/runtime scope.
-  _Rationale:_ these evaluators do not emit Pudu machine code.
+- **Q:** Compare native and evaluator rows as one number? **A:** No; each mode
+  names its scope. _Rationale:_ evaluator rows include startup and checking,
+  native rows time only the emitted executable. _Rejected:_ subtracting an
+  assumed startup cost.
+- **Q:** Rebuild the native executable for every sample? **A:** No; build once
+  per fixture and report build time beside the samples. _Rationale:_ compilation
+  is not runtime. _Rejected:_ charging every run with its build.
 
 ## Referenced by
 

@@ -19,14 +19,19 @@ exact outputs and RTS-statistics fixtures, then are removed after each test.
 The successful CLI case covers both evaluators and all seven fixed workload
 outputs; it asserts five default samples, positive unrounded monotonic wall
 milliseconds, raw RTS data, absolute library identity, binary/fixture SHA256,
-host metadata and independent median arithmetic. A fixture executable asserts
-that PUDU_CACHE is off even when the caller exports a cache directory, and that
-PUDU_LIB is absolute. Wrapper invocation with a spaced binary path must preserve
-arguments and return the same report.
+host metadata and independent median arithmetic. The native case builds one
+fixture once and asserts build time, binary SHA256/bytes, three runtime samples
+without RTS fields, one build in the fixture's log, and the runtime-only scope;
+a mixed run keeps the requested mode order and restores RTS flags. A fixture
+executable asserts that PUDU_CACHE is off even when the caller exports a cache
+directory, and that PUDU_LIB is absolute. Wrapper invocation with a spaced
+binary path must preserve arguments and return the same report.
 
 Refusal tests cover nonzero status, successful wrong output, missing output,
-unexpected diagnostics, missing RTS data, invalid modes/benchmark names, zero
-samples and duplicate flags. No failure may emit a completed JSON result.
+unexpected diagnostics, missing RTS data, a failed native build, a build that
+writes no executable, wrong or nonzero native execution, invalid
+modes/benchmark names, zero samples and duplicate flags. No failure may emit a
+completed JSON result.
 Expected stdout includes its final newline, preventing trimming from concealing
 an output regression. Tests use independent numeric RTS assertions rather than
 snapshots of the implementation.
@@ -39,6 +44,9 @@ snapshots of the implementation.
 - **Q:** Test only returned medians? **A:** Test sample retention, environment,
   provenance and exact failed execution. _Rationale:_ correctness of the measured
   workload matters before any speed claim.
+- **Q:** Build a real native fixture in the focused test? **A:** No; a fake
+  compiler writes an executable that proves the build-once, runtime-only
+  contract. _Rationale:_ the real optimized measurement is separate evidence.
 
 ## Referenced by
 

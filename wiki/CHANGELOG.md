@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-11-26 — Native ownership measurement
+
+- The runtime benchmark can build and time a native executable beside both evaluators; MultiMap is 542 ms natively against 699 ms tree and 702 ms compiled (five samples, optimized binary), after 3446 ms before the ownership work. refs #995
+
 ## 2026-11-26 — Buffer bounds and counted kernel corpus
 
 - Interpreter buffer bounds no longer overflow near the Int maximum (#1023); the counted-allocation run now loads library-importing programs and covers the flat table and the JSON/XML/CSV and binary codecs (#1022). Undisposed `Sync` cells are released at program exit (#1026); the counted run also counts `realloc`. The Records, tuples, sums and collections row is Implemented after an independent review.
